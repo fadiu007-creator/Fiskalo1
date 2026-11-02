@@ -294,6 +294,19 @@ app.MapPost(AtkCouponPath, async (AtkCouponRequest request, HttpContext context,
         return Results.Problem("Local test certificate or signing key could not be validated.", statusCode: StatusCodes.Status500InternalServerError);
     }
 });
+if (OperatingSystem.IsWindows())
+{
+    try
+    {
+        var recovered = await queueStore.RecoverInterruptedSubmissionsAsync();
+        if (recovered > 0) Console.WriteLine("Recovered interrupted ATK submissions; operator reconciliation is required: " + recovered);
+    }
+    catch (Exception ex) when (ex is CryptographicException or IOException or UnauthorizedAccessException)
+    {
+        Console.Error.WriteLine("Could not recover the protected fiscal queue. Fiscal submission remains disabled.");
+    }
+}
+
 app.Run();
 
 static bool HasValidSession(HttpContext context, string? expectedToken)
