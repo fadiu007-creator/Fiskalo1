@@ -7,7 +7,7 @@ as $$
 declare
   org_id uuid := nullif(payload->>'organization_id','')::uuid;
   supplier uuid := nullif(payload->>'supplier_id','')::uuid;
-  purchase_id uuid;
+  new_purchase_id uuid;
   item jsonb;
   product_row public.fiskalo_products%rowtype;
   qty numeric(14,3);
@@ -28,7 +28,7 @@ begin
 
   insert into public.fiskalo_purchases(organization_id,supplier_id,created_by,reference,purchase_date,notes)
   values(org_id,supplier,auth.uid(),nullif(trim(payload->>'reference'),''),coalesce(nullif(payload->>'purchase_date','')::date,current_date),nullif(trim(payload->>'notes'),''))
-  returning id into purchase_id;
+  returning id into new_purchase_id;
 
   for item in select value from jsonb_array_elements(payload->'items')
   loop
@@ -42,17 +42,17 @@ begin
       for update;
     if not found then raise exception 'A selected item is not stock-tracked in this business'; end if;
     insert into public.fiskalo_purchase_items(purchase_id,product_id,description,quantity,unit_cost,vat_rate)
-    values(purchase_id,product_row.id,product_row.name,qty,cost,vat);
+    values(new_purchase_id,product_row.id,product_row.name,qty,cost,vat);
   end loop;
 
   select coalesce(sum(line_subtotal+line_vat),0) into total_value
-  from public.fiskalo_purchase_items where purchase_id=purchase_id;
-  update public.fiskalo_purchases set total=total_value where id=purchase_id;
+  from public.fiskalo_purchase_items where purchase_id=new_purchase_id;
+  update public.fiskalo_purchases set total=total_value where id=new_purchase_id;
 
   insert into public.fiskalo_audit_logs(organization_id,actor_id,action,entity_type,entity_id,details)
-  values(org_id,auth.uid(),'purchase.created','purchase',purchase_id,
+  values(org_id,auth.uid(),'purchase.created','purchase',new_purchase_id,
     jsonb_build_object('reference',payload->>'reference','total',total_value));
-  return purchase_id;
+  return new_purchase_id;
 end;
 $$;
 revoke all on function public.fiskalo_create_purchase(jsonb) from public, anon;
