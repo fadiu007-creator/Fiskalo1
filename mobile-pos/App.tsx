@@ -186,6 +186,15 @@ export default function App() {
           </View>)}
         </ScrollView>
         <Text style={{ color: ink, fontWeight: "900", fontSize: 21, marginVertical: 7 }}>Totali: {money(total)}</Text>
+        <Text style={{ color: "#687773", fontSize: 11, marginBottom: 5 }}>Klienti (opsional)</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 42, marginBottom: 5 }}>
+          <TouchableOpacity onPress={() => setCustomerId("")} style={{ padding: 9, marginRight: 6, borderRadius: 8, backgroundColor: !customerId ? brand : "#eef2f0" }}>
+            <Text style={{ color: !customerId ? "white" : ink, fontSize: 12 }}>Pa emër</Text>
+          </TouchableOpacity>
+          {customers.map((customer) => <TouchableOpacity key={customer.id} onPress={() => setCustomerId(customer.id)} style={{ padding: 9, marginRight: 6, borderRadius: 8, backgroundColor: customerId === customer.id ? brand : "#eef2f0" }}>
+            <Text style={{ color: customerId === customer.id ? "white" : ink, fontSize: 12 }}>{customer.name}</Text>
+          </TouchableOpacity>)}
+        </ScrollView>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 42 }}>
           {(["cash", "card", "bank_transfer", "credit"] as const).map((method) => <TouchableOpacity key={method} onPress={() => { setPaymentMethod(method); setPaymentConfirmed(false); }} style={{ padding: 9, marginRight: 6, borderRadius: 8, backgroundColor: paymentMethod === method ? brand : "#eef2f0" }}>
             <Text style={{ color: paymentMethod === method ? "white" : ink, fontSize: 12 }}>{({ cash: "Cash", card: "Kartelë", bank_transfer: "Transfer", credit: "Me afat" })[method]}</Text>
