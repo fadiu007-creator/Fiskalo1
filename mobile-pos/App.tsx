@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, SafeAreaView, ScrollView, StatusBar, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { FlatList, SafeAreaView, ScrollView, StatusBar, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import { supabase } from "./src/supabase";
 
@@ -36,7 +36,10 @@ export default function App() {
   }, 0), [cart]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSignedIn(Boolean(data.session)));
+    supabase.auth.getSession().then(({ data }) => {
+      setSignedIn(Boolean(data.session));
+      if (data.session) void loadOrganizations();
+    });
   }, []);
 
   async function signIn() {
@@ -112,9 +115,12 @@ export default function App() {
     const { data: invoiceNumber, error: issueError } = await supabase.rpc("fiskalo_issue_invoice", { target_invoice: invoice.id });
     if (issueError) { setBusy(false); setError("Fatura mbeti draft: " + issueError.message); return; }
 
+    const { data: issuedInvoice, error: issuedReadError } = await supabase.from("fiskalo_invoices").select("total").eq("id", invoice.id).eq("organization_id", organizationId).single();
+    if (issuedReadError || !issuedInvoice) { setBusy(false); setError("Fatura u lëshua, por totali nuk u lexua. Kontrolloje para pagesës."); return; }
+
     if (paymentMethod !== "credit") {
       const { error: payError } = await supabase.rpc("fiskalo_record_payment", {
-        target_invoice: invoice.id, payment_amount: Number(total.toFixed(2)), method: paymentMethod, payment_reference: null,
+        target_invoice: invoice.id, payment_amount: Number(issuedInvoice.total), method: paymentMethod, payment_reference: null,
       });
       if (payError) { setBusy(false); setError("Fatura " + invoiceNumber + " u lëshua, por pagesa nuk u regjistrua: " + payError.message); return; }
     }
