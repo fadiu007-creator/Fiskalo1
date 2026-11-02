@@ -124,6 +124,37 @@ public sealed class FiscalQueueStoreTests
         Assert.Equal(plaintext, protector.Unprotect(protectedBytes));
     }
 
+
+    [Fact]
+    public void WindowsDpapiInstallationStorePersistsVerifiedPosBinding()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "fiskalo-install-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "installation.dpapi");
+        try
+        {
+            var store = new Fiskalo.PosAgent.Core.Security.WindowsDpapiInstallationStore(path);
+            var profile = new Fiskalo.PosAgent.Core.Security.AtkTestInstallationProfile(
+                123456789, "Test Business", "EDI-FISCAL-TEST", 2, 7, 99,
+                "ATK-VERIFY-CODE", DateTimeOffset.UtcNow, "TEST-THUMBPRINT", DateTimeOffset.UtcNow);
+            store.Save(profile);
+            var loaded = store.Load();
+
+            Assert.NotNull(loaded);
+            Assert.Equal(profile.Nui, loaded!.Nui);
+            Assert.Equal(profile.BranchId, loaded.BranchId);
+            Assert.Equal(profile.PosId, loaded.PosId);
+            Assert.Equal(profile.ApplicationId, loaded.ApplicationId);
+            Assert.Equal(profile.VerificationCode, loaded.VerificationCode);
+            Assert.Equal(profile.CertificateThumbprint, loaded.CertificateThumbprint);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Fact]
     public void WindowsDpapiKeyStoreReloadsSameP256PrivateKey()
     {
