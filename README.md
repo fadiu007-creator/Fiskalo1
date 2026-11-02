@@ -12,7 +12,7 @@ Implemented:
 - Products and services with Kosovo VAT rate options (0%, 8%, 18%)
 - Customer register
 - Expense register
-- Invoice drafts and atomic sequential invoice numbering on issue
+- Invoice drafts, atomic sequential numbering, manual/partial payments and payment history
 - Issued invoice immutability
 - Inventory deduction, audited manual stock adjustments, and stock movement records
 - Management summaries and CSV exports
@@ -53,6 +53,7 @@ Apply migrations in order:
 7. `supabase/migrations/0007_stock_adjustment_workflow.sql`
 8. `supabase/migrations/0008_opening_stock_audit.sql`
 9. `supabase/migrations/0009_invoice_draft_and_line_integrity.sql`
+10. `supabase/migrations/0010_invoice_payment_ledger.sql`
 
 Required public environment variables:
 - `NEXT_PUBLIC_SUPABASE_URL`
