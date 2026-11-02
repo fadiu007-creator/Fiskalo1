@@ -16,6 +16,7 @@ type Supplier = { id: string; name: string; business_number: string | null; emai
 type Purchase = { id: string; supplier_id: string; reference: string | null; purchase_date: string; status: string; total: number; paid_total: number; payment_status: string; received_at: string | null };
 type AtkTaxpayerProfile = { organization_id: string; fiscalization_number: string; business_name_from_atk: string | null; last_verified_at: string | null };
 type AtkPosInstallation = { id: string; atk_branch_id: number; pos_id: number; label: string; location: string | null; environment: string; status: string; certificate_serial: string | null; certificate_expires_at: string | null; agent_version: string | null; last_seen_at: string | null };
+type AgentVerification = { businessName: string; verificationCode: string };
 
 const panel: React.CSSProperties = { background: "white", border: "1px solid var(--line)", borderRadius: 14, padding: 18 };
 const field: React.CSSProperties = { width: "100%", minWidth: 0, border: "1px solid var(--line)", borderRadius: 8, padding: "10px 11px", background: "white", color: "var(--ink)" };
@@ -59,6 +60,14 @@ export default function BusinessDashboard() {
   const [atkPosInstallations, setAtkPosInstallations] = useState<AtkPosInstallation[]>([]);
   const [atkProfileForm, setAtkProfileForm] = useState({ fiscalization_number: "" });
   const [atkPosForm, setAtkPosForm] = useState({ atk_branch_id: "", pos_id: "", label: "", location: "" });
+  const [agentPairingCode, setAgentPairingCode] = useState("");
+  const [agentToken, setAgentToken] = useState("");
+  const [agentStatus, setAgentStatus] = useState<Record<string, unknown> | null>(null);
+  const [agentError, setAgentError] = useState("");
+  const [agentNotice, setAgentNotice] = useState("");
+  const [agentBusy, setAgentBusy] = useState(false);
+  const [atkApplicationId, setAtkApplicationId] = useState("");
+  const [agentVerifications, setAgentVerifications] = useState<Record<string, AgentVerification>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -128,6 +137,92 @@ export default function BusinessDashboard() {
     if (insertError) { setError(insertError.code === "23505" ? "Ky kombinim i degës dhe POS-it ekziston tashmë në mjedisin test." : insertError.message); return; }
     setAtkPosForm({ atk_branch_id: "", pos_id: "", label: "", location: "" });
     setNotice("Pajisja u regjistrua në listën lokale të Fiskalo-s. Kjo nuk e regjistron ende pajisjen në ATK."); await load();
+  }
+
+  async function agentRequest(path: string, body?: unknown) {
+    if (!agentToken) throw new Error("Lidhe fillimisht POS Agent-in.");
+    const response = await fetch("http://127.0.0.1:17843" + path, {
+      method: body === undefined ? "GET" : "POST",
+      headers: { Authorization: "Bearer " + agentToken, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || data.title || data.message || data.error || ("POS Agent error " + response.status));
+    return data;
+  }
+
+  async function pairPosAgent(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setAgentBusy(true); setAgentError(""); setAgentNotice("");
+    try {
+      const response = await fetch("http://127.0.0.1:17843/api/v1/pair", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pairingCode: agentPairingCode.trim() }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.sessionToken) throw new Error(data.message || "Nuk u lidh POS Agent. Kontrollo kodin dhe sigurohu që programi po punon në këtë kompjuter.");
+      setAgentToken(data.sessionToken);
+      setAgentPairingCode("");
+      const statusResponse = await fetch("http://127.0.0.1:17843/api/v1/status", {
+        headers: { Authorization: "Bearer " + data.sessionToken },
+      });
+      const status = await statusResponse.json().catch(() => ({}));
+      if (!statusResponse.ok) throw new Error("Lidhja u krijua, por statusi i POS Agent nuk u lexua.");
+      setAgentStatus(status);
+      setAgentNotice("POS Agent u lidh në këtë sesion të shfletuesit.");
+    } catch (e) {
+      setAgentToken(""); setAgentStatus(null);
+      setAgentError(e instanceof Error ? e.message : "Gabim gjatë lidhjes me POS Agent.");
+    } finally { setAgentBusy(false); }
+  }
+
+  async function refreshAgentStatus() {
+    setAgentBusy(true); setAgentError(""); setAgentNotice("");
+    try {
+      const status = await agentRequest("/api/v1/status");
+      setAgentStatus(status);
+      setAgentNotice("Statusi i POS Agent u rifreskua.");
+    } catch (e) {
+      setAgentError(e instanceof Error ? e.message : "Nuk u lexua statusi i POS Agent.");
+    } finally { setAgentBusy(false); }
+  }
+
+  async function verifyAtkPos(pos: AtkPosInstallation) {
+    setAgentBusy(true); setAgentError(""); setAgentNotice("");
+    try {
+      if (!atkProfile?.fiscalization_number) throw new Error("Ruaje së pari numrin e fiskalizimit nga EDI.");
+      const applicationId = Number(atkApplicationId);
+      const nui = Number(org?.nui);
+      if (!Number.isSafeInteger(applicationId) || applicationId <= 0) throw new Error("Shëno application ID-në e dhënë nga ATK.");
+      if (!Number.isSafeInteger(nui) || nui <= 0) throw new Error("NUI i biznesit nuk është numër valid.");
+      const result = await agentRequest("/api/v1/atk/test/verify", {
+        nui, fiscalizationNumber: atkProfile.fiscalization_number, posId: pos.pos_id,
+        branchId: pos.atk_branch_id, applicationId,
+      });
+      setAgentVerifications((current) => ({ ...current, [pos.id]: { businessName: result.businessName, verificationCode: result.verificationCode } }));
+      setAgentNotice("ATK e verifikoi pajisjen në mjedisin TEST. Vazhdo me kërkesën për certifikatë testuese.");
+    } catch (e) {
+      setAgentError(e instanceof Error ? e.message : "Verifikimi në ATK dështoi.");
+    } finally { setAgentBusy(false); }
+  }
+
+  async function requestAtkTestCertificate(pos: AtkPosInstallation) {
+    setAgentBusy(true); setAgentError(""); setAgentNotice("");
+    try {
+      const verified = agentVerifications[pos.id];
+      if (!verified) throw new Error("Verifikoje fillimisht pajisjen në ATK.");
+      const applicationId = Number(atkApplicationId);
+      const nui = Number(org?.nui);
+      const result = await agentRequest("/api/v1/atk/test/sign-csr", {
+        businessName: verified.businessName, businessNui: nui, branchId: pos.atk_branch_id,
+        verificationCode: verified.verificationCode, posId: pos.pos_id, applicationId,
+      });
+      const status = await agentRequest("/api/v1/status");
+      setAgentStatus(status);
+      setAgentNotice("ATK lëshoi certifikatën testuese dhe POS Agent verifikoi përputhjen me çelësin lokal. Certifikata nuk është për prodhim.");
+      void result;
+    } catch (e) {
+      setAgentError(e instanceof Error ? e.message : "Kërkesa për certifikatë testuese dështoi.");
+    } finally { setAgentBusy(false); }
   }
 
   async function signOut() {
