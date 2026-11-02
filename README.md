@@ -14,7 +14,7 @@ Implemented:
 - Expense register
 - Invoice drafts and atomic sequential invoice numbering on issue
 - Issued invoice immutability
-- Inventory deduction and stock movement records when tracked goods are invoiced
+- Inventory deduction, audited manual stock adjustments, and stock movement records
 - Management summaries and CSV exports
 - Row Level Security on all Fiskalo tables
 - Cloudflare Workers deployment configuration (OpenNext)
@@ -49,6 +49,8 @@ Apply migrations in order:
 3. `supabase/migrations/0003_invoice_controls_and_stock.sql`
 4. `supabase/migrations/0004_team_management.sql`
 5. `supabase/migrations/0005_tenant_integrity_and_atomic_stock.sql`
+6. `supabase/migrations/0006_invoice_financial_integrity_and_payments.sql`
+7. `supabase/migrations/0007_stock_adjustment_workflow.sql`
 
 Required public environment variables:
 - `NEXT_PUBLIC_SUPABASE_URL`
