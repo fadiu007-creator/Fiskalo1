@@ -1,4 +1,4 @@
--- Fiskalo business MVP schema. All objects are namespaced to protect shared Supabase project zikos.
+-- Fiskalo business MVP schema. All objects are namespaced to protect the shared Supabase project.
 create extension if not exists pgcrypto;
 
 create type public.fiskalo_organization_role as enum ('owner', 'administrator', 'accountant', 'cashier', 'manager');
