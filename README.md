@@ -51,6 +51,7 @@ Apply migrations in order:
 5. `supabase/migrations/0005_tenant_integrity_and_atomic_stock.sql`
 6. `supabase/migrations/0006_invoice_financial_integrity_and_payments.sql`
 7. `supabase/migrations/0007_stock_adjustment_workflow.sql`
+8. `supabase/migrations/0008_opening_stock_audit.sql`
 
 Required public environment variables:
 - `NEXT_PUBLIC_SUPABASE_URL`
