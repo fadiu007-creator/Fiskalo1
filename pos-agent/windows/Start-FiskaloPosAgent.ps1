@@ -3,7 +3,8 @@ param([string]$AllowedOrigins = 'https://fiskalo.shqiptare.workers.dev')
 $ErrorActionPreference = 'Stop'
 $agent = Join-Path $PSScriptRoot 'Fiskalo.PosAgent.Host.exe'
 if (-not (Test-Path -LiteralPath $agent -PathType Leaf)) { throw 'Agent executable missing. Reinstall from the complete Windows x64 package.' }
-$originList = @($AllowedOrigins.Split(';', [System.StringSplitOptions]::RemoveEmptyEntries | [System.StringSplitOptions]::TrimEntries))
+$splitOptions = [System.StringSplitOptions]::RemoveEmptyEntries -bor [System.StringSplitOptions]::TrimEntries
+$originList = @($AllowedOrigins.Split(';', $splitOptions))
 if ($originList.Count -eq 0) { throw 'At least one exact HTTPS origin is required.' }
 foreach ($origin in $originList) {
   $parsed = $null
