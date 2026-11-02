@@ -111,6 +111,7 @@ create table public.fiskalo_atk_fiscal_documents (
   updated_at timestamptz not null default now(),
   unique (organization_id, coupon_id),
   unique (idempotency_key),
+  unique (id, organization_id),
   foreign key (pos_installation_id, organization_id)
     references public.fiskalo_atk_pos_installations(id, organization_id) on delete restrict,
   constraint fiskalo_atk_docs_invoice_org_fk
@@ -135,10 +136,12 @@ create trigger fiskalo_atk_docs_touch before update on public.fiskalo_atk_fiscal
 create table public.fiskalo_atk_fiscal_events (
   id bigint generated always as identity primary key,
   organization_id uuid not null references public.fiskalo_organizations(id) on delete restrict,
-  fiscal_document_id uuid not null references public.fiskalo_atk_fiscal_documents(id) on delete restrict,
+  fiscal_document_id uuid not null,
   event_type text not null check (event_type in ('created','queued','offline_saved','submission_started','accepted','rejected','retry_scheduled','cancelled')),
   details jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  constraint fiskalo_atk_events_doc_org_fk foreign key (fiscal_document_id, organization_id)
+    references public.fiskalo_atk_fiscal_documents(id, organization_id) on delete restrict
 );
 create index fiskalo_atk_events_doc_idx on public.fiskalo_atk_fiscal_events(fiscal_document_id, created_at);
 alter table public.fiskalo_atk_fiscal_events enable row level security;
