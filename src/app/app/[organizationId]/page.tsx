@@ -14,6 +14,8 @@ type Member = { member_user_id: string; member_email: string; member_role: strin
 type PendingInvitation = { invitation_id: string; invite_email: string; invite_role: string; invited_at: string };
 type Supplier = { id: string; name: string; business_number: string | null; email: string | null; phone: string | null; address: string | null };
 type Purchase = { id: string; supplier_id: string; reference: string | null; purchase_date: string; status: string; total: number; paid_total: number; payment_status: string; received_at: string | null };
+type AtkTaxpayerProfile = { organization_id: string; fiscalization_number: string; business_name_from_atk: string | null; last_verified_at: string | null };
+type AtkPosInstallation = { id: string; atk_branch_id: number; pos_id: number; label: string; location: string | null; environment: string; status: string; certificate_serial: string | null; certificate_expires_at: string | null; agent_version: string | null; last_seen_at: string | null };
 
 const panel: React.CSSProperties = { background: "white", border: "1px solid var(--line)", borderRadius: 14, padding: 18 };
 const field: React.CSSProperties = { width: "100%", minWidth: 0, border: "1px solid var(--line)", borderRadius: 8, padding: "10px 11px", background: "white", color: "var(--ink)" };
@@ -53,12 +55,16 @@ export default function BusinessDashboard() {
   const [reportFrom, setReportFrom] = useState(new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10));
   const [reportTo, setReportTo] = useState(new Date().toISOString().slice(0, 10));
   const [purchasePaymentForm, setPurchasePaymentForm] = useState({ amount: "", method: "bank_transfer", reference: "" });
+  const [atkProfile, setAtkProfile] = useState<AtkTaxpayerProfile | null>(null);
+  const [atkPosInstallations, setAtkPosInstallations] = useState<AtkPosInstallation[]>([]);
+  const [atkProfileForm, setAtkProfileForm] = useState({ fiscalization_number: "" });
+  const [atkPosForm, setAtkPosForm] = useState({ atk_branch_id: "", pos_id: "", label: "", location: "" });
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     await supabase.rpc("fiskalo_accept_pending_team_invitations");
-    const [orgResult, productResult, customerResult, invoiceResult, expenseResult, supplierResult, purchaseResult] = await Promise.all([
+    const [orgResult, productResult, customerResult, invoiceResult, expenseResult, supplierResult, purchaseResult, atkProfileResult, atkPosResult] = await Promise.all([
       supabase.from("fiskalo_organizations").select("id,legal_name,municipality,nui,vat_registered,fiscalization_status").eq("id", organizationId).single(),
       supabase.from("fiskalo_products").select("*").eq("organization_id", organizationId).order("name"),
       supabase.from("fiskalo_customers").select("*").eq("organization_id", organizationId).order("name"),
@@ -66,6 +72,8 @@ export default function BusinessDashboard() {
       supabase.from("fiskalo_expenses").select("*").eq("organization_id", organizationId).order("expense_date", { ascending: false }),
       supabase.from("fiskalo_suppliers").select("*").eq("organization_id", organizationId).order("name"),
       supabase.from("fiskalo_purchases").select("*").eq("organization_id", organizationId).order("purchase_date", { ascending: false }),
+      supabase.from("fiskalo_atk_taxpayer_profiles").select("*").eq("organization_id", organizationId).maybeSingle(),
+      supabase.from("fiskalo_atk_pos_installations").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }),
     ]);
     if (orgResult.error) {
       setError("Nuk ke qasje në këtë biznes ose biznesi nuk ekziston.");
@@ -77,12 +85,50 @@ export default function BusinessDashboard() {
       setExpenses((expenseResult.data ?? []) as Expense[]);
       setSuppliers((supplierResult.data ?? []) as Supplier[]);
       setPurchases((purchaseResult.data ?? []) as Purchase[]);
-      if (productResult.error || customerResult.error || invoiceResult.error || expenseResult.error || supplierResult.error || purchaseResult.error) setError("Disa të dhëna nuk u ngarkuan. Rifresko faqen.");
+      setAtkProfile((atkProfileResult.data ?? null) as AtkTaxpayerProfile | null);
+      setAtkProfileForm({ fiscalization_number: atkProfileResult.data?.fiscalization_number ?? "" });
+      setAtkPosInstallations((atkPosResult.data ?? []) as AtkPosInstallation[]);
+      if (productResult.error || customerResult.error || invoiceResult.error || expenseResult.error || supplierResult.error || purchaseResult.error || atkProfileResult.error || atkPosResult.error) setError("Disa të dhëna nuk u ngarkuan. Rifresko faqen.");
     }
     setLoading(false);
   }, [organizationId, supabase]);
 
   useEffect(() => { void load(); }, [load]);
+
+  async function saveAtkProfile(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setError(""); setNotice("");
+    const fiscalizationNumber = atkProfileForm.fiscalization_number.trim();
+    if (!fiscalizationNumber) { setBusy(false); setError("Shëno numrin e fiskalizimit të marrë nga EDI i ATK-së."); return; }
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) { setBusy(false); setError("Sesioni ka skaduar. Hyr përsëri."); return; }
+    const { error: saveError } = await supabase.from("fiskalo_atk_taxpayer_profiles").upsert({
+      organization_id: organizationId, fiscalization_number: fiscalizationNumber, created_by: authData.user.id,
+    }, { onConflict: "organization_id" });
+    setBusy(false);
+    if (saveError) { setError(saveError.message); return; }
+    setNotice("Numri i fiskalizimit u ruajt. Ende nuk është verifikuar nga ATK."); await load();
+  }
+
+  async function addAtkPosInstallation(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setError(""); setNotice("");
+    if (!atkProfile) { setBusy(false); setError("Ruaje së pari numrin e fiskalizimit të biznesit."); return; }
+    const branchId = Number(atkPosForm.atk_branch_id);
+    const posId = Number(atkPosForm.pos_id);
+    if (!Number.isSafeInteger(branchId) || branchId <= 0 || !Number.isSafeInteger(posId) || posId <= 0) {
+      setBusy(false); setError("ID-ja e degës dhe ID-ja e POS-it duhet të jenë numra të plotë pozitivë."); return;
+    }
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) { setBusy(false); setError("Sesioni ka skaduar. Hyr përsëri."); return; }
+    const { error: insertError } = await supabase.from("fiskalo_atk_pos_installations").insert({
+      organization_id: organizationId, atk_branch_id: branchId, pos_id: posId,
+      label: atkPosForm.label.trim(), location: atkPosForm.location.trim() || null,
+      environment: "test", status: "unregistered", created_by: authData.user.id,
+    });
+    setBusy(false);
+    if (insertError) { setError(insertError.code === "23505" ? "Ky kombinim i degës dhe POS-it ekziston tashmë në mjedisin test." : insertError.message); return; }
+    setAtkPosForm({ atk_branch_id: "", pos_id: "", label: "", location: "" });
+    setNotice("Pajisja u regjistrua në listën lokale të Fiskalo-s. Kjo nuk e regjistron ende pajisjen në ATK."); await load();
+  }
 
   async function signOut() {
     await supabase.auth.signOut();
@@ -301,7 +347,7 @@ export default function BusinessDashboard() {
   const draftCount = invoices.filter((invoice) => invoice.status === "draft").length;
   const expenseTotal = expenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
   const fmt = (value: number) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR" }).format(value);
-  const tabItems = [{ id: "overview", label: "Përmbledhje" }, { id: "products", label: "Produktet" }, { id: "customers", label: "Klientët" }, { id: "invoices", label: "Faturat" }, { id: "expenses", label: "Shpenzimet" }, { id: "purchases", label: "Blerjet" }, { id: "reports", label: "Raportet" }, { id: "team", label: "Ekipi" }];
+  const tabItems = [{ id: "overview", label: "Përmbledhje" }, { id: "products", label: "Produktet" }, { id: "customers", label: "Klientët" }, { id: "invoices", label: "Faturat" }, { id: "expenses", label: "Shpenzimet" }, { id: "purchases", label: "Blerjet" }, { id: "atk", label: "ATK / POS" }, { id: "reports", label: "Raportet" }, { id: "team", label: "Ekipi" }];
 
   if (loading) return <main style={{ maxWidth: 1100, margin: "0 auto", padding: 32 }}>Duke ngarkuar panelin...</main>;
   if (!org) return <main style={{ maxWidth: 800, margin: "0 auto", padding: 32 }}><p>{error || "Biznesi nuk u gjet."}</p><Link href="/app">Kthehu te bizneset</Link></main>;
@@ -436,6 +482,48 @@ export default function BusinessDashboard() {
             {!purchases.length && <tr><td colSpan={6}>Nuk ka blerje të regjistruara.</td></tr>}
           </tbody></table></div>
           <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>Pranimi rrit stokun dhe krijon lëvizje inventari e gjurmë auditimi. Pagesat ndaj furnitorëve dhe libri zyrtar i blerjeve për ATK nuk janë ende të integruara.</p>
+        </section>
+      </section>}
+      {tab === "atk" && <section style={{ display: "grid", gap: 14 }}>
+        <section style={{ ...panel, borderColor: "#d7b56d" }}>
+          <h2 style={{ marginTop: 0, fontSize: 19 }}>Lidhja me ATK — faza e testimit</h2>
+          <p style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.6 }}>Këtu përgatiten të dhënat e tatimpaguesit dhe pajisjeve POS për integrimin testues. Ruajtja e këtyre të dhënave në Fiskalo nuk kryen kërkesë ndaj ATK-së, nuk gjeneron certifikatë dhe nuk lëshon kupon fiskal.</p>
+          <p style={{ fontSize: 13, marginBottom: 0 }}><strong>Statusi aktual:</strong> Fiskalo nuk është certifikuar. Mjedisi i prodhimit është i çaktivizuar.</p>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 12, fontSize: 13 }}>
+            <a href="https://apps.atk-ks.org/sefaplikimi/" target="_blank" rel="noreferrer" style={{ color: "var(--brand)", fontWeight: 700 }}>Portali zyrtar SEF</a>
+            <a href="https://fiskalizimi-test.atk-ks.org/swagger/index.html" target="_blank" rel="noreferrer" style={{ color: "var(--brand)", fontWeight: 700 }}>Swagger i mjedisit testues</a>
+            <a href="https://github.com/fiskalizimi/pos-csharp" target="_blank" rel="noreferrer" style={{ color: "var(--brand)", fontWeight: 700 }}>Shembulli zyrtar C#</a>
+          </div>
+        </section>
+        <div className="module-grid" style={{ display: "grid", gridTemplateColumns: "minmax(260px,340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
+          <form onSubmit={saveAtkProfile} style={panel}>
+            <h3 style={{ marginTop: 0 }}>Të dhënat e fiskalizimit të biznesit</h3>
+            <label className="field-label">Numri i fiskalizimit (nga EDI)<input required value={atkProfileForm.fiscalization_number} onChange={(e) => setAtkProfileForm({ fiscalization_number: e.target.value })} style={field} /></label>
+            <p style={{ color: "var(--muted)", fontSize: 11, lineHeight: 1.5 }}>Ky numër merret nga EDI i ATK-së për biznesin. Mos vendos NUI-në në vend të tij.</p>
+            <button disabled={busy} style={{ ...primary, width: "100%" }}>Ruaj të dhënat</button>
+            {atkProfile?.last_verified_at && <small>Verifikuar: {new Date(atkProfile.last_verified_at).toLocaleString("sq-XK")}</small>}
+            {atkProfile?.business_name_from_atk && <small>Emri sipas ATK-së: {atkProfile.business_name_from_atk}</small>}
+          </form>
+          <form onSubmit={addAtkPosInstallation} style={panel}>
+            <h3 style={{ marginTop: 0 }}>Shto pajisje POS për testim</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 8 }}>
+              <label className="field-label">ID e degës në ATK<input required type="number" min="1" step="1" value={atkPosForm.atk_branch_id} onChange={(e) => setAtkPosForm({ ...atkPosForm, atk_branch_id: e.target.value })} style={field} /></label>
+              <label className="field-label">ID e POS-it<input required type="number" min="1" step="1" value={atkPosForm.pos_id} onChange={(e) => setAtkPosForm({ ...atkPosForm, pos_id: e.target.value })} style={field} /></label>
+            </div>
+            <label className="field-label">Emri i pajisjes<input required value={atkPosForm.label} onChange={(e) => setAtkPosForm({ ...atkPosForm, label: e.target.value })} placeholder="p.sh. Arka kryesore" style={field} /></label>
+            <label className="field-label">Lokacioni<input value={atkPosForm.location} onChange={(e) => setAtkPosForm({ ...atkPosForm, location: e.target.value })} placeholder="p.sh. Ferizaj" style={field} /></label>
+            <p style={{ color: "var(--muted)", fontSize: 11 }}>Mjedisi: TEST. Çdo pajisje ka ID dhe çift çelësash unik. Çelësi privat duhet të krijohet dhe të mbetet në vetë pajisjen; Fiskalo nuk e ruan atë në cloud.</p>
+            <button disabled={busy || !atkProfile} style={{ ...primary, width: "100%" }}>Shto pajisjen testuese</button>
+            {!atkProfile && <small>Ruaje së pari numrin e fiskalizimit të biznesit.</small>}
+          </form>
+        </div>
+        <section style={panel}>
+          <h3 style={{ marginTop: 0 }}>Pajisjet POS të regjistruara në Fiskalo ({atkPosInstallations.length})</h3>
+          <div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Pajisja</th><th>Dega ATK</th><th>POS ID</th><th>Mjedisi</th><th>Statusi</th><th>Certifikata</th></tr></thead><tbody>
+            {atkPosInstallations.map((pos) => <tr key={pos.id}><td>{pos.label}<small>{pos.location || "Lokacioni nuk është shënuar"}</small></td><td>{pos.atk_branch_id}</td><td>{pos.pos_id}</td><td>{pos.environment === "test" ? "Test" : "Prodhim"}</td><td>{({ unregistered: "Pa regjistruar në ATK", verification_pending: "Verifikimi në pritje", certificate_pending: "Certifikata në pritje", active: "Aktive", suspended: "Pezulluar", revoked: "Revokuar" } as Record<string,string>)[pos.status] || pos.status}</td><td>{pos.certificate_serial ? pos.certificate_serial : "Nuk ka certifikatë"}</td></tr>)}
+            {!atkPosInstallations.length && <tr><td colSpan={6}>Nuk ka pajisje POS të regjistruara.</td></tr>}
+          </tbody></table></div>
+          <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>Lista paraqet vetëm konfigurimin lokal të Fiskalo-s. Verifikimi, nënshkrimi i CSR-së dhe lëshimi i certifikatës nga ATK nuk janë kryer.</p>
         </section>
       </section>}
       {tab === "reports" && <section style={{ display: "grid", gap: 14 }}>
