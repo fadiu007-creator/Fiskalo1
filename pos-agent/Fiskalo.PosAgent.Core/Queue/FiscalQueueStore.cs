@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace Fiskalo.PosAgent.Core.Queue;
@@ -80,6 +81,16 @@ public sealed class FiscalQueueStore
         try
         {
             var items = await LoadAsync(cancellationToken);
+            var expired = false;
+            for (var i = 0; i < items.Count; i++)
+            {
+                if (items[i].Status == FiscalQueueStatus.Queued && items[i].RecoveryDeadlineUtc <= timestamp)
+                {
+                    items[i] = items[i] with { Status = FiscalQueueStatus.Expired };
+                    expired = true;
+                }
+            }
+            if (expired) await SaveAsync(items, cancellationToken);
             return items.Where(x => x.Status == FiscalQueueStatus.Queued &&
                     x.NextAttemptAtUtc <= timestamp && x.RecoveryDeadlineUtc > timestamp)
                 .OrderBy(x => x.CreatedAtUtc)
