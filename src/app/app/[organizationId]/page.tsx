@@ -168,7 +168,7 @@ export default function BusinessDashboard() {
   async function loadMembers() {
     setError(""); setNotice("");
     const { data, error: memberError } = await supabase.rpc("fiskalo_list_members", { target_org: organizationId });
-    if (memberError) { setError(memberError.message); return; }
+    if (memberError) { setError(memberError.message.includes("No account found") ? "Ky email nuk ka ende llogari në Fiskalo. Anëtari duhet të regjistrohet te /register dhe pastaj mund ta shtosh këtu." : memberError.message); return; }
     setMembers((data ?? []) as Member[]);
   }
 
@@ -314,7 +314,7 @@ export default function BusinessDashboard() {
         <form onSubmit={addMember} style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Shto anëtar të ekipit</h2>
           <label className="field-label">Email i llogarisë<input required type="email" value={memberForm.email} onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })} style={field} /></label>
           <label className="field-label">Roli<select value={memberForm.role} onChange={(e) => setMemberForm({ ...memberForm, role: e.target.value })} style={field}><option value="administrator">Administrator</option><option value="accountant">Kontabilist</option><option value="manager">Menaxher</option><option value="cashier">Arkëtar</option></select></label>
-          <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>Personi duhet të ketë krijuar paraprakisht llogari në Fiskalo. Ftesat me email do të shtohen në fazën e konfigurimit të email serverit.</p>
+          <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>Së pari, anëtari duhet të krijojë llogari në Fiskalo me të njëjtin email. <a href="/register" style={{ color: "var(--brand)", fontWeight: 700 }}>Hap regjistrimin</a>. Pastaj shkruaje email-in këtu dhe cakto rolin. Ftesat automatike me email ende nuk janë aktive.</p>
           <button disabled={busy} style={{ ...primary, width: "100%" }}>Shto / përditëso rolin</button>
         </form>
         <section style={panel}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}><h2 style={{ fontSize: 18, marginTop: 0 }}>Anëtarët</h2><button style={secondary} onClick={() => void loadMembers()}>Rifresko</button></div>
