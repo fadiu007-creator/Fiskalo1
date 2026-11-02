@@ -9,7 +9,8 @@ type Org = { id: string; legal_name: string; municipality: string; nui: string; 
 type Product = { id: string; name: string; sku: string | null; unit_price: number; vat_rate: number; stock_quantity: number; item_type: string; track_stock: boolean; is_active: boolean };
 type Customer = { id: string; name: string; business_number: string | null; email: string | null; phone: string | null };
 type Invoice = { id: string; invoice_number: string | null; status: string; issue_date: string; total: number; vat_total: number; fiscalization_status: string; customer_id: string | null };
-type Expense = { id: string; description: string; supplier_name: string | null; category: string; amount: number; expense_date: string };
+type Expense = { id: string; description: string; supplier_name: string | null; category: string; amount: number; vat_rate: number; expense_date: string };
+type Member = { member_user_id: string; member_email: string; member_role: string; joined_at: string };
 
 const panel: React.CSSProperties = { background: "white", border: "1px solid var(--line)", borderRadius: 14, padding: 18 };
 const field: React.CSSProperties = { width: "100%", minWidth: 0, border: "1px solid var(--line)", borderRadius: 8, padding: "10px 11px", background: "white", color: "var(--ink)" };
@@ -35,6 +36,8 @@ export default function BusinessDashboard() {
   const [customerForm, setCustomerForm] = useState({ name: "", business_number: "", email: "", phone: "" });
   const [expenseForm, setExpenseForm] = useState({ description: "", supplier_name: "", category: "Tjetër", amount: "", vat_rate: "0", expense_date: new Date().toISOString().slice(0, 10) });
   const [invoiceForm, setInvoiceForm] = useState({ customer_id: "", product_id: "", quantity: "1" });
+  const [members, setMembers] = useState<Member[]>([]);
+  const [memberForm, setMemberForm] = useState({ email: "", role: "cashier" });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -129,11 +132,43 @@ export default function BusinessDashboard() {
     setNotice("Fatura u lëshua me numër " + invoiceNumber + "."); await load();
   }
 
+  async function loadMembers() {
+    setError(""); setNotice("");
+    const { data, error: memberError } = await supabase.rpc("fiskalo_list_members", { target_org: organizationId });
+    if (memberError) { setError(memberError.message); return; }
+    setMembers((data ?? []) as Member[]);
+  }
+
+  async function addMember(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setError(""); setNotice("");
+    const { error: memberError } = await supabase.rpc("fiskalo_add_existing_member", {
+      target_org: organizationId, target_email: memberForm.email.trim(), target_role: memberForm.role,
+    });
+    setBusy(false);
+    if (memberError) { setError(memberError.message); return; }
+    setMemberForm({ email: "", role: "cashier" }); setNotice("Anëtari u shtua ose roli u përditësua."); await loadMembers();
+  }
+
+  async function removeMember(userId: string) {
+    if (!window.confirm("A dëshiron ta largosh këtë anëtar nga biznesi?")) return;
+    const { error: removeError } = await supabase.rpc("fiskalo_remove_member", { target_org: organizationId, target_user: userId });
+    if (removeError) { setError(removeError.message); return; }
+    setNotice("Qasja e anëtarit u largua."); await loadMembers();
+  }
+
+  function exportInvoices() {
+    downloadCsv("fiskalo-faturat.csv", [["Numri", "Data", "Statusi", "Totali EUR", "TVSH EUR"], ...invoices.map((i) => [i.invoice_number || "Draft", i.issue_date, i.status, i.total, i.vat_total])]);
+  }
+
+  function exportExpenses() {
+    downloadCsv("fiskalo-shpenzimet.csv", [["Data", "Përshkrimi", "Furnitori", "Kategoria", "Shuma EUR"], ...expenses.map((e) => [e.expense_date, e.description, e.supplier_name || "", e.category, e.amount])]);
+  }
+
   const revenue = invoices.filter((invoice) => invoice.status === "issued").reduce((sum, invoice) => sum + Number(invoice.total), 0);
   const draftCount = invoices.filter((invoice) => invoice.status === "draft").length;
   const expenseTotal = expenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
   const fmt = (value: number) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR" }).format(value);
-  const tabItems = [{ id: "overview", label: "Përmbledhje" }, { id: "products", label: "Produktet" }, { id: "customers", label: "Klientët" }, { id: "invoices", label: "Faturat" }, { id: "expenses", label: "Shpenzimet" }];
+  const tabItems = [{ id: "overview", label: "Përmbledhje" }, { id: "products", label: "Produktet" }, { id: "customers", label: "Klientët" }, { id: "invoices", label: "Faturat" }, { id: "expenses", label: "Shpenzimet" }, { id: "reports", label: "Raportet" }, { id: "team", label: "Ekipi" }];
 
   if (loading) return <main style={{ maxWidth: 1100, margin: "0 auto", padding: 32 }}>Duke ngarkuar panelin...</main>;
   if (!org) return <main style={{ maxWidth: 800, margin: "0 auto", padding: 32 }}><p>{error || "Biznesi nuk u gjet."}</p><Link href="/app">Kthehu te bizneset</Link></main>;
@@ -218,6 +253,32 @@ export default function BusinessDashboard() {
         </form>
         <section style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Shpenzimet ({expenses.length})</h2><div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Data</th><th>Përshkrimi</th><th>Furnitori</th><th>Kategoria</th><th>Shuma</th></tr></thead><tbody>{expenses.map((e) => <tr key={e.id}><td>{e.expense_date}</td><td>{e.description}</td><td>{e.supplier_name || "—"}</td><td>{e.category}</td><td>{fmt(Number(e.amount))}</td></tr>)}{!expenses.length && <tr><td colSpan={5}>Nuk ka shpenzime ende.</td></tr>}</tbody></table></div></section>
       </section>}
+      {tab === "reports" && <section style={{ display: "grid", gap: 14 }}>
+        <div style={{ ...panel, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+          <div><h2 style={{ margin: "0 0 5px", fontSize: 19 }}>Raporti i biznesit</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: 12 }}>Përmbledhje operative nga të dhënat e regjistruara në Fiskalo.</p></div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button style={secondary} onClick={exportInvoices}>Eksporto faturat CSV</button><button style={secondary} onClick={exportExpenses}>Eksporto shpenzimet CSV</button></div>
+        </div>
+        <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>
+          <Stat label="Fatura të lëshuara" value={String(invoices.filter((i) => i.status === "issued").length)} />
+          <Stat label="Të hyra (bruto)" value={fmt(revenue)} />
+          <Stat label="TVSH në fatura" value={fmt(invoices.filter((i) => i.status === "issued").reduce((s, i) => s + Number(i.vat_total), 0))} />
+          <Stat label="Shpenzime të regjistruara" value={fmt(expenseTotal)} />
+          <Stat label="Diferenca operative" value={fmt(revenue - expenseTotal)} />
+        </section>
+        <section style={panel}><h3 style={{ marginTop: 0 }}>Shënim për raportet tatimore</h3><p style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.6 }}>Këto janë raporte të brendshme menaxheriale. Nuk janë libra zyrtarë të shitjes/blerjes, deklarata tatimore apo raportim i pranuar nga ATK. Klasifikimi dhe trajtimi tatimor duhet të verifikohen para përdorimit për deklarim.</p></section>
+      </section>}
+
+      {tab === "team" && <section style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
+        <form onSubmit={addMember} style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Shto anëtar të ekipit</h2>
+          <label className="field-label">Email i llogarisë<input required type="email" value={memberForm.email} onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })} style={field} /></label>
+          <label className="field-label">Roli<select value={memberForm.role} onChange={(e) => setMemberForm({ ...memberForm, role: e.target.value })} style={field}><option value="administrator">Administrator</option><option value="accountant">Kontabilist</option><option value="manager">Menaxher</option><option value="cashier">Arkëtar</option></select></label>
+          <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>Personi duhet të ketë krijuar paraprakisht llogari në Fiskalo. Ftesat me email do të shtohen në fazën e konfigurimit të email serverit.</p>
+          <button disabled={busy} style={{ ...primary, width: "100%" }}>Shto / përditëso rolin</button>
+        </form>
+        <section style={panel}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}><h2 style={{ fontSize: 18, marginTop: 0 }}>Anëtarët</h2><button style={secondary} onClick={() => void loadMembers()}>Rifresko</button></div>
+          <div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Email</th><th>Roli</th><th></th></tr></thead><tbody>{members.map((m) => <tr key={m.member_user_id}><td>{m.member_email}</td><td>{({ owner: "Pronar", administrator: "Administrator", accountant: "Kontabilist", manager: "Menaxher", cashier: "Arkëtar" } as Record<string,string>)[m.member_role] || m.member_role}</td><td>{m.member_role !== "owner" && <button style={secondary} onClick={() => void removeMember(m.member_user_id)}>Largo</button>}</td></tr>)}{!members.length && <tr><td colSpan={3}>Shtyp “Rifresko” për të parë anëtarët. Kjo pjesë është e disponueshme për pronarët dhe administratorët.</td></tr>}</tbody></table></div>
+        </section>
+      </section>}
       <footer style={{ marginTop: 24, color: "var(--muted)", fontSize: 11 }}>Të dhënat ruhen në hapësirën e këtij biznesi. Fiskalizimi zyrtar dhe certifikimi ATK nuk janë aktivizuar.</footer>
     </main>
   );
@@ -229,4 +290,13 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function InvoiceTable({ invoices, fmt, customers }: { invoices: Invoice[]; fmt: (value: number) => string; customers: Customer[] }) {
   return <div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Numri</th><th>Data</th><th>Klienti</th><th>Statusi</th><th>Totali</th><th></th></tr></thead><tbody>{invoices.map((invoice) => <tr key={invoice.id}><td>{invoice.invoice_number || "Draft"}</td><td>{invoice.issue_date}</td><td>{customers.find((c) => c.id === invoice.customer_id)?.name || "—"}</td><td>{invoice.status === "issued" ? "E lëshuar" : invoice.status === "cancelled" ? "Anuluar" : "Draft"}</td><td>{fmt(Number(invoice.total))}</td><td>{invoice.status === "issued" && <button className="no-print" style={secondary} onClick={() => window.print()}>Printo</button>}</td></tr>)}{!invoices.length && <tr><td colSpan={6}>Nuk ka fatura ende.</td></tr>}</tbody></table></div>;
+}
+
+
+function downloadCsv(filename: string, rows: (string | number)[][]) {
+  const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\\r\\n");
+  const blob = new Blob(["\\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url; link.download = filename; link.click(); URL.revokeObjectURL(url);
 }
