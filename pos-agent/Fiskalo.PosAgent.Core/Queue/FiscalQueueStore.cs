@@ -276,6 +276,12 @@ public sealed class FiscalQueueStore
         }
     }
 
+    private static void EnsureQueued(FiscalQueueItem item)
+    {
+        if (item.Status != FiscalQueueStatus.Queued)
+            throw new InvalidOperationException("Only queued fiscal documents can be rescheduled.");
+    }
+
     private static void EnsureSubmitting(FiscalQueueItem item)
     {
         if (item.Status != FiscalQueueStatus.Submitting)
