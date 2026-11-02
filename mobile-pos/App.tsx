@@ -36,10 +36,7 @@ export default function App() {
   }, 0), [cart]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSignedIn(Boolean(data.session));
-      if (data.session) void loadOrganizations();
-    });
+    supabase.auth.getSession().then(({ data }) => setSignedIn(Boolean(data.session)));
   }, []);
 
   async function signIn() {
