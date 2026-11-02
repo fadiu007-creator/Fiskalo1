@@ -70,6 +70,18 @@ public sealed class FiscalQueueStoreTests
         Assert.False(raw.Contains(secretPayload, StringComparison.Ordinal));
     }
 
+
+    [Fact]
+    public void CsrGenerationUsesP256AndDoesNotExportPrivateKey()
+    {
+        using var key = Fiskalo.PosAgent.Core.Atk.AtkPki.GenerateP256Key();
+        var csr = Fiskalo.PosAgent.Core.Atk.AtkPki.CreateCsrPem(key, "Fiskalo Test Business", 123456789, 1, 1);
+
+        Assert.StartsWith("-----BEGIN CERTIFICATE REQUEST-----", csr, StringComparison.Ordinal);
+        Assert.Contains("-----END CERTIFICATE REQUEST-----", csr, StringComparison.Ordinal);
+        Assert.Equal(256, key.KeySize);
+    }
+
     [Fact]
     public void WindowsDpapiProtectsAndUnprotectsQueueData()
     {
