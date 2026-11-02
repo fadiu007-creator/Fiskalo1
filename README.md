@@ -15,7 +15,9 @@ Implemented:
 - Invoice drafts, atomic sequential numbering, manual/partial payments and payment history
 - Issued invoice immutability
 - Inventory deduction, audited manual stock adjustments, and stock movement records
-- Management summaries and CSV exports
+- Supplier register, purchase drafts, atomic stock receiving, supplier payment ledger and outstanding balances
+- Date-filtered management reports and CSV exports
+- ATK preparation foundation: taxpayer fiscalization-number profile, test POS registry, fiscal document/event schema and provider production lock
 - Row Level Security on all Fiskalo tables
 - Cloudflare Workers deployment configuration (OpenNext)
 
@@ -24,7 +26,7 @@ Not yet part of this MVP:
 - Certified fiscal receipt/QR workflow and hardware integrations
 - Accountant multi-client workspace
 - Employee email invitations (team members must already have a Fiskalo account)
-- Supplier purchasing, purchase books, detailed inventory receiving, POS hardware and cash drawer
+- ATK test API onboarding and coupon submission, local POS Agent, secure certificate/key storage, offline queue, POS hardware and cash drawer
 - Subscription billing and Fiskalo platform administration
 - Production deployment and live end-to-end testing with real business accounts
 
@@ -55,6 +57,17 @@ Apply migrations in order:
 9. `supabase/migrations/0009_invoice_draft_and_line_integrity.sql`
 10. `supabase/migrations/0010_invoice_payment_ledger.sql`
 11. `supabase/migrations/0011_unit_price_precision.sql`
+12. `supabase/migrations/0012_fix_product_org_link_trigger.sql`
+13. `supabase/migrations/0013_edit_invoice_drafts.sql`
+14. `supabase/migrations/0014_team_invitations_and_payment_clarity.sql`
+15. `supabase/migrations/0015_explicit_invoice_payment_status.sql`
+16. `supabase/migrations/0016_atomic_target_stock_adjustment.sql`
+17. `supabase/migrations/0017_restrict_stock_rpc_to_authenticated.sql`
+18. `supabase/migrations/0018_restrict_fiskalo_definer_functions.sql`
+19. `supabase/migrations/0019_suppliers_and_purchase_receiving.sql`
+20. `supabase/migrations/0020_atomic_purchase_creation.sql`
+21. `supabase/migrations/0021_supplier_payment_ledger.sql`
+22. `supabase/migrations/0022_atk_fiscalization_foundation.sql`
 
 Required public environment variables:
 - `NEXT_PUBLIC_SUPABASE_URL`
@@ -94,4 +107,6 @@ The current 2026 ATK requirements and certification gates are tracked in [`docs/
 - Stock is checked and decremented atomically when an invoice is issued.
 - Audit events are recorded for business creation, invoice issuance, and team membership changes.
 - Fiscal signing keys and ATK credentials must never be stored in ordinary database tables.
-- Official fiscalization must remain disabled until current ATK specifications, authorized access, tests, and certification have been verified and completed.
+- The ATK preparation module only stores taxpayer and POS metadata. It does not call ATK or create certificates.
+- The ATK test protocol is based on the official `fiskalizimi/pos-csharp` and `pos-golang` examples; the current implementation state and test sequence are in `docs/atk-efs-certification-and-integration.md`.
+- Official fiscalization must remain disabled until current ATK specifications, authorized test access, onboarding, Sale/Cancel/Return tests, and provider/solution certification have been completed.
