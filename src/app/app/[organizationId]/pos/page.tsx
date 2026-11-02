@@ -126,10 +126,19 @@ export default function WebPosPage() {
       return;
     }
 
+    const { data: issuedInvoice, error: issuedReadError } = await supabase.from("fiskalo_invoices").select("total").eq("id", invoice.id).eq("organization_id", organizationId).single();
+    if (issuedReadError || !issuedInvoice) {
+      setBusy(false);
+      setIssuedInvoiceId(invoice.id);
+      setIssuedNumber(String(invoiceNumber ?? ""));
+      setError("Fatura u lëshua, por totali i saj nuk u lexua. Kontrollo faturën para regjistrimit të pagesës.");
+      return;
+    }
+
     if (paymentMethod !== "credit") {
       const { error: paymentError } = await supabase.rpc("fiskalo_record_payment", {
         target_invoice: invoice.id,
-        payment_amount: Number(total.toFixed(2)),
+        payment_amount: Number(issuedInvoice.total),
         method: paymentMethod,
         payment_reference: null,
       });
