@@ -37,7 +37,7 @@ The mapper deliberately does not convert a Fiskalo VAT percentage into an ATK ta
 
 ## Android scope
 
-The Android project in mobile-pos/ is a native client for ordinary Fiskalo sales/invoice management. It uses the existing Supabase Auth and RLS tenant boundaries and stores the login session in Android SecureStore. It has not yet been built as an APK or exercised on physical hardware.
+The Android project in mobile-pos/ is a native client for ordinary Fiskalo sales/invoice management. It uses the existing Supabase Auth and RLS tenant boundaries and stores the login session in Android SecureStore. The Android workflow now attempts to assemble a debug APK and upload it as a 14-day GitHub Actions artifact; the first build is still running and is not yet verified. It has not been exercised on physical hardware.
 
 Android ATK support is a separate milestone: Android Keystore-backed P-256 key management, CSR/certificate lifecycle, Protobuf signing, durable encrypted queue, network ambiguity reconciliation and ATK test evidence must be implemented and tested on real Android hardware. Do not copy a Windows DPAPI private key or certificate into Android.
 
@@ -47,7 +47,7 @@ Android ATK support is a separate milestone: Android Keystore-backed P-256 key m
 - Card acquiring is not integrated; card payments are only entered after an external terminal/provider confirms success.
 - No production ATK endpoint or production submission switch is enabled.
 - No test coupon has been sent as part of this implementation batch.
-- The Android app has not yet passed a build on a physical device.
+- The Android app has not yet been installed or tested on a physical device.
 
 ## Browser and Android key-storage prototype (2 November 2026)
 
@@ -58,3 +58,15 @@ The Android POS now contains a local Expo native module that generates P-256 key
 These are key-generation/CSR foundations only. They do not yet verify the CSR against ATK, install an ATK-issued certificate, submit fiscal coupons from Web/Android, or provide a production-ready offline queue. They have not been built/tested on physical devices or approved by ATK. The Windows Agent remains the only currently implemented complete local ATK test verify/sign-CSR path.
 
 For the exact applicant-vs-taxpayer identity distinction, test fiscalization number, Application ID, test request and portal verification steps, see [ATK test runbook](./atk-test-runbook.md).
+
+
+## ATK unit and POS identifiers
+
+Administrative Instruction (MF) 01/2026, Article 34(3), requires the taxpayer to submit its NUI/tax number, unit number, POS number, software-solution code and fiscalization number when requesting the certificate/key for each installed SEF. It does not prescribe a universal branch/unit number for all businesses.
+
+- The unit number belongs to the taxpayer's registered business unit/location. Retrieve it from the taxpayer's unit registration records or EDI data; if it is not clear, ask ATK before registering the test POS.
+- POS ID is a unique numeric identifier for each individual register. Keep it stable and do not reuse it for a different register. The official ATK integration reference explicitly says each POS must have a unique ID.
+- The internal Fiskalo branch UUID is not the ATK unit number.
+- Every installed SEF has its own private key. Do not share one key between browser profiles, Android devices or POS installations.
+
+References: [ATK Administrative Instruction 01/2026, Article 34](https://apps.atk-ks.org/sefaplikimi/) and [official ATK C# POS integration](https://github.com/fiskalizimi/pos-csharp).
