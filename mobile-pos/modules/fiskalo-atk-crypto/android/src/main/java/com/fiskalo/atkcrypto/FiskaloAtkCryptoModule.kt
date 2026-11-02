@@ -6,6 +6,7 @@ import android.security.keystore.KeyProperties
 import android.util.Base64
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
 import java.security.KeyFactory
@@ -14,6 +15,7 @@ import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.Signature
 import java.security.spec.ECGenParameterSpec
+import java.security.cert.CertificateFactory
 
 class FiskaloAtkCryptoModule : Module() {
   override fun definition() = ModuleDefinition {
@@ -81,7 +83,15 @@ class FiskaloAtkCryptoModule : Module() {
       val signer = Signature.getInstance("SHA256withECDSA")
       signer.initSign(key)
       signer.update(base64Payload.toByteArray(StandardCharsets.UTF_8))
-      Base64.encodeToString(signer.sign(), Base64.NO_WRAP)
+      Base64.encodeToString(Der.ecdsaDerToP1363(signer.sign()), Base64.NO_WRAP)
+    }
+
+    AsyncFunction("matchesCertificate") { alias: String, certificatePem: String ->
+      val clean = certificatePem.replace("-----BEGIN CERTIFICATE-----", "").replace("-----END CERTIFICATE-----", "").replace(Regex("\\\\s+"), "")
+      val certificateBytes = Base64.decode(clean, Base64.DEFAULT)
+      val certificate = CertificateFactory.getInstance("X.509").generateCertificate(ByteArrayInputStream(certificateBytes))
+      val localCertificate = keyStore().getCertificate(normalizeAlias(alias)) ?: return@AsyncFunction false
+      MessageDigest.isEqual(certificate.publicKey.encoded, localCertificate.publicKey.encoded)
     }
 
     AsyncFunction("deleteKey") { alias: String ->
@@ -114,6 +124,39 @@ private object Der {
     var body = value.copyOfRange(start, value.size)
     if ((body[0].toInt() and 0x80) != 0) body = byteArrayOf(0) + body
     return tagged(0x02, body)
+  }
+  fun ecdsaDerToP1363(signature: ByteArray): ByteArray {
+    var offset = 0
+    require(signature.size > 8 && signature[offset++].toInt() == 0x30) { "Invalid ECDSA DER signature." }
+    val sequenceLength = readLength(signature, offset)
+    offset = sequenceLength.second
+    require(offset + sequenceLength.first == signature.size) { "Invalid ECDSA DER sequence length." }
+    fun readInteger(): ByteArray {
+      require(offset < signature.size && signature[offset++].toInt() == 0x02) { "Invalid ECDSA DER integer." }
+      val length = readLength(signature, offset)
+      offset = length.second
+      require(length.first > 0 && offset + length.first <= signature.size) { "Invalid ECDSA DER integer length." }
+      var value = signature.copyOfRange(offset, offset + length.first)
+      offset += length.first
+      while (value.size > 32 && value[0] == 0.toByte()) value = value.copyOfRange(1, value.size)
+      require(value.size <= 32) { "ECDSA integer exceeds P-256 width." }
+      return ByteArray(32 - value.size) + value
+    }
+    val r = readInteger()
+    val s = readInteger()
+    require(offset == signature.size) { "Unexpected trailing ECDSA signature bytes." }
+    return r + s
+  }
+  private fun readLength(bytes: ByteArray, initialOffset: Int): Pair<Int, Int> {
+    var offset = initialOffset
+    require(offset < bytes.size) { "Missing DER length." }
+    val first = bytes[offset++].toInt() and 0xFF
+    if (first < 128) return Pair(first, offset)
+    val count = first and 0x7F
+    require(count in 1..4 && offset + count <= bytes.size) { "Invalid DER length." }
+    var length = 0
+    repeat(count) { length = length * 256 + (bytes[offset++].toInt() and 0xFF) }
+    return Pair(length, offset)
   }
   fun subject(name: String, nui: String, branch: String, pos: String): ByteArray {
     fun attribute(oidBytes: ByteArray, value: ByteArray) = set(sequence(oid(oidBytes), value))
