@@ -112,7 +112,7 @@ The current 2026 ATK requirements and certification gates are tracked in [`docs/
 - Stock is checked and decremented atomically when an invoice is issued.
 - Audit events are recorded for business creation, invoice issuance, and team membership changes.
 - Fiscal signing keys and ATK credentials must never be stored in ordinary database tables.
-- The ATK preparation module only stores taxpayer and POS metadata. It does not call ATK or create certificates.
+- The dashboard stores taxpayer/POS metadata; the paired Windows agent performs explicit test-only ATK verification, CSR/certificate requests and test coupon submission. Private signing keys remain local and DPAPI-protected.
 - The ATK test protocol is based on the official `fiskalizimi/pos-csharp` and `pos-golang` examples; the current implementation state and test sequence are in `docs/atk-efs-certification-and-integration.md`.
 - Official fiscalization must remain disabled until current ATK specifications, authorized test access, onboarding, Sale/Cancel/Return tests, and provider/solution certification have been completed.
 
