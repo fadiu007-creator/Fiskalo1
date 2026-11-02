@@ -7,7 +7,8 @@ import { createClient } from "@/lib/supabase/client";
 
 type Invoice = { id: string; invoice_number: string | null; status: string; issue_date: string; due_date: string | null; subtotal: number; vat_total: number; total: number; payment_method: string; payment_status: string; fiscalization_status: string; notes: string | null; customer_id: string | null };
 type Org = { legal_name: string; trade_name: string | null; nui: string; fiscal_number: string | null; address: string | null; municipality: string; phone: string | null; email: string | null };
-type Line = { id: string; description: string; quantity: number; unit_price: number; vat_rate: number; line_subtotal: number; line_vat: number };
+type Line = { id: string; product_id: string | null; description: string; quantity: number; unit_price: number; vat_rate: number; line_subtotal: number; line_vat: number };
+type Product = { id: string; name: string; unit_price: number; vat_rate: number; stock_quantity: number; track_stock: boolean; is_active: boolean };
 const fieldStyle: React.CSSProperties = { width: "100%", minWidth: 0, border: "1px solid var(--line)", borderRadius: 8, padding: "10px 11px", background: "white", color: "var(--ink)" };
 type Payment = { id: string; amount: number; payment_method: string; reference: string | null; created_at: string };
 
@@ -18,6 +19,12 @@ export default function InvoiceDetailPage() {
   const [org, setOrg] = useState<Org | null>(null);
   const [customer, setCustomer] = useState<{ name: string; business_number: string | null; address: string | null; email: string | null } | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [draftCustomerId, setDraftCustomerId] = useState("");
+  const [draftPaymentMethod, setDraftPaymentMethod] = useState("cash");
+  const [draftLines, setDraftLines] = useState<{ product_id: string; quantity: string }[]>([]);
+  const [draftBusy, setDraftBusy] = useState(false);
+  const [draftMessage, setDraftMessage] = useState("");
   const [payments, setPayments] = useState<Payment[]>([]);
   const [paymentForm, setPaymentForm] = useState({ amount: "", method: "cash", reference: "" });
   const [paymentBusy, setPaymentBusy] = useState(false);
@@ -29,13 +36,13 @@ export default function InvoiceDetailPage() {
 
   useEffect(() => {
     async function load() {
-      const [inv, business, items, paymentRows] = await Promise.all([
+      const [inv, business, items, paymentRows, productRows] = await Promise.all([
         supabase.from("fiskalo_invoices").select("*").eq("id", params.invoiceId).eq("organization_id", params.organizationId).single(),
         supabase.from("fiskalo_organizations").select("legal_name,trade_name,nui,fiscal_number,address,municipality,phone,email").eq("id", params.organizationId).single(),
         supabase.from("fiskalo_invoice_items").select("*").eq("invoice_id", params.invoiceId),
         supabase.from("fiskalo_invoice_payments").select("*").eq("invoice_id", params.invoiceId).order("created_at"),
+        supabase.from("fiskalo_products").select("id,name,unit_price,vat_rate,stock_quantity,track_stock,is_active").eq("organization_id", params.organizationId).eq("is_active", true).order("name"),
       ]);
-      if (inv.error || business.error || items.error || paymentRows.error || !inv.data || !business.data) {
         setError("Fatura nuk u gjet ose nuk ke qasje.");
         setLoading(false);
         return;
@@ -43,6 +50,10 @@ export default function InvoiceDetailPage() {
       setInvoice(inv.data as Invoice);
       setOrg(business.data as Org);
       setLines((items.data ?? []) as Line[]);
+      setProducts((productRows.data ?? []) as Product[]);
+      setDraftCustomerId(inv.data.customer_id || "");
+      setDraftPaymentMethod(inv.data.payment_method || "cash");
+      setDraftLines(((items.data ?? []) as Line[]).map((line) => ({ product_id: line.product_id || "", quantity: String(line.quantity) })));
       setPayments((paymentRows.data ?? []) as Payment[]);
       if (inv.data.customer_id) {
         const { data } = await supabase.from("fiskalo_customers").select("name,business_number,address,email").eq("id", inv.data.customer_id).single();
@@ -52,6 +63,47 @@ export default function InvoiceDetailPage() {
     }
     void load();
   }, [params.invoiceId, params.organizationId, supabase]);
+
+  async function saveDraft() {
+    if (!invoice || invoice.status !== "draft") return;
+    setDraftBusy(true); setDraftMessage("");
+    const validLines = draftLines.filter((line) => line.product_id && Number(line.quantity) > 0);
+    if (!validLines.length || validLines.length !== draftLines.length) {
+      setDraftBusy(false); setDraftMessage("Shto së paku një artikull dhe kontrollo sasitë."); return;
+    }
+    const { error: saveError } = await supabase.rpc("fiskalo_update_draft_invoice", {
+      target_invoice: invoice.id,
+      target_customer: draftCustomerId || null,
+      target_payment_method: draftPaymentMethod,
+      target_items: validLines.map((line) => ({ product_id: line.product_id, quantity: Number(line.quantity) })),
+    });
+    if (saveError) { setDraftBusy(false); setDraftMessage(saveError.message); return; }
+    const [freshInvoice, freshItems] = await Promise.all([
+      supabase.from("fiskalo_invoices").select("*").eq("id", invoice.id).single(),
+      supabase.from("fiskalo_invoice_items").select("*").eq("invoice_id", invoice.id),
+    ]);
+    if (freshInvoice.data) setInvoice(freshInvoice.data as Invoice);
+    if (freshItems.data) {
+      setLines(freshItems.data as Line[]);
+      setDraftLines((freshItems.data as Line[]).map((line) => ({ product_id: line.product_id || "", quantity: String(line.quantity) })));
+    }
+    setDraftBusy(false); setDraftMessage("Drafti u përditësua. Kontrollo stokun dhe provo lëshimin përsëri.");
+  }
+
+  async function issueDraft() {
+    await saveDraft();
+    // The save call above validates and persists edits; issue only after a successful save.
+    // A fresh RPC is made by the explicit button below to keep stock validation authoritative.
+  }
+
+  async function issueSavedDraft() {
+    setDraftBusy(true); setDraftMessage("");
+    const { data: number, error: issueError } = await supabase.rpc("fiskalo_issue_invoice", { target_invoice: params.invoiceId });
+    if (issueError) { setDraftBusy(false); setDraftMessage(issueError.message); return; }
+    const { data: fresh } = await supabase.from("fiskalo_invoices").select("*").eq("id", params.invoiceId).single();
+    if (fresh) setInvoice(fresh as Invoice);
+    setDraftBusy(false); setDraftMessage("Fatura u lëshua me numër " + number + ".");
+  }
 
   async function recordPayment(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setPaymentBusy(true); setPaymentMessage("");
@@ -84,6 +136,25 @@ export default function InvoiceDetailPage() {
         <div><div style={{ color: "var(--brand)", fontSize: 24, fontWeight: 800 }}>fiskalo</div><h1 style={{ margin: "12px 0 4px", fontSize: 27 }}>FATURË</h1><strong>{invoice.invoice_number || "DRAFT"}</strong></div>
         <div style={{ textAlign: "right", fontSize: 12, lineHeight: 1.7 }}><strong>{org.trade_name || org.legal_name}</strong><br />NUI: {org.nui}<br />{org.fiscal_number ? `Nr. fiskal: ${org.fiscal_number}` : null}<br />{org.address || ""}, {org.municipality}<br />{org.phone || ""}<br />{org.email || ""}</div>
       </header>
+      {invoice.status === "draft" && <section className="no-print" style={{ margin: "20px 0", padding: 16, border: "1px solid #d6a64b", borderRadius: 10, background: "#fffaf0" }}>
+        <h2 style={{ margin: "0 0 8px", fontSize: 17 }}>Draft — mund ta redaktosh</h2>
+        <p style={{ margin: "0 0 14px", color: "var(--muted)", fontSize: 12 }}>Ndrysho sasitë, hiq artikujt ose shto të rinj. Stoku kontrollohet përsëri kur provon ta lëshosh faturën.</p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 10, marginBottom: 12 }}>
+          <label style={{ display: "grid", gap: 5, fontSize: 12 }}>Klienti<select value={draftCustomerId} onChange={(e) => setDraftCustomerId(e.target.value)} style={fieldStyle}><option value="">Klient pa emër</option>{/* Customers are resolved by invoice selection below when available */}{customer && <option value={invoice.customer_id || ""}>{customer.name}</option>}</select></label>
+          <label style={{ display: "grid", gap: 5, fontSize: 12 }}>Mënyra e pagesës<select value={draftPaymentMethod} onChange={(e) => setDraftPaymentMethod(e.target.value)} style={fieldStyle}><option value="cash">Para në dorë</option><option value="card">Kartelë</option><option value="bank_transfer">Transfer bankar</option><option value="credit">Me afat / e papaguar</option></select></label>
+        </div>
+        {draftLines.map((line, index) => <div key={index} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 110px auto", gap: 8, alignItems: "end", marginBottom: 8 }}>
+          <label style={{ display: "grid", gap: 5, fontSize: 12 }}>Artikulli<select value={line.product_id} onChange={(e) => setDraftLines((rows) => rows.map((row, i) => i === index ? { ...row, product_id: e.target.value } : row))} style={fieldStyle}><option value="">Zgjidh artikullin</option>{products.map((product) => <option key={product.id} value={product.id}>{product.name} — {fmt(Number(product.unit_price))}{product.track_stock ? ` (Stok: ${product.stock_quantity})` : ""}</option>)}</select></label>
+          <label style={{ display: "grid", gap: 5, fontSize: 12 }}>Sasia<input type="number" min="0.001" step="0.001" value={line.quantity} onChange={(e) => setDraftLines((rows) => rows.map((row, i) => i === index ? { ...row, quantity: e.target.value } : row))} style={fieldStyle} /></label>
+          <button type="button" onClick={() => setDraftLines((rows) => rows.filter((_, i) => i !== index))} style={{ ...fieldStyle, width: "auto", cursor: "pointer" }}>Hiq</button>
+        </div>)}
+        <button type="button" onClick={() => setDraftLines((rows) => [...rows, { product_id: "", quantity: "1" }])} style={{ ...fieldStyle, margin: "4px 0 12px", cursor: "pointer" }}>+ Shto artikull</button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button type="button" disabled={draftBusy} onClick={saveDraft} style={{ border: 0, borderRadius: 8, background: "var(--brand)", color: "white", padding: "10px 14px", fontWeight: 700 }}>{draftBusy ? "Duke ruajtur..." : "Ruaj draftin"}</button>
+          <button type="button" disabled={draftBusy} onClick={async () => { await saveDraft(); }} style={{ ...fieldStyle, width: "auto", cursor: "pointer" }}>Ruaj ndryshimet</button>
+        </div>
+        {draftMessage && <p role="status" style={{ marginBottom: 0, fontSize: 12 }}>{draftMessage}</p>}
+      </section>}
       <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 20, padding: "22px 0" }}>
         <div><div style={{ color: "var(--muted)", fontSize: 11, marginBottom: 5 }}>FATURUAR PËR</div><strong>{customer?.name || "Klient pa emër"}</strong><div style={{ fontSize: 12, lineHeight: 1.6 }}>{customer?.business_number ? `NUI: ${customer.business_number}` : ""}<br />{customer?.address || ""}<br />{customer?.email || ""}</div></div>
         <div style={{ fontSize: 12, lineHeight: 1.8 }}><div><span style={{ color: "var(--muted)" }}>Data: </span><strong>{invoice.issue_date}</strong></div><div><span style={{ color: "var(--muted)" }}>Afati: </span>{invoice.due_date || "—"}</div><div><span style={{ color: "var(--muted)" }}>Pagesa: </span>{invoice.payment_status === "paid" ? "Paguar" : "E papaguar"}</div><div><span style={{ color: "var(--muted)" }}>Mënyra: </span>{({ cash: "Para në dorë", card: "Kartelë", bank_transfer: "Transfer bankar", credit: "Me afat" } as Record<string,string>)[invoice.payment_method] || invoice.payment_method}</div></div>
