@@ -45,10 +45,20 @@ public sealed class AtkTestClient
         return PostAsync<AtkCertificateResponse>("/ca/signcsr", body, cancellationToken);
     }
 
-    public async Task<AtkPosCouponResponse> SubmitPosCouponAsync(
+    public Task<AtkPosCouponResponse> SubmitPosCouponAsync(
         PosCoupon coupon, ECDsa privateKey, CancellationToken cancellationToken = default)
     {
         var signed = AtkCouponSigner.SignPosCoupon(coupon, privateKey);
+        return SubmitSignedPosCouponAsync(signed, cancellationToken);
+    }
+
+    public async Task<AtkPosCouponResponse> SubmitSignedPosCouponAsync(
+        SignedAtkCoupon signed, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(signed);
+        if (string.IsNullOrWhiteSpace(signed.DetailsBase64) || string.IsNullOrWhiteSpace(signed.SignatureBase64))
+            throw new ArgumentException("Signed coupon details and signature are required.", nameof(signed));
+
         var response = await PostAsync<AtkPosCouponResponse>(
             "/pos/coupon", new PosCouponRequest(signed.DetailsBase64, signed.SignatureBase64), cancellationToken);
         if (response.TransactionId == 0)
