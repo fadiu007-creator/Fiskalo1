@@ -693,14 +693,14 @@ export default function BusinessDashboard() {
             {atkProfile?.business_name_from_atk && <small>Emri sipas ATK-së: {atkProfile.business_name_from_atk}</small>}
           </form>
           <form onSubmit={addAtkPosInstallation} style={panel}>
-            <h3 style={{ marginTop: 0 }}>Shto pajisje POS për testim</h3>
+            <h3 style={{ marginTop: 0 }}>Regjistro një POS për testim</h3>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 8 }}>
-              <label className="field-label">ID e njësisë / degës (e konfirmuar)<input required type="number" min="1" step="1" value={atkPosForm.atk_branch_id} onChange={(e) => setAtkPosForm({ ...atkPosForm, atk_branch_id: e.target.value })} style={field} /></label>
-              <label className="field-label">Numri i POS-it (i konfirmuar)<input required type="number" min="1" step="1" value={atkPosForm.pos_id} onChange={(e) => setAtkPosForm({ ...atkPosForm, pos_id: e.target.value })} style={field} /></label>
+              <label className="field-label">Numri i njësisë (nga regjistrimi i biznesit)<input required type="number" min="1" step="1" value={atkPosForm.atk_branch_id} onChange={(e) => setAtkPosForm({ ...atkPosForm, atk_branch_id: e.target.value })} style={field} /></label>
+              <label className="field-label">Numri unik i POS-it<input required type="number" min="1" step="1" value={atkPosForm.pos_id} onChange={(e) => setAtkPosForm({ ...atkPosForm, pos_id: e.target.value })} style={field} /></label>
             </div>
             <label className="field-label">Emri i pajisjes<input required value={atkPosForm.label} onChange={(e) => setAtkPosForm({ ...atkPosForm, label: e.target.value })} placeholder="p.sh. Arka kryesore" style={field} /></label>
             <label className="field-label">Lokacioni<input value={atkPosForm.location} onChange={(e) => setAtkPosForm({ ...atkPosForm, location: e.target.value })} placeholder="p.sh. Ferizaj" style={field} /></label>
-            <p style={{ color: "var(--muted)", fontSize: 11 }}>Mjedisi: TEST. Mos shpik ID të njësisë ose POS-it. Vendos vetëm identifikuesit që ATK i ka caktuar ose konfirmuar për këtë tatimpagues dhe instalim. Çdo instalim fiskal ka çift çelësash unik; çelësi privat duhet të mbetet në pajisje dhe nuk ruhet në cloud.</p>
+            <p style={{ color: "var(--muted)", fontSize: 11 }}>Mjedisi: TEST. Numrin e njësisë merre nga të dhënat e regjistrimit të njësisë së biznesit; nëse nuk e gjen në dokumentet/EDI të tatimpaguesit, konfirmoje me ATK. POS ID është numër unik për secilën arkë (p.sh. 1 dhe 2 për dy arka të ndryshme — vetëm shembull, jo numra universalë). Mos përdor UUID-në e degës së Fiskalo-s. Çdo instalim SEF ka çelës privat të veçantë, i cili duhet të mbetet në pajisje.</p>
             <button disabled={busy || !atkProfile} style={{ ...primary, width: "100%" }}>Shto pajisjen testuese</button>
             {!atkProfile && <small>Ruaje së pari numrin e fiskalizimit të biznesit.</small>}
           </form>
