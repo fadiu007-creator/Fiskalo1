@@ -178,11 +178,7 @@ app.MapGet(QueuePath, async (HttpContext context, CancellationToken cancellation
 
 app.Run();
 
-internal sealed record CsrRequest(
-    [property: JsonPropertyName("businessName")] string BusinessName,
-    [property: JsonPropertyName("businessNui")] ulong BusinessNui,
-    [property: JsonPropertyName("branchId")] ulong BranchId,
-    [property: JsonPropertyName("posId")] ulong PosId);app.Run();
+app.Run();
 
 static bool HasValidSession(HttpContext context, string? expectedToken)
 {
@@ -205,3 +201,10 @@ internal sealed record PairRequest(
 internal sealed record PairResponse(
     [property: JsonPropertyName("sessionToken")] string SessionToken,
     [property: JsonPropertyName("agentVersion")] string AgentVersion);
+
+
+internal sealed record CsrRequest(
+    [property: JsonPropertyName("businessName")] string BusinessName,
+    [property: JsonPropertyName("businessNui")] ulong BusinessNui,
+    [property: JsonPropertyName("branchId")] ulong BranchId,
+    [property: JsonPropertyName("posId")] ulong PosId);
