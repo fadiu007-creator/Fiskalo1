@@ -1,0 +1,232 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+
+type Org = { id: string; legal_name: string; municipality: string; nui: string; vat_registered: boolean; fiscalization_status: string };
+type Product = { id: string; name: string; sku: string | null; unit_price: number; vat_rate: number; stock_quantity: number; item_type: string; track_stock: boolean; is_active: boolean };
+type Customer = { id: string; name: string; business_number: string | null; email: string | null; phone: string | null };
+type Invoice = { id: string; invoice_number: string | null; status: string; issue_date: string; total: number; vat_total: number; fiscalization_status: string; customer_id: string | null };
+type Expense = { id: string; description: string; supplier_name: string | null; category: string; amount: number; expense_date: string };
+
+const panel: React.CSSProperties = { background: "white", border: "1px solid var(--line)", borderRadius: 14, padding: 18 };
+const field: React.CSSProperties = { width: "100%", minWidth: 0, border: "1px solid var(--line)", borderRadius: 8, padding: "10px 11px", background: "white", color: "var(--ink)" };
+const primary: React.CSSProperties = { border: 0, borderRadius: 8, background: "var(--brand)", color: "white", padding: "10px 14px", fontWeight: 700, cursor: "pointer" };
+const secondary: React.CSSProperties = { border: "1px solid var(--line)", borderRadius: 8, background: "white", color: "var(--ink)", padding: "9px 12px", fontWeight: 600, cursor: "pointer" };
+
+export default function BusinessDashboard() {
+  const params = useParams<{ organizationId: string }>();
+  const router = useRouter();
+  const organizationId = params.organizationId;
+  const supabase = useMemo(() => createClient(), []);
+  const [org, setOrg] = useState<Org | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [tab, setTab] = useState("overview");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+  const [productForm, setProductForm] = useState({ name: "", sku: "", unit_price: "", vat_rate: "18", item_type: "product", stock_quantity: "0", track_stock: true });
+  const [customerForm, setCustomerForm] = useState({ name: "", business_number: "", email: "", phone: "" });
+  const [expenseForm, setExpenseForm] = useState({ description: "", supplier_name: "", category: "Tjetër", amount: "", vat_rate: "0", expense_date: new Date().toISOString().slice(0, 10) });
+  const [invoiceForm, setInvoiceForm] = useState({ customer_id: "", product_id: "", quantity: "1" });
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    const [orgResult, productResult, customerResult, invoiceResult, expenseResult] = await Promise.all([
+      supabase.from("fiskalo_organizations").select("id,legal_name,municipality,nui,vat_registered,fiscalization_status").eq("id", organizationId).single(),
+      supabase.from("fiskalo_products").select("*").eq("organization_id", organizationId).order("name"),
+      supabase.from("fiskalo_customers").select("*").eq("organization_id", organizationId).order("name"),
+      supabase.from("fiskalo_invoices").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }),
+      supabase.from("fiskalo_expenses").select("*").eq("organization_id", organizationId).order("expense_date", { ascending: false }),
+    ]);
+    if (orgResult.error) {
+      setError("Nuk ke qasje në këtë biznes ose biznesi nuk ekziston.");
+    } else {
+      setOrg(orgResult.data as Org);
+      setProducts((productResult.data ?? []) as Product[]);
+      setCustomers((customerResult.data ?? []) as Customer[]);
+      setInvoices((invoiceResult.data ?? []) as Invoice[]);
+      setExpenses((expenseResult.data ?? []) as Expense[]);
+      if (productResult.error || customerResult.error || invoiceResult.error || expenseResult.error) setError("Disa të dhëna nuk u ngarkuan. Rifresko faqen.");
+    }
+    setLoading(false);
+  }, [organizationId, supabase]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  async function signOut() {
+    await supabase.auth.signOut();
+    router.replace("/login");
+    router.refresh();
+  }
+
+  async function addProduct(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setError(""); setNotice("");
+    const { error: saveError } = await supabase.from("fiskalo_products").insert({
+      organization_id: organizationId, name: productForm.name.trim(), sku: productForm.sku.trim() || null,
+      unit_price: Number(productForm.unit_price), vat_rate: Number(productForm.vat_rate), item_type: productForm.item_type,
+      stock_quantity: Number(productForm.stock_quantity || 0), track_stock: productForm.track_stock,
+    });
+    setBusy(false);
+    if (saveError) { setError(saveError.message); return; }
+    setProductForm({ name: "", sku: "", unit_price: "", vat_rate: "18", item_type: "product", stock_quantity: "0", track_stock: true });
+    setNotice("Artikulli u ruajt."); await load();
+  }
+
+  async function addCustomer(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setError(""); setNotice("");
+    const { error: saveError } = await supabase.from("fiskalo_customers").insert({
+      organization_id: organizationId, name: customerForm.name.trim(), business_number: customerForm.business_number.trim() || null,
+      email: customerForm.email.trim() || null, phone: customerForm.phone.trim() || null,
+    });
+    setBusy(false);
+    if (saveError) { setError(saveError.message); return; }
+    setCustomerForm({ name: "", business_number: "", email: "", phone: "" }); setNotice("Klienti u ruajt."); await load();
+  }
+
+  async function addExpense(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setError(""); setNotice("");
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth.user) { setBusy(false); setError("Sesioni ka skaduar."); return; }
+    const { error: saveError } = await supabase.from("fiskalo_expenses").insert({
+      organization_id: organizationId, created_by: auth.user.id, description: expenseForm.description.trim(),
+      supplier_name: expenseForm.supplier_name.trim() || null, category: expenseForm.category,
+      amount: Number(expenseForm.amount), vat_rate: Number(expenseForm.vat_rate), expense_date: expenseForm.expense_date,
+    });
+    setBusy(false);
+    if (saveError) { setError(saveError.message); return; }
+    setExpenseForm({ description: "", supplier_name: "", category: "Tjetër", amount: "", vat_rate: "0", expense_date: new Date().toISOString().slice(0, 10) });
+    setNotice("Shpenzimi u regjistrua."); await load();
+  }
+
+  async function createInvoice(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setError(""); setNotice("");
+    const product = products.find((item) => item.id === invoiceForm.product_id);
+    if (!product) { setBusy(false); setError("Zgjidh një produkt ose shërbim."); return; }
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth.user) { setBusy(false); setError("Sesioni ka skaduar."); return; }
+    const { data: invoice, error: invoiceError } = await supabase.from("fiskalo_invoices").insert({
+      organization_id: organizationId, created_by: auth.user.id, customer_id: invoiceForm.customer_id || null,
+      issue_date: new Date().toISOString().slice(0, 10),
+    }).select("id").single();
+    if (invoiceError || !invoice) { setBusy(false); setError(invoiceError?.message ?? "Fatura nuk u krijua."); return; }
+    const { error: itemError } = await supabase.from("fiskalo_invoice_items").insert({
+      invoice_id: invoice.id, product_id: product.id, description: product.name, quantity: Number(invoiceForm.quantity),
+      unit_price: Number(product.unit_price), vat_rate: Number(product.vat_rate),
+    });
+    if (itemError) { setBusy(false); setError("Fatura draft u krijua, por artikulli nuk u shtua: " + itemError.message); await load(); return; }
+    const { data: invoiceNumber, error: issueError } = await supabase.rpc("fiskalo_issue_invoice", { target_invoice: invoice.id });
+    setBusy(false);
+    if (issueError) { setError("Fatura u ruajt si draft, por nuk u lëshua: " + issueError.message); await load(); return; }
+    setInvoiceForm({ customer_id: "", product_id: "", quantity: "1" });
+    setNotice("Fatura u lëshua me numër " + invoiceNumber + "."); await load();
+  }
+
+  const revenue = invoices.filter((invoice) => invoice.status === "issued").reduce((sum, invoice) => sum + Number(invoice.total), 0);
+  const draftCount = invoices.filter((invoice) => invoice.status === "draft").length;
+  const expenseTotal = expenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
+  const fmt = (value: number) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR" }).format(value);
+  const tabItems = [{ id: "overview", label: "Përmbledhje" }, { id: "products", label: "Produktet" }, { id: "customers", label: "Klientët" }, { id: "invoices", label: "Faturat" }, { id: "expenses", label: "Shpenzimet" }];
+
+  if (loading) return <main style={{ maxWidth: 1100, margin: "0 auto", padding: 32 }}>Duke ngarkuar panelin...</main>;
+  if (!org) return <main style={{ maxWidth: 800, margin: "0 auto", padding: 32 }}><p>{error || "Biznesi nuk u gjet."}</p><Link href="/app">Kthehu te bizneset</Link></main>;
+
+  return (
+    <main style={{ maxWidth: 1180, margin: "0 auto", padding: "28px 20px 60px" }}>
+      <header className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
+        <div><Link href="/app" style={{ color: "var(--brand)", fontWeight: 800, fontSize: 22 }}>fiskalo</Link><div style={{ color: "var(--muted)", fontSize: 12 }}>Paneli i biznesit</div></div>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}><Link href="/app" style={secondary}>Bizneset</Link><button onClick={signOut} style={secondary}>Dil nga llogaria</button></div>
+      </header>
+      <section style={{ ...panel, marginBottom: 18, display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+        <div><h1 style={{ margin: "0 0 5px", fontSize: 27 }}>{org.legal_name}</h1><span style={{ color: "var(--muted)", fontSize: 13 }}>{org.municipality} · NUI: {org.nui}</span></div>
+        <div style={{ alignSelf: "center", fontSize: 12, color: "var(--muted)", maxWidth: 290 }}>Fiskalizimi zyrtar: <strong>{org.fiscalization_status === "certified" ? "I konfiguruar" : "Jo aktiv"}</strong><br />Fiskalo nuk është i certifikuar nga ATK.</div>
+      </section>
+      <nav className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
+        {tabItems.map((item) => <button key={item.id} onClick={() => { setTab(item.id); setNotice(""); setError(""); }} style={{ ...secondary, ...(tab === item.id ? { background: "var(--brand)", color: "white", borderColor: "var(--brand)" } : {}) }}>{item.label}</button>)}
+      </nav>
+      {error && <p role="alert" style={{ background: "#fff0ef", color: "#9d2d26", padding: 12, borderRadius: 9, fontSize: 13 }}>{error}</p>}
+      {notice && <p role="status" style={{ background: "#edf7f1", color: "#155c3c", padding: 12, borderRadius: 9, fontSize: 13 }}>{notice}</p>}
+
+      {tab === "overview" && <>
+        <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12, marginBottom: 18 }}>
+          <Stat label="Qarkullimi i faturuar" value={fmt(revenue)} />
+          <Stat label="Fatura gjithsej" value={String(invoices.length)} />
+          <Stat label="Draft" value={String(draftCount)} />
+          <Stat label="Shpenzimet" value={fmt(expenseTotal)} />
+          <Stat label="Produkte / shërbime" value={String(products.length)} />
+        </section>
+        <section style={{ ...panel, marginBottom: 14 }}>
+          <h2 style={{ fontSize: 18, marginTop: 0 }}>Gjendja e biznesit</h2>
+          <p style={{ color: "var(--muted)", lineHeight: 1.6, fontSize: 13 }}>Regjistro artikujt, klientët, faturat dhe shpenzimet. Faturat e lëshuara ruhen me numër unik dhe nuk mund të ndryshohen. Ky version nuk kryen fiskalizim zyrtar dhe nuk zëvendëson pajisjen ose softuerin e certifikuar nga ATK.</p>
+          <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}><button style={primary} onClick={() => setTab("invoices")}>+ Krijo faturë</button><button style={secondary} onClick={() => setTab("products")}>+ Shto produkt</button><button style={secondary} onClick={() => setTab("expenses")}>+ Regjistro shpenzim</button></div>
+        </section>
+        <section style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Faturat e fundit</h2><InvoiceTable invoices={invoices.slice(0, 5)} fmt={fmt} customers={customers} /></section>
+      </>}
+
+      {tab === "products" && <section style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
+        <form onSubmit={addProduct} style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Shto produkt / shërbim</h2>
+          <label className="field-label">Emri<input required value={productForm.name} onChange={(e) => setProductForm({ ...productForm, name: e.target.value })} style={field} /></label>
+          <label className="field-label">Kodi / SKU<input value={productForm.sku} onChange={(e) => setProductForm({ ...productForm, sku: e.target.value })} style={field} /></label>
+          <label className="field-label">Lloji<select value={productForm.item_type} onChange={(e) => setProductForm({ ...productForm, item_type: e.target.value })} style={field}><option value="product">Produkt</option><option value="service">Shërbim</option></select></label>
+          <label className="field-label">Çmimi (€)<input required type="number" min="0" step="0.01" value={productForm.unit_price} onChange={(e) => setProductForm({ ...productForm, unit_price: e.target.value })} style={field} /></label>
+          <label className="field-label">TVSH<select value={productForm.vat_rate} onChange={(e) => setProductForm({ ...productForm, vat_rate: e.target.value })} style={field}><option value="0">0%</option><option value="8">8%</option><option value="18">18%</option></select></label>
+          {productForm.item_type === "product" && <label className="field-label">Stoku fillestar<input type="number" step="0.001" value={productForm.stock_quantity} onChange={(e) => setProductForm({ ...productForm, stock_quantity: e.target.value })} style={field} /></label>}
+          <button disabled={busy} style={{ ...primary, width: "100%", marginTop: 10 }}>Ruaj artikullin</button>
+        </form>
+        <section style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Lista e artikujve ({products.length})</h2><div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Emri</th><th>Lloji</th><th>Çmimi</th><th>TVSH</th><th>Stoku</th></tr></thead><tbody>{products.map((p) => <tr key={p.id}><td>{p.name}<small>{p.sku || ""}</small></td><td>{p.item_type === "service" ? "Shërbim" : "Produkt"}</td><td>{fmt(Number(p.unit_price))}</td><td>{p.vat_rate}%</td><td>{p.track_stock ? p.stock_quantity : "—"}</td></tr>)}{!products.length && <tr><td colSpan={5}>Nuk ka artikuj ende.</td></tr>}</tbody></table></div></section>
+      </section>}
+
+      {tab === "customers" && <section style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
+        <form onSubmit={addCustomer} style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Shto klient</h2>
+          <label className="field-label">Emri / biznesi<input required value={customerForm.name} onChange={(e) => setCustomerForm({ ...customerForm, name: e.target.value })} style={field} /></label>
+          <label className="field-label">NUI / numri i biznesit<input value={customerForm.business_number} onChange={(e) => setCustomerForm({ ...customerForm, business_number: e.target.value })} style={field} /></label>
+          <label className="field-label">Email<input type="email" value={customerForm.email} onChange={(e) => setCustomerForm({ ...customerForm, email: e.target.value })} style={field} /></label>
+          <label className="field-label">Telefoni<input value={customerForm.phone} onChange={(e) => setCustomerForm({ ...customerForm, phone: e.target.value })} style={field} /></label>
+          <button disabled={busy} style={{ ...primary, width: "100%", marginTop: 10 }}>Ruaj klientin</button>
+        </form>
+        <section style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Klientët ({customers.length})</h2><div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Emri</th><th>NUI</th><th>Email</th><th>Telefoni</th></tr></thead><tbody>{customers.map((c) => <tr key={c.id}><td>{c.name}</td><td>{c.business_number || "—"}</td><td>{c.email || "—"}</td><td>{c.phone || "—"}</td></tr>)}{!customers.length && <tr><td colSpan={4}>Nuk ka klientë ende.</td></tr>}</tbody></table></div></section>
+      </section>}
+
+      {tab === "invoices" && <section style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
+        <form onSubmit={createInvoice} style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Lësho faturë</h2>
+          <label className="field-label">Klienti<select value={invoiceForm.customer_id} onChange={(e) => setInvoiceForm({ ...invoiceForm, customer_id: e.target.value })} style={field}><option value="">Klient pa emër</option>{customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+          <label className="field-label">Produkti / shërbimi<select required value={invoiceForm.product_id} onChange={(e) => setInvoiceForm({ ...invoiceForm, product_id: e.target.value })} style={field}><option value="">Zgjidh artikullin</option>{products.filter((p) => p.is_active).map((p) => <option key={p.id} value={p.id}>{p.name} — {fmt(Number(p.unit_price))}</option>)}</select></label>
+          <label className="field-label">Sasia<input required type="number" min="0.001" step="0.001" value={invoiceForm.quantity} onChange={(e) => setInvoiceForm({ ...invoiceForm, quantity: e.target.value })} style={field} /></label>
+          <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>Fatura numërohet automatikisht kur lëshohet. Pas lëshimit, të dhënat nuk mund të ndryshohen.</p>
+          <button disabled={busy || products.length === 0} style={{ ...primary, width: "100%" }}>{busy ? "Duke ruajtur..." : "Krijo dhe lësho faturën"}</button>
+          {!products.length && <small>Shto së pari një produkt ose shërbim.</small>}
+        </form>
+        <section style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Faturat ({invoices.length})</h2><InvoiceTable invoices={invoices} fmt={fmt} customers={customers} /></section>
+      </section>}
+
+      {tab === "expenses" && <section style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
+        <form onSubmit={addExpense} style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Regjistro shpenzim</h2>
+          <label className="field-label">Përshkrimi<input required value={expenseForm.description} onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })} style={field} /></label>
+          <label className="field-label">Furnitori<input value={expenseForm.supplier_name} onChange={(e) => setExpenseForm({ ...expenseForm, supplier_name: e.target.value })} style={field} /></label>
+          <label className="field-label">Kategoria<select value={expenseForm.category} onChange={(e) => setExpenseForm({ ...expenseForm, category: e.target.value })} style={field}>{["Qira","Paga","Furnizim","Transport","Shërbime","Komunalitë","Tjetër"].map((v) => <option key={v}>{v}</option>)}</select></label>
+          <label className="field-label">Shuma (€)<input required type="number" min="0.01" step="0.01" value={expenseForm.amount} onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })} style={field} /></label>
+          <label className="field-label">TVSH<select value={expenseForm.vat_rate} onChange={(e) => setExpenseForm({ ...expenseForm, vat_rate: e.target.value })} style={field}><option value="0">0%</option><option value="8">8%</option><option value="18">18%</option></select></label>
+          <label className="field-label">Data<input required type="date" value={expenseForm.expense_date} onChange={(e) => setExpenseForm({ ...expenseForm, expense_date: e.target.value })} style={field} /></label>
+          <button disabled={busy} style={{ ...primary, width: "100%", marginTop: 10 }}>Ruaj shpenzimin</button>
+        </form>
+        <section style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Shpenzimet ({expenses.length})</h2><div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Data</th><th>Përshkrimi</th><th>Furnitori</th><th>Kategoria</th><th>Shuma</th></tr></thead><tbody>{expenses.map((e) => <tr key={e.id}><td>{e.expense_date}</td><td>{e.description}</td><td>{e.supplier_name || "—"}</td><td>{e.category}</td><td>{fmt(Number(e.amount))}</td></tr>)}{!expenses.length && <tr><td colSpan={5}>Nuk ka shpenzime ende.</td></tr>}</tbody></table></div></section>
+      </section>}
+      <footer style={{ marginTop: 24, color: "var(--muted)", fontSize: 11 }}>Të dhënat ruhen në hapësirën e këtij biznesi. Fiskalizimi zyrtar dhe certifikimi ATK nuk janë aktivizuar.</footer>
+    </main>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return <article style={panel}><div style={{ color: "var(--muted)", fontSize: 12 }}>{label}</div><strong style={{ display: "block", fontSize: 22, marginTop: 8 }}>{value}</strong></article>;
+}
+
+function InvoiceTable({ invoices, fmt, customers }: { invoices: Invoice[]; fmt: (value: number) => string; customers: Customer[] }) {
+  return <div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Numri</th><th>Data</th><th>Klienti</th><th>Statusi</th><th>Totali</th><th></th></tr></thead><tbody>{invoices.map((invoice) => <tr key={invoice.id}><td>{invoice.invoice_number || "Draft"}</td><td>{invoice.issue_date}</td><td>{customers.find((c) => c.id === invoice.customer_id)?.name || "—"}</td><td>{invoice.status === "issued" ? "E lëshuar" : invoice.status === "cancelled" ? "Anuluar" : "Draft"}</td><td>{fmt(Number(invoice.total))}</td><td>{invoice.status === "issued" && <button className="no-print" style={secondary} onClick={() => window.print()}>Printo</button>}</td></tr>)}{!invoices.length && <tr><td colSpan={6}>Nuk ka fatura ende.</td></tr>}</tbody></table></div>;
+}
