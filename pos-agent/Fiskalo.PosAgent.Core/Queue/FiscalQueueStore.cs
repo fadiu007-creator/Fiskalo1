@@ -256,10 +256,11 @@ public sealed class FiscalQueueStore
         Directory.CreateDirectory(directory);
 
         var plaintext = JsonSerializer.SerializeToUtf8Bytes(items, JsonOptions);
-        var encrypted = _protector.Protect(plaintext);
+        byte[]? encrypted = null;
         var temporaryPath = _path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
+            encrypted = _protector.Protect(plaintext);
             await using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write,
                 FileShare.None, 4096, FileOptions.Asynchronous | FileOptions.WriteThrough))
             {
@@ -273,7 +274,7 @@ public sealed class FiscalQueueStore
         {
             if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
             CryptographicOperations.ZeroMemory(plaintext);
-            CryptographicOperations.ZeroMemory(encrypted);
+            if (encrypted is not null) CryptographicOperations.ZeroMemory(encrypted);
         }
     }
 
