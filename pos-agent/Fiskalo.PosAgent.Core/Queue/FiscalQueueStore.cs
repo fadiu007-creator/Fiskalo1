@@ -186,8 +186,17 @@ public sealed class FiscalQueueStore
     {
         if (!File.Exists(_path)) return [];
         var encrypted = await File.ReadAllBytesAsync(_path, cancellationToken);
-        var plaintext = _protector.Unprotect(encrypted);
-        return JsonSerializer.Deserialize<List<FiscalQueueItem>>(plaintext, JsonOptions) ?? [];
+        byte[]? plaintext = null;
+        try
+        {
+            plaintext = _protector.Unprotect(encrypted);
+            return JsonSerializer.Deserialize<List<FiscalQueueItem>>(plaintext, JsonOptions) ?? [];
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(encrypted);
+            if (plaintext is not null) CryptographicOperations.ZeroMemory(plaintext);
+        }
     }
 
     private async Task SaveAsync(List<FiscalQueueItem> items, CancellationToken cancellationToken)
