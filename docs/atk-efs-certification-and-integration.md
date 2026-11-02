@@ -247,3 +247,8 @@ The repository now contains an initial runnable local host at `pos-agent/Fiskalo
 The .NET core also contains a durable encrypted queue abstraction. It stores signed payloads and signatures only after an injected `IFiscalQueueProtector` encrypts the complete queue snapshot, uses atomic file replacement, enforces idempotency-key consistency, schedules exponential retry, records accepted/rejected states and expires entries after the 48-hour recovery window. A Windows `CurrentUser` DPAPI queue protector and DPAPI-backed P-256 private-key store are implemented in the core. Both fail closed off Windows. macOS Keychain and Linux Secret Service providers, automated tests, and host integration remain pending.
 
 These milestones are local engineering foundations only. No ATK request was sent, no certificate was issued, and no ATK transaction or fiscal receipt has been verified. The POS Agent is not ready for unattended or customer production use.
+
+
+### Automated verification added
+
+A .NET test project now exercises queue idempotency, retry timing, 48-hour expiry, accepted-state immutability, encrypted-at-rest storage and Windows DPAPI key/queue persistence. POS Agent CI is configured to build the core and local host and run tests on Ubuntu and Windows. The run triggered by the latest changes must be checked in GitHub Actions before treating this milestone as verified.
