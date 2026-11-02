@@ -14,7 +14,7 @@ create table public.fiskalo_atk_provider_settings (
   check (production_enabled = false or certification_status = 'certified')
 );
 alter table public.fiskalo_atk_provider_settings enable row level security;
-revoke all on public.fiskalo_atk_provider_settings from anon, authenticated;
+revoke all on public.fiskalo_atk_provider_settings from public, anon, authenticated;
 
 create table public.fiskalo_atk_taxpayer_profiles (
   organization_id uuid primary key references public.fiskalo_organizations(id) on delete restrict,
@@ -26,6 +26,7 @@ create table public.fiskalo_atk_taxpayer_profiles (
   updated_at timestamptz not null default now()
 );
 alter table public.fiskalo_atk_taxpayer_profiles enable row level security;
+revoke all on public.fiskalo_atk_taxpayer_profiles from public, anon, authenticated;
 create policy fiskalo_atk_taxpayer_select on public.fiskalo_atk_taxpayer_profiles
   for select to authenticated using (public.fiskalo_is_member(organization_id));
 create policy fiskalo_atk_taxpayer_insert on public.fiskalo_atk_taxpayer_profiles
@@ -70,6 +71,7 @@ create table public.fiskalo_atk_pos_installations (
 );
 create index fiskalo_atk_pos_org_idx on public.fiskalo_atk_pos_installations(organization_id, created_at desc);
 alter table public.fiskalo_atk_pos_installations enable row level security;
+revoke all on public.fiskalo_atk_pos_installations from public, anon, authenticated;
 create policy fiskalo_atk_pos_select on public.fiskalo_atk_pos_installations
   for select to authenticated using (public.fiskalo_is_member(organization_id));
 create policy fiskalo_atk_pos_insert on public.fiskalo_atk_pos_installations
@@ -127,6 +129,7 @@ create table public.fiskalo_atk_fiscal_documents (
 create index fiskalo_atk_docs_org_date_idx on public.fiskalo_atk_fiscal_documents(organization_id, occurred_at desc);
 create index fiskalo_atk_docs_status_idx on public.fiskalo_atk_fiscal_documents(status, created_at);
 alter table public.fiskalo_atk_fiscal_documents enable row level security;
+revoke all on public.fiskalo_atk_fiscal_documents from public, anon, authenticated;
 create policy fiskalo_atk_docs_select on public.fiskalo_atk_fiscal_documents
   for select to authenticated using (public.fiskalo_is_member(organization_id));
 grant select on public.fiskalo_atk_fiscal_documents to authenticated;
@@ -145,6 +148,7 @@ create table public.fiskalo_atk_fiscal_events (
 );
 create index fiskalo_atk_events_doc_idx on public.fiskalo_atk_fiscal_events(fiscal_document_id, created_at);
 alter table public.fiskalo_atk_fiscal_events enable row level security;
+revoke all on public.fiskalo_atk_fiscal_events from public, anon, authenticated;
 create policy fiskalo_atk_events_select on public.fiskalo_atk_fiscal_events
   for select to authenticated using (public.fiskalo_is_member(organization_id));
 grant select on public.fiskalo_atk_fiscal_events to authenticated;
