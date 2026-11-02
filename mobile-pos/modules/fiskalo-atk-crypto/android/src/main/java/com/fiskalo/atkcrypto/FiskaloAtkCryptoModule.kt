@@ -87,7 +87,7 @@ class FiskaloAtkCryptoModule : Module() {
     }
 
     AsyncFunction("matchesCertificate") { alias: String, certificatePem: String ->
-      val clean = certificatePem.replace("-----BEGIN CERTIFICATE-----", "").replace("-----END CERTIFICATE-----", "").replace(Regex("\\\\s+"), "")
+      val clean = certificatePem.replace("-----BEGIN CERTIFICATE-----", "").replace("-----END CERTIFICATE-----", "").replace(Regex("\\s+"), "")
       val certificateBytes = Base64.decode(clean, Base64.DEFAULT)
       val certificate = CertificateFactory.getInstance("X.509").generateCertificate(ByteArrayInputStream(certificateBytes))
       val localCertificate = keyStore().getCertificate(normalizeAlias(alias)) ?: return@AsyncFunction false
