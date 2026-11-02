@@ -84,5 +84,5 @@ begin
 end;
 $$;
 
-revoke all on function public.fiskalo_set_stock(uuid, numeric, text) from public;
+revoke all on function public.fiskalo_set_stock(uuid, numeric, text) from public, anon;
 grant execute on function public.fiskalo_set_stock(uuid, numeric, text) to authenticated;
