@@ -238,3 +238,12 @@ The following is now implemented in Fiskalo's data model and business UI:
 The new `pos-agent/Fiskalo.PosAgent.Core` library now contains the ATK Protobuf schema/models, P-256 key and CSR generation helpers, exact money-unit conversion, POS coupon construction/reconciliation checks, Protobuf Base64 serialization, ECDSA signing, citizen QR payload construction, and test-only HTTP client methods for `/ca/verify`, `/ca/signcsr` and `/pos/coupon`.
 
 **Still not implemented or exercised:** an installed local POS Agent service, OS-protected persistent key storage, certificate installation/renewal, complete sale-to-coupon/tax-group mapping from Fiskalo records, durable offline queue, printer integration, real ATK test calls, Sale/Cancel/Return test completion and ATK response verification. The new client methods have not yet been run against ATK; no ATK request has been sent from Fiskalo.
+
+
+## 9. Progress update — 2 November 2026
+
+The repository now contains an initial runnable local host at `pos-agent/Fiskalo.PosAgent.Host`. It binds only to loopback (`127.0.0.1:17843`), checks the Host header, allowlists exact browser origins, uses a one-time console pairing code and an in-memory bearer session, rate-limits failed pairing attempts, and exposes authenticated status. It explicitly reports fiscalization disabled. Pairing/session state is memory-only; unattended service installation and persistent OS-protected credentials are not complete.
+
+The .NET core also contains a durable encrypted queue abstraction. It stores signed payloads and signatures only after an injected `IFiscalQueueProtector` encrypts the complete queue snapshot, uses atomic file replacement, enforces idempotency-key consistency, schedules exponential retry, records accepted/rejected states and expires entries after the 48-hour recovery window. **No concrete OS protector has been implemented yet**, so the host must not enable the queue until DPAPI/Keychain/Secret Service protection is available and tested.
+
+These milestones are local engineering foundations only. No ATK request was sent, no certificate was issued, and no ATK transaction or fiscal receipt has been verified. The POS Agent is not ready for unattended or customer production use.
