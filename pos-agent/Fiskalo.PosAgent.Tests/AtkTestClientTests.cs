@@ -38,6 +38,22 @@ public sealed class AtkTestClientTests
         Assert.Equal("TEST-CERT", result.SignedCertificate);
     }
 
+
+    [Fact]
+    public async Task SubmitSignedCoupon_UsesPosCouponEndpointAndReturnsTransactionId()
+    {
+        var handler = new StubHandler(request =>
+        {
+            Assert.Equal("https://fiskalizimi-test.atk-ks.org/pos/coupon", request.RequestUri!.ToString());
+            return Json("{\"message\":\"accepted\",\"transaction_id\":987654}");
+        });
+        using var http = new HttpClient(handler);
+        var result = await new AtkTestClient(http).SubmitSignedPosCouponAsync(
+            new SignedAtkCoupon("cG9zLWNvdXBvbg==", "c2lnbmF0dXJl", "hash"));
+
+        Assert.Equal((ulong)987654, result.TransactionId);
+    }
+
     [Fact]
     public async Task NonSuccessResponse_IsReturnedAsTypedAtkError()
     {
