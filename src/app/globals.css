@@ -12,4 +12,20 @@
 html, body { min-height: 100%; }
 body { margin: 0; background: var(--canvas); color: var(--ink); font-family: Arial, Helvetica, sans-serif; }
 a { color: inherit; text-decoration: none; }
-button, input { font: inherit; }
+button, input, select { font: inherit; }
+button:disabled { opacity: .6; cursor: not-allowed !important; }
+.field-label { display: grid; gap: 7px; margin: 13px 0; font-size: 12px; font-weight: 700; color: var(--ink); }
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+.data-table th { color: var(--muted); font-weight: 700; font-size: 11px; white-space: nowrap; }
+.data-table th, .data-table td { padding: 12px 10px; border-bottom: 1px solid var(--line); }
+.data-table td { vertical-align: middle; }
+.data-table td small { display: block; color: var(--muted); margin-top: 3px; }
+@media (max-width: 760px) {
+  .data-table { min-width: 560px; }
+}
+@media print {
+  body { background: white; }
+  .no-print, nav, button { display: none !important; }
+  main { max-width: none !important; padding: 0 !important; }
+  section, article { break-inside: avoid; box-shadow: none !important; }
+}
