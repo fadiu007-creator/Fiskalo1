@@ -48,6 +48,7 @@ Apply migrations in order:
 2. `supabase/migrations/0002_onboarding_and_invoice_workflows.sql`
 3. `supabase/migrations/0003_invoice_controls_and_stock.sql`
 4. `supabase/migrations/0004_team_management.sql`
+5. `supabase/migrations/0005_tenant_integrity_and_atomic_stock.sql`
 
 Required public environment variables:
 - `NEXT_PUBLIC_SUPABASE_URL`
