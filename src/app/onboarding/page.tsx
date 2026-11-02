@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
 export default function OnboardingPage() {
@@ -35,7 +36,7 @@ export default function OnboardingPage() {
 
   return (
     <main style={{ maxWidth: 680, margin: "0 auto", padding: "40px 24px" }}>
-      <a href="/app" style={{ color: "var(--brand)", fontWeight: 700 }}>← Kthehu te bizneset</a>
+      <Link href="/app" style={{ color: "var(--brand)", fontWeight: 700 }}>← Kthehu te bizneset</Link>
       <h1 style={{ fontSize: 32 }}>Regjistro biznesin</h1>
       <p style={{ color: "var(--muted)", lineHeight: 1.6 }}>Plotëso të dhënat bazë. Të dhënat fiskale verifikohen para aktivizimit të fiskalizimit zyrtar.</p>
       <form onSubmit={submit} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 16, background: "white", padding: 24, border: "1px solid var(--line)", borderRadius: 16 }}>
