@@ -219,7 +219,7 @@ export async function getBrowserPosCsr(id: string): Promise<{ csrPem: string; pu
   return { csrPem: record.csrPem, publicKeySha256, createdAt: record.createdAt };
 }
 
-type DerNode = { tag: number; contentStart: number; end: number; next: number };
+type DerNode = { tag: number; start: number; contentStart: number; end: number; next: number };
 
 function readDerNode(bytes: Uint8Array, offset: number): DerNode {
   if (offset + 2 > bytes.length) throw new Error("Malformed ATK certificate DER.");
@@ -234,7 +234,7 @@ function readDerNode(bytes: Uint8Array, offset: number): DerNode {
   }
   const end = cursor + length;
   if (end > bytes.length) throw new Error("ATK certificate DER is truncated.");
-  return { tag, contentStart: cursor, end, next: end };
+  return { tag, start: offset, contentStart: cursor, end, next: end };
 }
 
 function derChildren(bytes: Uint8Array, node: DerNode): DerNode[] {
@@ -266,7 +266,7 @@ function certificateSpki(certificatePem: string): Uint8Array {
   index += 5; // serial, signature, issuer, validity, subject
   const spki = fields[index];
   if (!spki || spki.tag !== 0x30) throw new Error("ATK certificate has no SubjectPublicKeyInfo.");
-  return bytes.slice(index === -1 ? 0 : spki.contentStart - (spki.contentStart - (spki.contentStart)), spki.end);
+  return bytes.slice(spki.start, spki.end);
 }
 
 function equalBytes(first: Uint8Array, second: Uint8Array): boolean {
