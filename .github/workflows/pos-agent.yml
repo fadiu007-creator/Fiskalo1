@@ -1,4 +1,4 @@
-name: POS Agent Core CI
+name: POS Agent CI
 
 on:
   push:
@@ -24,4 +24,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
-      - run: dotnet build pos-agent/Fiskalo.PosAgent.Core/Fiskalo.PosAgent.Core.csproj --configuration Release
+      - name: Build ATK protocol core
+        run: dotnet build pos-agent/Fiskalo.PosAgent.Core/Fiskalo.PosAgent.Core.csproj --configuration Release
+      - name: Build local POS Agent host
+        run: dotnet build pos-agent/Fiskalo.PosAgent.Host/Fiskalo.PosAgent.Host.csproj --configuration Release
