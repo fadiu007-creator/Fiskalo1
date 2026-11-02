@@ -67,7 +67,7 @@ public sealed class FiscalQueueStoreTests
 
         var file = await File.ReadAllBytesAsync(fixture.Path);
         var raw = Encoding.UTF8.GetString(file);
-        Assert.DoesNotContain(secretPayload, raw, StringComparison.Ordinal);
+        Assert.False(raw.Contains(secretPayload, StringComparison.Ordinal));
     }
 
     [Fact]
