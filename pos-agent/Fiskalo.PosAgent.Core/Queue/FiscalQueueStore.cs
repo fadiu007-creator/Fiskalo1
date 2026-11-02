@@ -213,6 +213,74 @@ public sealed class FiscalQueueStore
         finally { _gate.Release(); }
     }
 
+    /// <summary>
+    /// Operator-confirmed resolution after checking the ATK test records.
+    /// This method never contacts ATK and must not be called automatically.
+    /// </summary>
+    public Task<FiscalQueueItem> ResolveAsAcceptedAsync(
+        string idempotencyKey,
+        string atkTransactionId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(atkTransactionId))
+            throw new ArgumentException("ATK transaction ID is required.", nameof(atkTransactionId));
+        return MutateAsync(idempotencyKey, item =>
+        {
+            EnsureNeedsReconciliation(item);
+            return item with { Status = FiscalQueueStatus.Accepted, AtkTransactionId = atkTransactionId.Trim(), LastError = null };
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Operator-confirmed resolution after ATK has definitively rejected the document.
+    /// </summary>
+    public Task<FiscalQueueItem> ResolveAsRejectedAsync(
+        string idempotencyKey,
+        string operatorNote,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(operatorNote))
+            throw new ArgumentException("Record the ATK rejection or operator review note.", nameof(operatorNote));
+        return MutateAsync(idempotencyKey, item =>
+        {
+            EnsureNeedsReconciliation(item);
+            return item with { Status = FiscalQueueStatus.Rejected, LastError = Truncate(operatorNote, 500) };
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Re-queues a signed document only after an operator explicitly confirms
+    /// that ATK records contain no matching transaction. No automatic retry occurs.
+    /// </summary>
+    public Task<FiscalQueueItem> ResolveNotFoundAndRequeueAsync(
+        string idempotencyKey,
+        bool confirmedNoAtkRecord,
+        DateTimeOffset? now = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!confirmedNoAtkRecord)
+            throw new ArgumentException("Explicit confirmation that no ATK record exists is required.", nameof(confirmedNoAtkRecord));
+        var timestamp = (now ?? DateTimeOffset.UtcNow).ToUniversalTime();
+        return MutateAsync(idempotencyKey, item =>
+        {
+            EnsureNeedsReconciliation(item);
+            if (item.RecoveryDeadlineUtc <= timestamp)
+                return item with { Status = FiscalQueueStatus.Expired, LastError = "Operator confirmed no ATK record, but the recovery window expired. Create a new reviewed test document." };
+            return item with
+            {
+                Status = FiscalQueueStatus.Queued,
+                NextAttemptAtUtc = timestamp,
+                LastError = "Operator confirmed no matching ATK test transaction. Manual resubmission is now permitted."
+            };
+        }, cancellationToken);
+    }
+
+    private static void EnsureNeedsReconciliation(FiscalQueueItem item)
+    {
+        if (item.Status != FiscalQueueStatus.NeedsReconciliation)
+            throw new InvalidOperationException("Only a document awaiting reconciliation can be resolved by an operator.");
+    }
+
     private async Task<FiscalQueueItem> MutateAsync(
         string idempotencyKey,
         Func<FiscalQueueItem, FiscalQueueItem> mutation,
