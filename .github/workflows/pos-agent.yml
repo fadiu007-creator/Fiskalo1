@@ -46,6 +46,13 @@ jobs:
           dotnet-version: "8.0.x"
       - name: Publish self-contained Windows POS Agent
         run: dotnet publish pos-agent/Fiskalo.PosAgent.Host/Fiskalo.PosAgent.Host.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true
+      - name: Add Windows installer and launcher scripts
+        shell: pwsh
+        run: |
+          $publish = 'pos-agent/Fiskalo.PosAgent.Host/bin/Release/net8.0/win-x64/publish'
+          Copy-Item pos-agent/windows/Start-FiskaloPosAgent.ps1 $publish/
+          Copy-Item pos-agent/windows/Install-FiskaloPosAgent.ps1 $publish/
+          Copy-Item pos-agent/windows/Uninstall-FiskaloPosAgent.ps1 $publish/
       - name: Upload Windows POS Agent artifact
         uses: actions/upload-artifact@v4
         with:
