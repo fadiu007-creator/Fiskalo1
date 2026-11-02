@@ -7,7 +7,8 @@ This is an Android-native POS client scaffold using Expo/React Native and the ex
 1. Copy `.env.example` to `.env`.
 2. Set the Fiskalo Supabase project URL and publishable key. Never put a service-role key in the app.
 3. From this folder run `npm install`.
-4. Run `npx expo start` and open the project on an Android device with Expo Go, or build an Android package with EAS Build.
+4. Run `npx expo start` and open the project on an Android device with Expo Go.
+5. To create an installable internal-test APK, install/configure EAS and run `npx eas-cli build --platform android --profile preview`.
 
 ## Implemented
 
