@@ -18,6 +18,7 @@ Implemented:
 - Supplier register, purchase drafts, atomic stock receiving, supplier payment ledger and outstanding balances
 - Date-filtered management reports and CSV exports
 - ATK preparation foundation: taxpayer fiscalization-number profile, test POS registry, fiscal document/event schema and provider production lock
+- .NET 8 POS protocol core based on ATK's official C# sample: Protobuf models, P-256 CSR helpers, ECDSA coupon signing, money conversion and test-only HTTP client
 - Row Level Security on all Fiskalo tables
 - Cloudflare Workers deployment configuration (OpenNext)
 
@@ -26,7 +27,7 @@ Not yet part of this MVP:
 - Certified fiscal receipt/QR workflow and hardware integrations
 - Accountant multi-client workspace
 - Employee email invitations (team members must already have a Fiskalo account)
-- ATK test API onboarding and coupon submission, local POS Agent, secure certificate/key storage, offline queue, POS hardware and cash drawer
+- Executed ATK test onboarding and coupon submissions, installed local POS Agent service, OS-protected persistent key/certificate storage, offline queue, printer/POS hardware and cash drawer
 - Subscription billing and Fiskalo platform administration
 - Production deployment and live end-to-end testing with real business accounts
 
