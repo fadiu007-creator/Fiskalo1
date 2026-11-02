@@ -1,5 +1,6 @@
 using System.Net;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json.Serialization;
 using Fiskalo.PosAgent.Core.Atk;
@@ -12,6 +13,8 @@ const string StatusPath = "/api/v1/status";
 const string HealthPath = "/health";
 const string CsrPath = "/api/v1/keys/csr";
 const string QueuePath = "/api/v1/queue";
+const string AtkVerifyPath = "/api/v1/atk/test/verify";
+const string AtkSignCsrPath = "/api/v1/atk/test/sign-csr";
 
 var allowedOrigins = (Environment.GetEnvironmentVariable("FISKALO_ALLOWED_ORIGINS")
     ?? "https://fiskalo.shqiptare.workers.dev")
@@ -25,6 +28,7 @@ var pairLockedUntil = DateTimeOffset.MinValue;
 var dataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fiskalo", "PosAgent");
 var keyPath = Path.Combine(dataDirectory, "pos-signing-key.dpapi");
 var queuePath = Path.Combine(dataDirectory, "fiscal-queue.bin");
+var certificatePath = Path.Combine(dataDirectory, "atk-test-certificate.pem");
 var keyStore = new WindowsDpapiEcdsaKeyStore();
 
 Console.WriteLine("Fiskalo POS Agent " + AgentVersion);
@@ -176,6 +180,48 @@ app.MapGet(QueuePath, async (HttpContext context, CancellationToken cancellation
     }
 });
 
+app.MapPost(AtkVerifyPath, async (AtkVerifyRequest request, HttpContext context, CancellationToken cancellationToken) => {
+    if (!HasValidSession(context, sessionToken)) return Results.Unauthorized();
+    if (request.Nui == 0 || request.PosId == 0 || request.BranchId == 0 || request.ApplicationId == 0 || string.IsNullOrWhiteSpace(request.FiscalizationNumber)) return Results.BadRequest(new { error = "NUI, fiscalization number, POS ID, branch ID and ATK application ID are required." });
+    try {
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+        var result = await new AtkTestClient(http).VerifyPosAsync(request.Nui, request.FiscalizationNumber, request.PosId, request.BranchId, request.ApplicationId, cancellationToken);
+        return Results.Ok(new { businessName = result.BusinessName, verificationCode = result.VerificationCode, environment = "ATK TEST", productionEnabled = false });
+    } catch (AtkApiException ex) {
+        return Results.Problem("ATK test verification failed (HTTP " + (int)ex.StatusCode + "). Check the supplied test identifiers and ATK test-service availability.", statusCode: StatusCodes.Status502BadGateway);
+    } catch (HttpRequestException) {
+        return Results.Problem("Could not reach the ATK test service.", statusCode: StatusCodes.Status502BadGateway);
+    } catch (TaskCanceledException) {
+        return Results.Problem("ATK test request timed out.", statusCode: StatusCodes.Status504GatewayTimeout);
+    }
+});
+
+app.MapPost(AtkSignCsrPath, async (AtkSignCsrRequest request, HttpContext context, CancellationToken cancellationToken) => {
+    if (!HasValidSession(context, sessionToken)) return Results.Unauthorized();
+    if (!OperatingSystem.IsWindows()) return Results.Problem("Local signing-key storage currently requires Windows DPAPI.", statusCode: StatusCodes.Status501NotImplemented);
+    if (request.BusinessNui == 0 || request.BranchId == 0 || request.PosId == 0 || request.ApplicationId == 0 || string.IsNullOrWhiteSpace(request.BusinessName) || string.IsNullOrWhiteSpace(request.VerificationCode)) return Results.BadRequest(new { error = "Business identity, ATK verification code and POS identifiers are required." });
+    try {
+        Directory.CreateDirectory(dataDirectory);
+        using var key = keyStore.LoadOrCreate(keyPath);
+        var csr = AtkPki.CreateCsrPem(key, request.BusinessName, request.BusinessNui, request.BranchId, request.PosId);
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        var response = await new AtkTestClient(http).SignCsrAsync(request.BusinessName, request.BusinessNui, request.BranchId, request.VerificationCode, request.PosId, request.ApplicationId, csr, cancellationToken);
+        using var certificate = ParseCertificate(response.SignedCertificate);
+        using var certificateKey = certificate.GetECDsaPublicKey();
+        if (certificateKey is null || !SamePublicKey(key, certificateKey)) return Results.Problem("ATK returned a certificate whose public key does not match this POS private key. It was not saved.", statusCode: StatusCodes.Status502BadGateway);
+        var pem = certificate.ExportCertificatePem();
+        await File.WriteAllTextAsync(certificatePath, pem, cancellationToken);
+        return Results.Ok(new { certificateStatus = "ATK_TEST_CERTIFICATE_RECEIVED_AND_KEY_MATCHED", subject = certificate.Subject, thumbprint = certificate.Thumbprint, environment = "ATK TEST", privateKeyExported = false, productionEnabled = false });
+    } catch (AtkApiException ex) {
+        return Results.Problem("ATK test certificate request failed (HTTP " + (int)ex.StatusCode + "). Check the verification code and test identifiers.", statusCode: StatusCodes.Status502BadGateway);
+    } catch (HttpRequestException) {
+        return Results.Problem("Could not reach the ATK test service.", statusCode: StatusCodes.Status502BadGateway);
+    } catch (TaskCanceledException) {
+        return Results.Problem("ATK certificate request timed out.", statusCode: StatusCodes.Status504GatewayTimeout);
+    } catch (CryptographicException) {
+        return Results.Problem("ATK response was not a valid certificate matching the locally protected POS key.", statusCode: StatusCodes.Status502BadGateway);
+    }
+});
 app.Run();
 
 app.Run();
@@ -208,3 +254,45 @@ internal sealed record CsrRequest(
     [property: JsonPropertyName("businessNui")] ulong BusinessNui,
     [property: JsonPropertyName("branchId")] ulong BranchId,
     [property: JsonPropertyName("posId")] ulong PosId);
+
+internal sealed record AtkVerifyRequest(
+    [property: JsonPropertyName("nui")] ulong Nui,
+    [property: JsonPropertyName("fiscalizationNumber")] string FiscalizationNumber,
+    [property: JsonPropertyName("posId")] ulong PosId,
+    [property: JsonPropertyName("branchId")] ulong BranchId,
+    [property: JsonPropertyName("applicationId")] ulong ApplicationId);
+
+internal sealed record AtkSignCsrRequest(
+    [property: JsonPropertyName("businessName")] string BusinessName,
+    [property: JsonPropertyName("businessNui")] ulong BusinessNui,
+    [property: JsonPropertyName("branchId")] ulong BranchId,
+    [property: JsonPropertyName("verificationCode")] string VerificationCode,
+    [property: JsonPropertyName("posId")] ulong PosId,
+    [property: JsonPropertyName("applicationId")] ulong ApplicationId);
+
+static X509Certificate2 ParseCertificate(string certificate)
+{
+    if (string.IsNullOrWhiteSpace(certificate))
+        throw new CryptographicException("ATK returned an empty certificate.");
+    if (certificate.Contains("-----BEGIN CERTIFICATE-----", StringComparison.Ordinal))
+        return X509Certificate2.CreateFromPem(certificate);
+    try
+    {
+        return new X509Certificate2(Convert.FromBase64String(certificate));
+    }
+    catch (FormatException ex)
+    {
+        throw new CryptographicException("ATK certificate encoding is not PEM or Base64 DER.", ex);
+    }
+}
+
+static bool SamePublicKey(ECDsa first, ECDsa second)
+{
+    var a = first.ExportParameters(false);
+    var b = second.ExportParameters(false);
+    return a.Curve.Oid.Value == b.Curve.Oid.Value &&
+        a.Q.X is not null && a.Q.Y is not null &&
+        b.Q.X is not null && b.Q.Y is not null &&
+        CryptographicOperations.FixedTimeEquals(a.Q.X, b.Q.X) &&
+        CryptographicOperations.FixedTimeEquals(a.Q.Y, b.Q.Y);
+}
