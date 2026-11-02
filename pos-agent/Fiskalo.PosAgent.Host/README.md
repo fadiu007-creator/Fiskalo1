@@ -67,3 +67,11 @@ These calls have not been run. Do not send test requests until ATK has provided 
 - The executable runs in the foreground; no Windows service installer, auto-start, update mechanism or secure pairing UI exists yet.
 - The agent does not yet create/submit fiscal coupons or automatically process the queue.
 - No production ATK URL, production switch, or production credential support exists.
+
+## ATK test coupon route and duplicate-safety
+
+`POST /api/v1/atk/test/coupon` accepts a `PosCouponInput` and an idempotency key. It requires a locally stored test certificate and DPAPI key, checks certificate validity dates and confirms the certificate public key matches the private key. It also checks that taxpayer NUI, branch, POS, application ID and verification number match the DPAPI-protected installation profile created during ATK verification/onboarding.
+
+Before sending, the signed Protobuf details and signature are persisted in the encrypted queue. The item moves to `Submitting`; an ATK success records the returned transaction ID and `Accepted`. A definitive ATK 4xx response is recorded as `Rejected`. A timeout, network error, 5xx response or process restart during submission moves the item to `NeedsReconciliation` and blocks automatic resubmission. This is deliberate: without a confirmed ATK idempotency contract, blindly retrying an ambiguous submission could create a duplicate fiscal coupon.
+
+The route is test-only and must only be used with ATK-issued test data. It does not enable production fiscalization.
