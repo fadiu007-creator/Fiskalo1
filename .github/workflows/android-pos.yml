@@ -27,3 +27,27 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: TypeScript check
         run: npx tsc --noEmit
+
+  native-android-compile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile-pos
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Install JavaScript dependencies
+        run: npm install --no-audit --no-fund
+      - name: Install Android SDK platform
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --no-install
+      - name: Compile native Kotlin modules
+        run: cd android && chmod +x gradlew && ./gradlew :app:compileDebugKotlin --no-daemon
