@@ -11,12 +11,12 @@
 | Taxpayer NUI for fiscalization | The actual taxpayer whose POS is being onboarded | That taxpayer's registered NUI |
 | Test fiscalization number | Identifier generated for the pre-application test request | ATK pre-application confirmation email |
 | Test Application ID | Identifier for the pre-application test request | ATK pre-application confirmation email |
-| Branch/unit ID | Stable numeric identifier for the business location | Assign/confirm according to the taxpayer's unit records and ATK instructions |
-| POS ID | Stable numeric identifier for an individual register within a unit | Assign a unique numeric ID per POS and confirm the convention with ATK |
+| Branch/unit ID (Numri i Njësisë) | Identifies the taxpayer's registered business unit/location | Use the unit number recorded for that taxpayer/location; check the taxpayer's business-unit registration/EDI records and confirm with ATK if unclear. Do not use Fiskalo's internal branch UUID or invent a number. |
+| POS ID (Numri i POS-it) | Identifies one individual POS installation/register | Use a unique numeric value for each register within the unit. The official ATK integration reference requires a unique numeric POS ID per POS; confirm the chosen assignment with ATK for the test taxpayer. |
 
 Do not confuse the test fiscalization number in the pre-application email with the taxpayer's production Unique Fiscalization Code obtained through EDI's **Fiscalization → Request for Fiscalization** service. ATK says the production Unique Fiscalization Code is a prerequisite for using an EFS. The pre-application form separately says it generates a fiscalization number when the test request is submitted.
 
-The ATK public POS integration reference describes the POS ID as a unique numeric value for each POS and the branch ID as the unique ID of the branch where the POS is located. Keep both stable and do not reuse the same POS ID for two registers.
+The ATK 2026 Administrative Instruction, Article 34(3), requires the taxpayer to provide the NUI/tax number, unit number, POS number, software-solution code and fiscalization number when obtaining the certificate/key for each installed SEF. The official ATK integration repository says the POS ID is a unique numeric value for each POS and the Branch ID uniquely identifies the branch where that POS is located. The regulation does not provide a universal number to copy into every business's branch/unit field. Ask the taxpayer for its registered unit number; if no number is visible in its business-unit records/EDI, ask ATK before proceeding. The POS number is a unique numeric register identifier; assign a stable number per register only after confirming ATK's convention for that taxpayer. Do not confuse this with Fiskalo's internal branch UUID.
 
 ## 2. If you do not have a business NUI
 
@@ -48,7 +48,7 @@ Do not use the production EDI code in place of the test number from this email u
 
 For each actual register to be tested:
 
-1. Choose a stable branch/unit ID for the location and a unique numeric POS ID for the register, following the taxpayer's unit records and ATK's instructions.
+1. Obtain the unit number for the taxpayer's registered business location from its business-unit registration records (and confirm with ATK if the record is unclear). Choose/confirm a unique numeric POS ID for each individual register. For example only, one unit might have POS IDs 1 and 2 for two distinct registers; these are not universal ATK-issued values.
 2. In Fiskalo, open the organization dashboard → **ATK / POS**.
 3. Save the test fiscalization number from the ATK confirmation email.
 4. Add a test POS installation with the confirmed branch/unit ID and POS ID.
