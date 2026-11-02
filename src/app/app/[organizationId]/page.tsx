@@ -621,7 +621,7 @@ export default function BusinessDashboard() {
             {agentToken && <button type="button" disabled={agentBusy} onClick={refreshAgentStatus} style={secondary}>Rifresko statusin</button>}
           </form>
           {agentStatus && <p style={{ fontSize: 12, marginBottom: 0 }}>Agent {String(agentStatus.agentVersion || "")} · Windows DPAPI: {agentStatus.windowsKeyStoreAvailable ? "i disponueshëm" : "jo i disponueshëm"} · Çelësi lokal: {agentStatus.signingKeyInitialized ? "i krijuar" : "nuk është krijuar"} · Certifikata testuese: {agentStatus.testCertificateInstalled ? "e instaluar" : "nuk është instaluar"}</p>}
-          <label className="field-label" style={{ maxWidth: 340, marginTop: 10 }}>ATK application ID<input type="number" min="1" step="1" value={atkApplicationId} onChange={(e) => setAtkApplicationId(e.target.value)} placeholder="ID e dhënë nga ATK" style={field} /></label>
+          <label className="field-label" style={{ maxWidth: 340, marginTop: 10 }}>Application ID nga emaili i ATK-së<input type="number" min="1" step="1" value={atkApplicationId} onChange={(e) => setAtkApplicationId(e.target.value)} placeholder="Vendos ID-në nga emaili i konfirmimit" style={field} /></label><small style={{ display: "block", maxWidth: 480, color: "var(--muted)" }}>Përdor ID-në e aplikimit për testim që ATK ta dërgon me email. Numri i fiskalizimit është fushë tjetër dhe nuk zëvendësohet me këtë ID.</small>
           {agentError && <p role="alert" style={{ color: "#9d2d26", fontSize: 12 }}>{agentError}</p>}
           {agentNotice && <p role="status" style={{ color: "#155c3c", fontSize: 12 }}>{agentNotice}</p>}
         </section>
@@ -637,12 +637,12 @@ export default function BusinessDashboard() {
           <form onSubmit={addAtkPosInstallation} style={panel}>
             <h3 style={{ marginTop: 0 }}>Shto pajisje POS për testim</h3>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 8 }}>
-              <label className="field-label">ID e degës në ATK<input required type="number" min="1" step="1" value={atkPosForm.atk_branch_id} onChange={(e) => setAtkPosForm({ ...atkPosForm, atk_branch_id: e.target.value })} style={field} /></label>
-              <label className="field-label">ID e POS-it<input required type="number" min="1" step="1" value={atkPosForm.pos_id} onChange={(e) => setAtkPosForm({ ...atkPosForm, pos_id: e.target.value })} style={field} /></label>
+              <label className="field-label">ID e njësisë / degës (e konfirmuar)<input required type="number" min="1" step="1" value={atkPosForm.atk_branch_id} onChange={(e) => setAtkPosForm({ ...atkPosForm, atk_branch_id: e.target.value })} style={field} /></label>
+              <label className="field-label">Numri i POS-it (i konfirmuar)<input required type="number" min="1" step="1" value={atkPosForm.pos_id} onChange={(e) => setAtkPosForm({ ...atkPosForm, pos_id: e.target.value })} style={field} /></label>
             </div>
             <label className="field-label">Emri i pajisjes<input required value={atkPosForm.label} onChange={(e) => setAtkPosForm({ ...atkPosForm, label: e.target.value })} placeholder="p.sh. Arka kryesore" style={field} /></label>
             <label className="field-label">Lokacioni<input value={atkPosForm.location} onChange={(e) => setAtkPosForm({ ...atkPosForm, location: e.target.value })} placeholder="p.sh. Ferizaj" style={field} /></label>
-            <p style={{ color: "var(--muted)", fontSize: 11 }}>Mjedisi: TEST. Çdo pajisje ka ID dhe çift çelësash unik. Çelësi privat duhet të krijohet dhe të mbetet në vetë pajisjen; Fiskalo nuk e ruan atë në cloud.</p>
+            <p style={{ color: "var(--muted)", fontSize: 11 }}>Mjedisi: TEST. Mos shpik ID të njësisë ose POS-it. Vendos vetëm identifikuesit që ATK i ka caktuar ose konfirmuar për këtë tatimpagues dhe instalim. Çdo instalim fiskal ka çift çelësash unik; çelësi privat duhet të mbetet në pajisje dhe nuk ruhet në cloud.</p>
             <button disabled={busy || !atkProfile} style={{ ...primary, width: "100%" }}>Shto pajisjen testuese</button>
             {!atkProfile && <small>Ruaje së pari numrin e fiskalizimit të biznesit.</small>}
           </form>
