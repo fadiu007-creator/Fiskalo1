@@ -1,0 +1,75 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+
+export default function OnboardingPage() {
+  const router = useRouter();
+  const [form, setForm] = useState({ legal_name: "", nui: "", municipality: "", address: "", phone: "", email: "", vat_registered: false });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  function update<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const supabase = createClient();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) throw new Error("Sesioni ka skaduar. Hyr përsëri.");
+      const { data: organization, error: orgError } = await supabase
+        .from("organizations")
+        .insert({ ...form, created_by: user.id })
+        .select("id")
+        .single();
+      if (orgError) throw orgError;
+      const { error: memberError } = await supabase.from("organization_users").insert({
+        organization_id: organization.id,
+        user_id: user.id,
+        role: "owner",
+      });
+      if (memberError) throw memberError;
+      router.replace("/app");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Regjistrimi i biznesit dështoi.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main style={{ maxWidth: 680, margin: "0 auto", padding: "40px 24px" }}>
+      <h1 style={{ fontSize: 32 }}>Regjistro biznesin</h1>
+      <p style={{ color: "var(--muted)", lineHeight: 1.6 }}>Plotëso të dhënat bazë. Të dhënat fiskale do të verifikohen para aktivizimit të funksioneve përkatëse.</p>
+      <form onSubmit={submit} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 16, background: "white", padding: 24, border: "1px solid var(--line)", borderRadius: 16 }}>
+        <Field label="Emri ligjor i biznesit" required value={form.legal_name} onChange={(v) => update("legal_name", v)} />
+        <Field label="NUI" required value={form.nui} onChange={(v) => update("nui", v)} />
+        <Field label="Komuna" required value={form.municipality} onChange={(v) => update("municipality", v)} />
+        <Field label="Adresa" value={form.address} onChange={(v) => update("address", v)} />
+        <Field label="Telefoni" value={form.phone} onChange={(v) => update("phone", v)} />
+        <Field label="Email i biznesit" type="email" value={form.email} onChange={(v) => update("email", v)} />
+        <label style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13 }}>
+          <input type="checkbox" checked={form.vat_registered} onChange={(e) => update("vat_registered", e.target.checked)} />
+          Biznesi është i regjistruar për TVSH
+        </label>
+        {error && <p role="alert" style={{ color: "#a12b2b", gridColumn: "1 / -1", fontSize: 13 }}>{error}</p>}
+        <button disabled={busy} type="submit" style={{ gridColumn: "1 / -1", border: 0, borderRadius: 9, background: "var(--brand)", color: "white", padding: 13, fontWeight: 700 }}>{busy ? "Duke ruajtur..." : "Ruaj biznesin"}</button>
+      </form>
+    </main>
+  );
+}
+
+function Field({ label, value, onChange, required = false, type = "text" }: { label: string; value: string; onChange: (value: string) => void; required?: boolean; type?: string }) {
+  return (
+    <label style={{ display: "grid", gap: 7, fontSize: 13, fontWeight: 600 }}>
+      {label}
+      <input type={type} required={required} value={value} onChange={(e) => onChange(e.target.value)} style={{ width: "100%", border: "1px solid var(--line)", borderRadius: 9, padding: "12px 13px" }} />
+    </label>
+  );
+}
