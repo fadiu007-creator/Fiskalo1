@@ -52,6 +52,7 @@ Apply migrations in order:
 6. `supabase/migrations/0006_invoice_financial_integrity_and_payments.sql`
 7. `supabase/migrations/0007_stock_adjustment_workflow.sql`
 8. `supabase/migrations/0008_opening_stock_audit.sql`
+9. `supabase/migrations/0009_invoice_draft_and_line_integrity.sql`
 
 Required public environment variables:
 - `NEXT_PUBLIC_SUPABASE_URL`
