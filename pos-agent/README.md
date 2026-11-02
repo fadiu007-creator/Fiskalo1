@@ -7,6 +7,7 @@ This is the .NET 8 protocol core for the future local Fiskalo POS Agent. It is b
 - Exact ATK `models.proto` schema and generated C# model classes from the reference repository.
 - P-256 ECDSA key generation and CSR construction helpers.
 - ATK's two monetary scales: unit prices in EUR × 10,000; coupon totals and payments in cents.
+- ATK POS coupon builder with validation of identifiers, sale/cancel/return references, item/payment totals and tax-group reconciliation.
 - Protobuf serialization, Base64 encoding, SHA-256 hashing and ECDSA signing.
 - Citizen coupon QR payload construction (`Base64(Protobuf)|Base64(signature)`).
 - Test-only HTTP calls for `/ca/verify/{nui}`, `/ca/signcsr` and `/pos/coupon`.
