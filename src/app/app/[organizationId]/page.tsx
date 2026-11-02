@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { createBrowserPosCsr, getBrowserPosCsr, hasBrowserPosKey } from "@/lib/atk/browser-key-vault";
 
 type Org = { id: string; legal_name: string; municipality: string; nui: string; vat_registered: boolean; fiscalization_status: string };
 type Product = { id: string; name: string; sku: string | null; unit_price: number; vat_rate: number; stock_quantity: number; item_type: string; track_stock: boolean; is_active: boolean };
@@ -67,6 +68,8 @@ export default function BusinessDashboard() {
   const [agentNotice, setAgentNotice] = useState("");
   const [agentBusy, setAgentBusy] = useState(false);
   const [atkApplicationId, setAtkApplicationId] = useState("");
+  const [browserKeyState, setBrowserKeyState] = useState<Record<string, { exists: boolean; fingerprint?: string }>>({});
+  const [browserKeyBusyId, setBrowserKeyBusyId] = useState<string | null>(null);
   const [agentVerifications, setAgentVerifications] = useState<Record<string, AgentVerification>>({});
 
   const load = useCallback(async () => {
@@ -121,6 +124,47 @@ export default function BusinessDashboard() {
         setAgentError(e instanceof Error ? e.message : "Nuk u rikthye lidhja me POS Agent.");
       });
   }, []);
+
+  useEffect(() => {
+    const savedApplicationId = window.sessionStorage.getItem("fiskalo-atk-application-id:" + organizationId);
+    if (savedApplicationId) setAtkApplicationId(savedApplicationId);
+  }, [organizationId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all(atkPosInstallations.map(async (pos) => ({
+      id: pos.id,
+      exists: await hasBrowserPosKey(organizationId + ":" + pos.id).catch(() => false),
+    }))).then((entries) => {
+      if (!cancelled) setBrowserKeyState((current) => ({
+        ...current,
+        ...Object.fromEntries(entries.map((entry) => [entry.id, { exists: entry.exists }])),
+      }));
+    });
+    return () => { cancelled = true; };
+  }, [atkPosInstallations, organizationId]);
+
+  async function downloadWebPosCsr(pos: AtkPosInstallation) {
+    setBrowserKeyBusyId(pos.id); setAgentError(""); setAgentNotice("");
+    try {
+      if (!org?.nui || !/^\\d{9}$/.test(org.nui)) throw new Error("Ky biznes nuk ka NUI valid me 9 shifra. Plotëso identitetin e saktë të tatimpaguesit para gjenerimit të CSR-së.");
+      const keyId = organizationId + ":" + pos.id;
+      const existing = await getBrowserPosCsr(keyId);
+      const result = existing ?? await createBrowserPosCsr(keyId, {
+        businessName: org.legal_name, nui: org.nui,
+        branchId: String(pos.atk_branch_id), posId: String(pos.pos_id),
+      });
+      const blob = new Blob([result.csrPem], { type: "application/pkcs10" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url; anchor.download = "fiskalo-" + pos.atk_branch_id + "-" + pos.pos_id + ".csr.pem";
+      document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
+      setBrowserKeyState((current) => ({ ...current, [pos.id]: { exists: true, fingerprint: result.publicKeySha256 } }));
+      setAgentNotice("CSR u krijua në shfletues dhe u shkarkua. Çelësi privat nuk u dërgua në cloud. Kjo është fazë eksperimentale për testim; konfirmo me ATK nëse ruajtja e çelësit në shfletues pranohet për certifikim.");
+    } catch (e) {
+      setAgentError(e instanceof Error ? e.message : "Nuk u krijua CSR në Web POS.");
+    } finally { setBrowserKeyBusyId(null); }
+  }
 
   async function saveAtkProfile(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
@@ -621,7 +665,7 @@ export default function BusinessDashboard() {
             {agentToken && <button type="button" disabled={agentBusy} onClick={refreshAgentStatus} style={secondary}>Rifresko statusin</button>}
           </form>
           {agentStatus && <p style={{ fontSize: 12, marginBottom: 0 }}>Agent {String(agentStatus.agentVersion || "")} · Windows DPAPI: {agentStatus.windowsKeyStoreAvailable ? "i disponueshëm" : "jo i disponueshëm"} · Çelësi lokal: {agentStatus.signingKeyInitialized ? "i krijuar" : "nuk është krijuar"} · Certifikata testuese: {agentStatus.testCertificateInstalled ? "e instaluar" : "nuk është instaluar"}</p>}
-          <label className="field-label" style={{ maxWidth: 340, marginTop: 10 }}>Application ID nga emaili i ATK-së<input type="number" min="1" step="1" value={atkApplicationId} onChange={(e) => setAtkApplicationId(e.target.value)} placeholder="Vendos ID-në nga emaili i konfirmimit" style={field} /></label><small style={{ display: "block", maxWidth: 480, color: "var(--muted)" }}>Përdor ID-në e aplikimit për testim që ATK ta dërgon me email. Numri i fiskalizimit është fushë tjetër dhe nuk zëvendësohet me këtë ID.</small>
+          <label className="field-label" style={{ maxWidth: 340, marginTop: 10 }}>Application ID nga emaili i ATK-së<input type="number" min="1" step="1" value={atkApplicationId} onChange={(e) => { setAtkApplicationId(e.target.value); window.sessionStorage.setItem("fiskalo-atk-application-id:" + organizationId, e.target.value); }} placeholder="Vendos ID-në nga emaili i konfirmimit" style={field} /></label><small style={{ display: "block", maxWidth: 480, color: "var(--muted)" }}>Përdor Application ID nga emaili i konfirmimit të kërkesës për testim dhe ruaje veçmas numrin e fiskalizimit. <a href="https://apps.atk-ks.org/sefaplikimi/PreApplication/VerifyTests" target="_blank" rel="noreferrer">Hap verifikimin zyrtar të testimeve në ATK</a>.</small>
           {agentError && <p role="alert" style={{ color: "#9d2d26", fontSize: 12 }}>{agentError}</p>}
           {agentNotice && <p role="status" style={{ color: "#155c3c", fontSize: 12 }}>{agentNotice}</p>}
         </section>
@@ -649,9 +693,9 @@ export default function BusinessDashboard() {
         </div>
         <section style={panel}>
           <h3 style={{ marginTop: 0 }}>Pajisjet POS të regjistruara në Fiskalo ({atkPosInstallations.length})</h3>
-          <div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Pajisja</th><th>Dega ATK</th><th>POS ID</th><th>Mjedisi</th><th>Statusi</th><th>Certifikata</th><th>Veprimet testuese</th></tr></thead><tbody>
-            {atkPosInstallations.map((pos) => <tr key={pos.id}><td>{pos.label}<small>{pos.location || "Lokacioni nuk është shënuar"}</small></td><td>{pos.atk_branch_id}</td><td>{pos.pos_id}</td><td>{pos.environment === "test" ? "Test" : "Prodhim"}</td><td>{({ unregistered: "Pa regjistruar në ATK", verification_pending: "Verifikimi në pritje", certificate_pending: "Certifikata në pritje", active: "Aktive", suspended: "Pezulluar", revoked: "Revokuar" } as Record<string,string>)[pos.status] || pos.status}</td><td>{pos.certificate_serial ? pos.certificate_serial : "Nuk ka certifikatë"}</td><td><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}><button type="button" disabled={agentBusy || !agentToken || !atkApplicationId} onClick={() => void verifyAtkPos(pos)} style={secondary}>Verifiko ATK</button><button type="button" disabled={agentBusy || !agentToken || !agentVerifications[pos.id] || !atkApplicationId} onClick={() => void requestAtkTestCertificate(pos)} style={secondary}>Kërko certifikatën</button></div>{agentVerifications[pos.id] && <small>Verifikimi u krye në këtë sesion.</small>}</td></tr>)}
-            {!atkPosInstallations.length && <tr><td colSpan={7}>Nuk ka pajisje POS të regjistruara.</td></tr>}
+          <div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Pajisja</th><th>Dega ATK</th><th>POS ID</th><th>Mjedisi</th><th>Statusi</th><th>Certifikata</th><th>CSR Web</th><th>Veprimet testuese</th></tr></thead><tbody>
+            {atkPosInstallations.map((pos) => <tr key={pos.id}><td>{pos.label}<small>{pos.location || "Lokacioni nuk është shënuar"}</small></td><td>{pos.atk_branch_id}</td><td>{pos.pos_id}</td><td>{pos.environment === "test" ? "Test" : "Prodhim"}</td><td>{({ unregistered: "Pa regjistruar në ATK", verification_pending: "Verifikimi në pritje", certificate_pending: "Certifikata në pritje", active: "Aktive", suspended: "Pezulluar", revoked: "Revokuar" } as Record<string,string>)[pos.status] || pos.status}</td><td>{pos.certificate_serial ? pos.certificate_serial : "Nuk ka certifikatë"}</td><td><button type="button" disabled={browserKeyBusyId === pos.id} onClick={() => void downloadWebPosCsr(pos)} style={secondary}>{browserKeyBusyId === pos.id ? "Duke krijuar..." : browserKeyState[pos.id]?.exists ? "Shkarko CSR Web" : "Gjenero CSR Web"}</button>{browserKeyState[pos.id]?.fingerprint && <small>SHA-256: {browserKeyState[pos.id].fingerprint}</small>}{browserKeyState[pos.id]?.exists && <small>Çelësi ruhet në këtë shfletues.</small>}</td><td><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}><button type="button" disabled={agentBusy || !agentToken || !atkApplicationId} onClick={() => void verifyAtkPos(pos)} style={secondary}>Verifiko ATK</button><button type="button" disabled={agentBusy || !agentToken || !agentVerifications[pos.id] || !atkApplicationId} onClick={() => void requestAtkTestCertificate(pos)} style={secondary}>Kërko certifikatën</button></div>{agentVerifications[pos.id] && <small>Verifikimi u krye në këtë sesion.</small>}</td></tr>)}
+            {!atkPosInstallations.length && <tr><td colSpan={8}>Nuk ka pajisje POS të regjistruara.</td></tr>}
           </tbody></table></div>
           <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>Lista paraqet konfigurimin e POS-it në Fiskalo. Veprimet testuese aktivizohen vetëm pasi të lidhësh POS Agent-in dhe të vendosësh application ID-në e dhënë nga ATK.</p>
         </section>
