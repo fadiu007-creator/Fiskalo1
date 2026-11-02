@@ -25,6 +25,7 @@ export default function InvoiceDetailPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const fmt = (n: number) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR" }).format(n);
+  const fmtUnit = (n: number) => new Intl.NumberFormat("sq-XK", { minimumFractionDigits: 4, maximumFractionDigits: 4 }).format(n) + " €";
 
   useEffect(() => {
     async function load() {
@@ -87,7 +88,7 @@ export default function InvoiceDetailPage() {
         <div><div style={{ color: "var(--muted)", fontSize: 11, marginBottom: 5 }}>FATURUAR PËR</div><strong>{customer?.name || "Klient pa emër"}</strong><div style={{ fontSize: 12, lineHeight: 1.6 }}>{customer?.business_number ? `NUI: ${customer.business_number}` : ""}<br />{customer?.address || ""}<br />{customer?.email || ""}</div></div>
         <div style={{ fontSize: 12, lineHeight: 1.8 }}><div><span style={{ color: "var(--muted)" }}>Data: </span><strong>{invoice.issue_date}</strong></div><div><span style={{ color: "var(--muted)" }}>Afati: </span>{invoice.due_date || "—"}</div><div><span style={{ color: "var(--muted)" }}>Pagesa: </span>{invoice.payment_status === "paid" ? "Paguar" : "E papaguar"}</div><div><span style={{ color: "var(--muted)" }}>Mënyra: </span>{({ cash: "Para në dorë", card: "Kartelë", bank_transfer: "Transfer bankar", credit: "Me afat" } as Record<string,string>)[invoice.payment_method] || invoice.payment_method}</div></div>
       </section>
-      <div style={{ overflowX: "auto" }}><table className="data-table" style={{ minWidth: 560 }}><thead><tr><th>Nr.</th><th>Përshkrimi</th><th>Sasia</th><th>Çmimi</th><th>TVSH</th><th>Gjithsej</th></tr></thead><tbody>{lines.map((line, i) => <tr key={line.id}><td>{i + 1}</td><td>{line.description}</td><td>{line.quantity}</td><td>{fmt(Number(line.unit_price))}</td><td>{line.vat_rate}%</td><td>{fmt(Number(line.line_subtotal) + Number(line.line_vat))}</td></tr>)}</tbody></table></div>
+      <div style={{ overflowX: "auto" }}><table className="data-table" style={{ minWidth: 560 }}><thead><tr><th>Nr.</th><th>Përshkrimi</th><th>Sasia</th><th>Çmimi</th><th>TVSH</th><th>Gjithsej</th></tr></thead><tbody>{lines.map((line, i) => <tr key={line.id}><td>{i + 1}</td><td>{line.description}</td><td>{line.quantity}</td><td>{fmtUnit(Number(line.unit_price))}</td><td>{line.vat_rate}%</td><td>{fmt(Number(line.line_subtotal) + Number(line.line_vat))}</td></tr>)}</tbody></table></div>
       <section style={{ display: "flex", justifyContent: "flex-end", marginTop: 22 }}>
         <div style={{ width: "100%", maxWidth: 300, fontSize: 13, lineHeight: 2 }}><div style={{ display: "flex", justifyContent: "space-between" }}><span>Nëntotali</span><strong>{fmt(Number(invoice.subtotal))}</strong></div><div style={{ display: "flex", justifyContent: "space-between" }}><span>TVSH</span><strong>{fmt(Number(invoice.vat_total))}</strong></div><div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--line)", paddingTop: 8, fontSize: 18 }}><strong>TOTALI</strong><strong>{fmt(Number(invoice.total))}</strong></div></div>
       </section>
