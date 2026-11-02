@@ -12,6 +12,8 @@ type Invoice = { id: string; invoice_number: string | null; status: string; issu
 type Expense = { id: string; description: string; supplier_name: string | null; category: string; amount: number; vat_rate: number; expense_date: string };
 type Member = { member_user_id: string; member_email: string; member_role: string; joined_at: string };
 type PendingInvitation = { invitation_id: string; invite_email: string; invite_role: string; invited_at: string };
+type Supplier = { id: string; name: string; business_number: string | null; email: string | null; phone: string | null; address: string | null };
+type Purchase = { id: string; supplier_id: string; reference: string | null; purchase_date: string; status: string; total: number; received_at: string | null };
 
 const panel: React.CSSProperties = { background: "white", border: "1px solid var(--line)", borderRadius: 14, padding: 18 };
 const field: React.CSSProperties = { width: "100%", minWidth: 0, border: "1px solid var(--line)", borderRadius: 8, padding: "10px 11px", background: "white", color: "var(--ink)" };
@@ -42,17 +44,24 @@ export default function BusinessDashboard() {
   const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([]);
   const [memberForm, setMemberForm] = useState({ email: "", role: "cashier" });
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [supplierForm, setSupplierForm] = useState({ name: "", business_number: "", email: "", phone: "", address: "" });
+  const [purchaseForm, setPurchaseForm] = useState({ supplier_id: "", reference: "", purchase_date: new Date().toISOString().slice(0, 10), notes: "" });
+  const [purchaseLines, setPurchaseLines] = useState([{ product_id: "", quantity: "1", unit_cost: "", vat_rate: "0" }]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     await supabase.rpc("fiskalo_accept_pending_team_invitations");
-    const [orgResult, productResult, customerResult, invoiceResult, expenseResult] = await Promise.all([
+    const [orgResult, productResult, customerResult, invoiceResult, expenseResult, supplierResult, purchaseResult] = await Promise.all([
       supabase.from("fiskalo_organizations").select("id,legal_name,municipality,nui,vat_registered,fiscalization_status").eq("id", organizationId).single(),
       supabase.from("fiskalo_products").select("*").eq("organization_id", organizationId).order("name"),
       supabase.from("fiskalo_customers").select("*").eq("organization_id", organizationId).order("name"),
       supabase.from("fiskalo_invoices").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }),
       supabase.from("fiskalo_expenses").select("*").eq("organization_id", organizationId).order("expense_date", { ascending: false }),
+      supabase.from("fiskalo_suppliers").select("*").eq("organization_id", organizationId).order("name"),
+      supabase.from("fiskalo_purchases").select("*").eq("organization_id", organizationId).order("purchase_date", { ascending: false }),
     ]);
     if (orgResult.error) {
       setError("Nuk ke qasje në këtë biznes ose biznesi nuk ekziston.");
@@ -62,7 +71,9 @@ export default function BusinessDashboard() {
       setCustomers((customerResult.data ?? []) as Customer[]);
       setInvoices((invoiceResult.data ?? []) as Invoice[]);
       setExpenses((expenseResult.data ?? []) as Expense[]);
-      if (productResult.error || customerResult.error || invoiceResult.error || expenseResult.error) setError("Disa të dhëna nuk u ngarkuan. Rifresko faqen.");
+      setSuppliers((supplierResult.data ?? []) as Supplier[]);
+      setPurchases((purchaseResult.data ?? []) as Purchase[]);
+      if (productResult.error || customerResult.error || invoiceResult.error || expenseResult.error || supplierResult.error || purchaseResult.error) setError("Disa të dhëna nuk u ngarkuan. Rifresko faqen.");
     }
     setLoading(false);
   }, [organizationId, supabase]);
@@ -142,6 +153,52 @@ export default function BusinessDashboard() {
     setNotice("Shpenzimi u regjistrua."); await load();
   }
 
+  async function addSupplier(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setError(""); setNotice("");
+    const { error: saveError } = await supabase.from("fiskalo_suppliers").insert({
+      organization_id: organizationId, name: supplierForm.name.trim(),
+      business_number: supplierForm.business_number.trim() || null,
+      email: supplierForm.email.trim() || null, phone: supplierForm.phone.trim() || null,
+      address: supplierForm.address.trim() || null,
+    });
+    setBusy(false);
+    if (saveError) { setError(saveError.message); return; }
+    setSupplierForm({ name: "", business_number: "", email: "", phone: "", address: "" });
+    setNotice("Furnitori u ruajt."); await load();
+  }
+
+  async function createPurchase(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setError(""); setNotice("");
+    if (!purchaseForm.supplier_id) { setBusy(false); setError("Zgjidh furnitorin."); return; }
+    const selected = purchaseLines.map((line) => ({ ...line, product: products.find((p) => p.id === line.product_id) }));
+    if (selected.some((line) => !line.product || !line.product.track_stock || !(Number(line.quantity) > 0) || !(Number(line.unit_cost) >= 0))) {
+      setBusy(false); setError("Zgjidh produktet me menaxhim stoku dhe plotëso sasitë e kostot."); return;
+    }
+    const { error: saveError } = await supabase.rpc("fiskalo_create_purchase", {
+      payload: {
+        organization_id: organizationId, supplier_id: purchaseForm.supplier_id,
+        reference: purchaseForm.reference.trim() || null, purchase_date: purchaseForm.purchase_date,
+        notes: purchaseForm.notes.trim() || null,
+        items: selected.map((line) => ({ product_id: line.product_id, quantity: Number(line.quantity), unit_cost: Number(line.unit_cost), vat_rate: Number(line.vat_rate) })),
+      },
+    });
+    setBusy(false);
+    if (saveError) { setError(saveError.message); return; }
+    setPurchaseForm({ supplier_id: "", reference: "", purchase_date: new Date().toISOString().slice(0, 10), notes: "" });
+    setPurchaseLines([{ product_id: "", quantity: "1", unit_cost: "", vat_rate: "0" }]);
+    setNotice("Blerja u ruajt si draft. Pranoje pasi malli të arrijë fizikisht.");
+    await load();
+  }
+
+  async function receivePurchase(purchaseId: string) {
+    if (!window.confirm("Konfirmo që malli ka arritur. Stoku do të rritet menjëherë.")) return;
+    setBusy(true); setError(""); setNotice("");
+    const { error: receiveError } = await supabase.rpc("fiskalo_receive_purchase", { target_purchase: purchaseId });
+    setBusy(false);
+    if (receiveError) { setError(receiveError.message); return; }
+    setNotice("Blerja u pranua dhe stoku u përditësua."); await load();
+  }
+
   async function createInvoice(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
     const selectedLines = invoiceLines.map((line) => ({ line, product: products.find((item) => item.id === line.product_id) }));
@@ -211,7 +268,7 @@ export default function BusinessDashboard() {
   const draftCount = invoices.filter((invoice) => invoice.status === "draft").length;
   const expenseTotal = expenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
   const fmt = (value: number) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR" }).format(value);
-  const tabItems = [{ id: "overview", label: "Përmbledhje" }, { id: "products", label: "Produktet" }, { id: "customers", label: "Klientët" }, { id: "invoices", label: "Faturat" }, { id: "expenses", label: "Shpenzimet" }, { id: "reports", label: "Raportet" }, { id: "team", label: "Ekipi" }];
+  const tabItems = [{ id: "overview", label: "Përmbledhje" }, { id: "products", label: "Produktet" }, { id: "customers", label: "Klientët" }, { id: "invoices", label: "Faturat" }, { id: "expenses", label: "Shpenzimet" }, { id: "purchases", label: "Blerjet" }, { id: "reports", label: "Raportet" }, { id: "team", label: "Ekipi" }];
 
   if (loading) return <main style={{ maxWidth: 1100, margin: "0 auto", padding: 32 }}>Duke ngarkuar panelin...</main>;
   if (!org) return <main style={{ maxWidth: 800, margin: "0 auto", padding: 32 }}><p>{error || "Biznesi nuk u gjet."}</p><Link href="/app">Kthehu te bizneset</Link></main>;
