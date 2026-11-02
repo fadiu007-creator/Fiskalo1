@@ -22,6 +22,7 @@ button:disabled { opacity: .6; cursor: not-allowed !important; }
 .data-table td small { display: block; color: var(--muted); margin-top: 3px; }
 @media (max-width: 760px) {
   .data-table { min-width: 560px; }
+  .module-grid { grid-template-columns: minmax(0, 1fr) !important; }
 }
 @media print {
   body { background: white; }
