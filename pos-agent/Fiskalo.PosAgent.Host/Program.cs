@@ -44,7 +44,7 @@ app.Use(async (context, next) =>
         return;
     }
 
-    var origin = context.Request.Headers.Origin.ToString();
+    var origin = context.Request.Headers["Origin"].ToString();
     if (!string.IsNullOrEmpty(origin) && !allowedOrigins.Contains(origin))
     {
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
@@ -59,22 +59,22 @@ app.Use(async (context, next) =>
             return;
         }
 
-        context.Response.Headers.AccessControlAllowOrigin = origin;
-        context.Response.Headers.AccessControlAllowMethods = "GET, POST, OPTIONS";
-        context.Response.Headers.AccessControlAllowHeaders = "Authorization, Content-Type";
+        context.Response.Headers["Access-Control-Allow-Origin"] = origin;
+        context.Response.Headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
+        context.Response.Headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type";
         if (context.Request.Headers.ContainsKey("Access-Control-Request-Private-Network"))
             context.Response.Headers["Access-Control-Allow-Private-Network"] = "true";
-        context.Response.Headers.Vary = "Origin";
+        context.Response.Headers["Vary"] = "Origin";
         context.Response.StatusCode = StatusCodes.Status204NoContent;
         return;
     }
 
     if (!string.IsNullOrEmpty(origin) && allowedOrigins.Contains(origin))
     {
-        context.Response.Headers.AccessControlAllowOrigin = origin;
-        context.Response.Headers.AccessControlAllowMethods = "GET, POST, OPTIONS";
-        context.Response.Headers.AccessControlAllowHeaders = "Authorization, Content-Type";
-        context.Response.Headers.Vary = "Origin";
+        context.Response.Headers["Access-Control-Allow-Origin"] = origin;
+        context.Response.Headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
+        context.Response.Headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type";
+        context.Response.Headers["Vary"] = "Origin";
     }
 
     await next();
@@ -90,7 +90,7 @@ app.MapGet(HealthPath, () => Results.Ok(new
 
 app.MapPost(PairPath, (PairRequest request, HttpContext context) =>
 {
-    var origin = context.Request.Headers.Origin.ToString();
+    var origin = context.Request.Headers["Origin"].ToString();
     if (string.IsNullOrEmpty(origin) || !allowedOrigins.Contains(origin))
         return Results.StatusCode(StatusCodes.Status403Forbidden);
 
@@ -143,7 +143,7 @@ app.Run();
 static bool HasValidSession(HttpContext context, string? expectedToken)
 {
     if (string.IsNullOrEmpty(expectedToken)) return false;
-    var header = context.Request.Headers.Authorization.ToString();
+    var header = context.Request.Headers["Authorization"].ToString();
     if (!header.StartsWith("Bearer ", StringComparison.Ordinal)) return false;
 
     var supplied = Encoding.UTF8.GetBytes(header[7..].Trim());
