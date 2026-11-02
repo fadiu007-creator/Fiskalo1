@@ -97,10 +97,10 @@ export default function BusinessDashboard() {
         unit_price: Number(productForm.unit_price), vat_rate: Number(productForm.vat_rate),
       }).eq("id", editingProductId).eq("organization_id", organizationId);
       if (updateError) { setBusy(false); setError(updateError.message); return; }
-      const stockDelta = current.track_stock ? Number(productForm.stock_quantity || 0) - Number(current.stock_quantity) : 0;
-      if (stockDelta !== 0) {
-        const { error: stockError } = await supabase.rpc("fiskalo_adjust_stock", {
-          target_product: editingProductId, quantity_delta: stockDelta, movement_note: "Përditësim nga redaktimi i produktit",
+      const targetStock = Number(productForm.stock_quantity || 0);
+      if (current.track_stock && targetStock !== Number(current.stock_quantity)) {
+        const { error: stockError } = await supabase.rpc("fiskalo_set_stock", {
+          target_product: editingProductId, target_quantity: targetStock, movement_note: "Përditësim i stokut nga redaktimi i produktit",
         });
         if (stockError) { setBusy(false); setError("Emri dhe çmimi u ruajtën, por stoku nuk u ndryshua: " + stockError.message); await load(); return; }
       }
