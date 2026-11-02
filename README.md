@@ -77,7 +77,7 @@ The repository contains `wrangler.jsonc` and `open-next.config.ts`.
 - Deploy: `npm run deploy`
 - Generate Worker types: `npm run cf-typegen`
 
-Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` as Cloudflare Worker environment variables before deployment. Cloudflare deployment also requires an authenticated Wrangler session or Cloudflare API credentials with Workers deployment permission.
+Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` as Cloudflare Worker environment variables before deployment. Cloudflare deployment also requires GitHub Actions secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, plus build secrets `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Set the two Supabase values as Worker runtime variables in the Cloudflare dashboard as well. Then run the manual `Deploy Fiskalo to Cloudflare Workers` workflow from GitHub Actions.
 
 ## Security and compliance boundaries
 
