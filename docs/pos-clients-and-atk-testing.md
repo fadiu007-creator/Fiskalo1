@@ -48,3 +48,13 @@ Android ATK support is a separate milestone: Android Keystore-backed P-256 key m
 - No production ATK endpoint or production submission switch is enabled.
 - No test coupon has been sent as part of this implementation batch.
 - The Android app has not yet passed a build on a physical device.
+
+## Browser and Android key-storage prototype (2 November 2026)
+
+The Web dashboard now contains an experimental CSR action per test POS. It creates a P-256 key in the browser, imports the private key as a non-extractable Web Crypto key, persists that key in IndexedDB and downloads the CSR. The browser key is scoped to the organization and POS installation. This is not equivalent to a hardware-backed keystore and is not yet approved by ATK; browser-profile compromise, same-origin XSS or browser data loss remain relevant risks.
+
+The Android POS now contains a local Expo native module that generates P-256 keys in Android Keystore, builds a PKCS#10 CSR and can sign the ATK Base64 payload with ECDSA/SHA-256. The app exposes a test-only CSR onboarding panel and keeps the CSR as public data in SecureStore for repeat export. The private key is not exported. Hardware-backed status is reported by the device's Android Keystore and may be false on some devices.
+
+These are key-generation/CSR foundations only. They do not yet verify the CSR against ATK, install an ATK-issued certificate, submit fiscal coupons from Web/Android, or provide a production-ready offline queue. They have not been built/tested on physical devices or approved by ATK. The Windows Agent remains the only currently implemented complete local ATK test verify/sign-CSR path.
+
+For the exact applicant-vs-taxpayer identity distinction, test fiscalization number, Application ID, test request and portal verification steps, see [ATK test runbook](./atk-test-runbook.md).
