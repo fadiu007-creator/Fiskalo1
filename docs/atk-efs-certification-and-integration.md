@@ -264,3 +264,20 @@ The local Windows host now has explicit authenticated routes for:
 - Inspecting encrypted queue metadata without exposing signed payloads or signatures.
 
 Mock-based tests now cover the ATK test client route contract and error mapping. These routes do not call ATK automatically; a user/operator must explicitly invoke them. The ATK test environment has **not** been contacted from this development session. POS coupon submission, queue worker/reconciliation, certificate renewal/revocation, and printer integration remain incomplete. Production fiscalization is still hard-disabled.
+
+
+## 14. ATK test coupon submission and duplicate-safety milestone
+
+The POS Agent now has a manual test-only coupon route. It:
+- Requires a local DPAPI-protected P-256 key and ATK test certificate.
+- Checks certificate validity dates and matches its ECDSA public key to the local private key.
+- Requires the verified installation profile to match NUI, branch, POS ID, ATK application ID and verification number.
+- Builds and validates the POS Protobuf coupon using caller-supplied ATK tax/category/unit values.
+- Uses a deterministic idempotency key derived from NUI, branch, POS ID and coupon ID.
+- Encrypts and persists the exact Base64 Protobuf details and signature before sending to the fixed ATK test endpoint.
+- Records the ATK transaction ID on success and records definitive 4xx rejection.
+- Moves uncertain network/5xx outcomes and interrupted in-flight submissions to `NeedsReconciliation`, preventing automatic resubmission.
+
+This is a deliberate conservative control. The current ATK sample API does not establish a remote idempotency guarantee in the reviewed material, so a timeout cannot safely be treated as proof that ATK did not receive the coupon. An operator must reconcile the transaction with ATK before any retry.
+
+The host still has no full UI, Windows service installer, automatic retry/reconciliation workflow, printer support, cancellation/return user flows or verified live ATK test run. The ATK test environment has not been contacted in this session; production remains disabled.
