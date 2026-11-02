@@ -152,7 +152,7 @@ app.MapGet(StatusPath, (HttpContext context) =>
         version = AgentVersion,
         paired = true,
         fiscalizationEnabled = false,
-        capabilities = new[] { "health", "secure-local-pairing", "windows-dpapi-key-csr", "encrypted-queue-inspection" },
+        capabilities = new[] { "health", "secure-local-pairing", "windows-dpapi-key-csr", "encrypted-queue-inspection", "manual-queue-reconciliation", "atk-test-coupon-submission" },
         windowsKeyStoreAvailable = OperatingSystem.IsWindows(),
         signingKeyInitialized = OperatingSystem.IsWindows() && File.Exists(keyPath),
         queueInitialized = OperatingSystem.IsWindows() && File.Exists(queuePath),
@@ -180,7 +180,6 @@ app.MapGet(QueuePath, async (HttpContext context, CancellationToken cancellation
     if (!HasValidSession(context, sessionToken)) return Results.Unauthorized();
     if (!OperatingSystem.IsWindows()) return Results.Problem("Local encrypted queue currently requires Windows DPAPI.", statusCode: StatusCodes.Status501NotImplemented);
     try {
-        var store = new FiscalQueueStore(queuePath, new WindowsDpapiFiscalQueueProtector());
         var items = await queueStore.GetAllAsync(cancellationToken);
         return Results.Ok(new { count = items.Count, items = items.Select(item => new { item.IdempotencyKey, item.DocumentType, item.CreatedAtUtc, item.RecoveryDeadlineUtc, item.NextAttemptAtUtc, status = item.Status.ToString(), item.AttemptCount, item.LastError, item.AtkTransactionId }) });
     } catch (Exception ex) when (ex is CryptographicException or IOException or UnauthorizedAccessException) {
