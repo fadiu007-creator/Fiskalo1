@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { createBrowserPosCsr, getBrowserPosCsr, hasBrowserPosKey } from "@/lib/atk/browser-key-vault";
+import { createBrowserPosCsr, getBrowserPosCsr, hasBrowserPosCertificate, hasBrowserPosKey, installBrowserPosCertificate } from "@/lib/atk/browser-key-vault";
 
 type Org = { id: string; legal_name: string; municipality: string; nui: string; vat_registered: boolean; fiscalization_status: string };
 type Product = { id: string; name: string; sku: string | null; unit_price: number; vat_rate: number; stock_quantity: number; item_type: string; track_stock: boolean; is_active: boolean };
@@ -68,7 +68,7 @@ export default function BusinessDashboard() {
   const [agentNotice, setAgentNotice] = useState("");
   const [agentBusy, setAgentBusy] = useState(false);
   const [atkApplicationId, setAtkApplicationId] = useState("");
-  const [browserKeyState, setBrowserKeyState] = useState<Record<string, { exists: boolean; fingerprint?: string }>>({});
+  const [browserKeyState, setBrowserKeyState] = useState<Record<string, { exists: boolean; fingerprint?: string; certificateInstalled?: boolean }>>({});
   const [browserKeyBusyId, setBrowserKeyBusyId] = useState<string | null>(null);
   const [agentVerifications, setAgentVerifications] = useState<Record<string, AgentVerification>>({});
 
@@ -135,6 +135,7 @@ export default function BusinessDashboard() {
     void Promise.all(atkPosInstallations.map(async (pos) => ({
       id: pos.id,
       exists: await hasBrowserPosKey(organizationId + ":" + pos.id).catch(() => false),
+      certificateInstalled: await hasBrowserPosCertificate(organizationId + ":" + pos.id).catch(() => false),
     }))).then((entries) => {
       if (!cancelled) setBrowserKeyState((current) => ({
         ...current,
@@ -255,15 +256,20 @@ export default function BusinessDashboard() {
     try {
       if (!atkProfile?.fiscalization_number) throw new Error("Ruaje së pari numrin e fiskalizimit për TEST nga emaili i ATK-së.");
       const applicationId = Number(atkApplicationId);
-      const nui = Number(org?.nui);
-      if (!Number.isSafeInteger(applicationId) || applicationId <= 0) throw new Error("Shëno application ID-në e dhënë nga ATK.");
-      if (!Number.isSafeInteger(nui) || nui <= 0) throw new Error("NUI i biznesit nuk është numër valid.");
-      const result = await agentRequest("/api/v1/atk/test/verify", {
-        nui, fiscalizationNumber: atkProfile.fiscalization_number, posId: pos.pos_id,
-        branchId: pos.atk_branch_id, applicationId,
+      const nui = org?.nui ?? "";
+      if (!Number.isSafeInteger(applicationId) || applicationId <= 0) throw new Error("Shëno Application ID-në e dhënë nga ATK.");
+      if (!/^\d{9}$/.test(nui)) throw new Error("NUI i tatimpaguesit duhet të jetë NUI valid me 9 shifra.");
+      const response = await fetch("/api/atk/test/verify", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          organizationId, nui, fiscalizationNumber: atkProfile.fiscalization_number,
+          posId: pos.pos_id, branchId: pos.atk_branch_id, applicationId,
+        }),
       });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.detail || result.error || "Verifikimi në ATK dështoi.");
       setAgentVerifications((current) => ({ ...current, [pos.id]: { businessName: result.businessName, verificationCode: result.verificationCode } }));
-      setAgentNotice("ATK e verifikoi pajisjen në mjedisin TEST. Vazhdo me kërkesën për certifikatë testuese.");
+      setAgentNotice("ATK e verifikoi POS-in në mjedisin TEST. Tani mund të kërkosh certifikatën nga ky shfletues.");
     } catch (e) {
       setAgentError(e instanceof Error ? e.message : "Verifikimi në ATK dështoi.");
     } finally { setAgentBusy(false); }
@@ -273,17 +279,25 @@ export default function BusinessDashboard() {
     setAgentBusy(true); setAgentError(""); setAgentNotice("");
     try {
       const verified = agentVerifications[pos.id];
-      if (!verified) throw new Error("Verifikoje fillimisht pajisjen në ATK.");
+      if (!verified) throw new Error("Verifikoje fillimisht POS-in në ATK.");
       const applicationId = Number(atkApplicationId);
-      const nui = Number(org?.nui);
-      const result = await agentRequest("/api/v1/atk/test/sign-csr", {
-        businessName: verified.businessName, businessNui: nui, branchId: pos.atk_branch_id,
-        verificationCode: verified.verificationCode, posId: pos.pos_id, applicationId,
+      const nui = org?.nui ?? "";
+      const keyId = organizationId + ":" + pos.id;
+      const csr = await getBrowserPosCsr(keyId);
+      if (!csr) throw new Error("Gjenero fillimisht CSR-në Web për këtë POS.");
+      const response = await fetch("/api/atk/test/sign-csr", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          organizationId, nui, businessName: verified.businessName,
+          verificationCode: verified.verificationCode, branchId: pos.atk_branch_id,
+          posId: pos.pos_id, applicationId, csrPem: csr.csrPem,
+        }),
       });
-      const status = await agentRequest("/api/v1/status");
-      setAgentStatus(status);
-      setAgentNotice("ATK lëshoi certifikatën testuese dhe POS Agent verifikoi përputhjen me çelësin lokal. Certifikata nuk është për prodhim.");
-      void result;
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.detail || result.error || "Kërkesa për certifikatë testuese dështoi.");
+      const installed = await installBrowserPosCertificate(keyId, result.signedCertificate);
+      setBrowserKeyState((current) => ({ ...current, [pos.id]: { ...current[pos.id], exists: true, certificateInstalled: installed.installed, fingerprint: installed.publicKeySha256 } }));
+      setAgentNotice("ATK lëshoi certifikatën TEST dhe çelësi publik u verifikua kundrejt çelësit privat lokal të këtij shfletuesi. Certifikata nuk është për prodhim.");
     } catch (e) {
       setAgentError(e instanceof Error ? e.message : "Kërkesa për certifikatë testuese dështoi.");
     } finally { setAgentBusy(false); }
@@ -694,10 +708,10 @@ export default function BusinessDashboard() {
         <section style={panel}>
           <h3 style={{ marginTop: 0 }}>Pajisjet POS të regjistruara në Fiskalo ({atkPosInstallations.length})</h3>
           <div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Pajisja</th><th>Dega ATK</th><th>POS ID</th><th>Mjedisi</th><th>Statusi</th><th>Certifikata</th><th>CSR Web</th><th>Veprimet testuese</th></tr></thead><tbody>
-            {atkPosInstallations.map((pos) => <tr key={pos.id}><td>{pos.label}<small>{pos.location || "Lokacioni nuk është shënuar"}</small></td><td>{pos.atk_branch_id}</td><td>{pos.pos_id}</td><td>{pos.environment === "test" ? "Test" : "Prodhim"}</td><td>{({ unregistered: "Pa regjistruar në ATK", verification_pending: "Verifikimi në pritje", certificate_pending: "Certifikata në pritje", active: "Aktive", suspended: "Pezulluar", revoked: "Revokuar" } as Record<string,string>)[pos.status] || pos.status}</td><td>{pos.certificate_serial ? pos.certificate_serial : "Nuk ka certifikatë"}</td><td><button type="button" disabled={browserKeyBusyId === pos.id} onClick={() => void downloadWebPosCsr(pos)} style={secondary}>{browserKeyBusyId === pos.id ? "Duke krijuar..." : browserKeyState[pos.id]?.exists ? "Shkarko CSR Web" : "Gjenero CSR Web"}</button>{browserKeyState[pos.id]?.fingerprint && <small>SHA-256: {browserKeyState[pos.id].fingerprint}</small>}{browserKeyState[pos.id]?.exists && <small>Çelësi ruhet në këtë shfletues.</small>}</td><td><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}><button type="button" disabled={agentBusy || !agentToken || !atkApplicationId} onClick={() => void verifyAtkPos(pos)} style={secondary}>Verifiko ATK</button><button type="button" disabled={agentBusy || !agentToken || !agentVerifications[pos.id] || !atkApplicationId} onClick={() => void requestAtkTestCertificate(pos)} style={secondary}>Kërko certifikatën</button></div>{agentVerifications[pos.id] && <small>Verifikimi u krye në këtë sesion.</small>}</td></tr>)}
+            {atkPosInstallations.map((pos) => <tr key={pos.id}><td>{pos.label}<small>{pos.location || "Lokacioni nuk është shënuar"}</small></td><td>{pos.atk_branch_id}</td><td>{pos.pos_id}</td><td>{pos.environment === "test" ? "Test" : "Prodhim"}</td><td>{({ unregistered: "Pa regjistruar në ATK", verification_pending: "Verifikimi në pritje", certificate_pending: "Certifikata në pritje", active: "Aktive", suspended: "Pezulluar", revoked: "Revokuar" } as Record<string,string>)[pos.status] || pos.status}</td><td>{pos.certificate_serial ? pos.certificate_serial : "Nuk ka certifikatë"}</td><td><button type="button" disabled={browserKeyBusyId === pos.id} onClick={() => void downloadWebPosCsr(pos)} style={secondary}>{browserKeyBusyId === pos.id ? "Duke krijuar..." : browserKeyState[pos.id]?.exists ? "Shkarko CSR Web" : "Gjenero CSR Web"}</button>{browserKeyState[pos.id]?.fingerprint && <small>SHA-256: {browserKeyState[pos.id].fingerprint}</small>}{browserKeyState[pos.id]?.exists && <small>Çelësi ruhet në këtë shfletues.</small>}</td><td><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}><button type="button" disabled={agentBusy || !atkApplicationId || !atkProfile?.fiscalization_number} onClick={() => void verifyAtkPos(pos)} style={secondary}>Verifiko ATK (Web)</button><button type="button" disabled={agentBusy || !agentVerifications[pos.id] || !atkApplicationId} onClick={() => void requestAtkTestCertificate(pos)} style={secondary}>Kërko certifikatën (Web)</button></div>{agentVerifications[pos.id] && <small>Verifikimi u krye në këtë sesion.</small>}{browserKeyState[pos.id]?.certificateInstalled && <small>Certifikata TEST është instaluar lokalisht dhe përputhet me çelësin.</small>}</td></tr>)}
             {!atkPosInstallations.length && <tr><td colSpan={8}>Nuk ka pajisje POS të regjistruara.</td></tr>}
           </tbody></table></div>
-          <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>Lista paraqet konfigurimin e POS-it në Fiskalo. Veprimet testuese aktivizohen vetëm pasi të lidhësh POS Agent-in dhe të vendosësh application ID-në e dhënë nga ATK.</p>
+          <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>Lista paraqet konfigurimin e POS-it në Fiskalo. Veprimet Web TEST përdorin API-në e Fiskalo-s dhe nuk kërkojnë Windows POS Agent. Gjenerimi i CSR-së dhe instalimi i certifikatës mbeten lokalë në shfletues; konfirmo pranueshmërinë e këtij modeli me ATK.</p>
         </section>
       </section>}
       {tab === "reports" && <section style={{ display: "grid", gap: 14 }}>
