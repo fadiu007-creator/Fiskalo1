@@ -50,6 +50,8 @@ export default function BusinessDashboard() {
   const [purchaseForm, setPurchaseForm] = useState({ supplier_id: "", reference: "", purchase_date: new Date().toISOString().slice(0, 10), notes: "" });
   const [purchaseLines, setPurchaseLines] = useState([{ product_id: "", quantity: "1", unit_cost: "", vat_rate: "0" }]);
   const [payingPurchaseId, setPayingPurchaseId] = useState<string | null>(null);
+  const [reportFrom, setReportFrom] = useState(new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10));
+  const [reportTo, setReportTo] = useState(new Date().toISOString().slice(0, 10));
   const [purchasePaymentForm, setPurchasePaymentForm] = useState({ amount: "", method: "bank_transfer", reference: "" });
 
   const load = useCallback(async () => {
@@ -276,17 +278,25 @@ export default function BusinessDashboard() {
   }
 
   function exportInvoices() {
-    downloadCsv("fiskalo-faturat.csv", [["Numri", "Data", "Statusi", "Totali EUR", "TVSH EUR"], ...invoices.map((i) => [i.invoice_number || "Draft", i.issue_date, i.status, i.total, i.vat_total])]);
+    downloadCsv("fiskalo-faturat.csv", [["Numri", "Data", "Statusi", "Totali EUR", "TVSH EUR"], ...periodInvoices.map((i) => [i.invoice_number || "Draft", i.issue_date, i.status, i.total, i.vat_total])]);
   }
 
   function exportExpenses() {
-    downloadCsv("fiskalo-shpenzimet.csv", [["Data", "Përshkrimi", "Furnitori", "Kategoria", "Shuma EUR"], ...expenses.map((e) => [e.expense_date, e.description, e.supplier_name || "", e.category, e.amount])]);
+    downloadCsv("fiskalo-shpenzimet.csv", [["Data", "Përshkrimi", "Furnitori", "Kategoria", "Shuma EUR"], ...periodExpenses.map((e) => [e.expense_date, e.description, e.supplier_name || "", e.category, e.amount])]);
   }
 
   function exportPurchases() {
-    downloadCsv("fiskalo-blerjet.csv", [["Data", "Furnitori", "Referenca", "Statusi", "Totali EUR", "Paguar EUR", "Mbetur EUR"], ...purchases.map((p) => [p.purchase_date, suppliers.find((s) => s.id === p.supplier_id)?.name || "", p.reference || "", p.status, p.total, p.paid_total, Number(p.total) - Number(p.paid_total)])]);
+    downloadCsv("fiskalo-blerjet.csv", [["Data", "Furnitori", "Referenca", "Statusi", "Totali EUR", "Paguar EUR", "Mbetur EUR"], ...periodPurchases.map((p) => [p.purchase_date, suppliers.find((s) => s.id === p.supplier_id)?.name || "", p.reference || "", p.status, p.total, p.paid_total, Number(p.total) - Number(p.paid_total)])]);
   }
 
+  const periodInvoices = invoices.filter((item) => item.status === "issued" && item.issue_date >= reportFrom && item.issue_date <= reportTo);
+  const periodExpenses = expenses.filter((item) => item.expense_date >= reportFrom && item.expense_date <= reportTo);
+  const periodPurchases = purchases.filter((item) => item.purchase_date >= reportFrom && item.purchase_date <= reportTo);
+  const periodRevenue = periodInvoices.reduce((sum, item) => sum + Number(item.total), 0);
+  const periodVat = periodInvoices.reduce((sum, item) => sum + Number(item.vat_total), 0);
+  const periodExpenseTotal = periodExpenses.reduce((sum, item) => sum + Number(item.amount), 0);
+  const periodPurchaseTotal = periodPurchases.reduce((sum, item) => sum + Number(item.total), 0);
+  const periodSupplierBalance = periodPurchases.reduce((sum, item) => sum + Number(item.total) - Number(item.paid_total), 0);
   const revenue = invoices.filter((invoice) => invoice.status === "issued").reduce((sum, invoice) => sum + Number(invoice.total), 0);
   const draftCount = invoices.filter((invoice) => invoice.status === "draft").length;
   const expenseTotal = expenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
@@ -430,11 +440,11 @@ export default function BusinessDashboard() {
       </section>}
       {tab === "reports" && <section style={{ display: "grid", gap: 14 }}>
         <div style={{ ...panel, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-          <div><h2 style={{ margin: "0 0 5px", fontSize: 19 }}>Raporti i biznesit</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: 12 }}>Përmbledhje operative nga të dhënat e regjistruara në Fiskalo.</p></div>
+          <div><h2 style={{ margin: "0 0 5px", fontSize: 19 }}>Raporti i biznesit</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: 12 }}>Përmbledhje operative nga të dhënat e regjistruara në Fiskalo.</p><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}><label style={{ fontSize: 11 }}>Prej<input type="date" value={reportFrom} max={reportTo} onChange={(e) => setReportFrom(e.target.value)} style={{ ...field, display: "block", marginTop: 4 }} /></label><label style={{ fontSize: 11 }}>Deri<input type="date" value={reportTo} min={reportFrom} onChange={(e) => setReportTo(e.target.value)} style={{ ...field, display: "block", marginTop: 4 }} /></label></div></div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button style={secondary} onClick={exportInvoices}>Eksporto faturat CSV</button><button style={secondary} onClick={exportExpenses}>Eksporto shpenzimet CSV</button><button style={secondary} onClick={exportPurchases}>Eksporto blerjet CSV</button></div>
         </div>
         <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>
-          <Stat label="Fatura të lëshuara" value={String(invoices.filter((i) => i.status === "issued").length)} />
+          <Stat label="Fatura të lëshuara" value={String(periodInvoices.length)} />
           <Stat label="Të hyra (bruto)" value={fmt(revenue)} />
           <Stat label="TVSH në fatura" value={fmt(invoices.filter((i) => i.status === "issued").reduce((s, i) => s + Number(i.vat_total), 0))} />
           <Stat label="Shpenzime të regjistruara" value={fmt(expenseTotal)} />
