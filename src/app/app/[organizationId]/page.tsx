@@ -169,7 +169,7 @@ export default function BusinessDashboard() {
   async function saveAtkProfile(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
     const fiscalizationNumber = atkProfileForm.fiscalization_number.trim();
-    if (!fiscalizationNumber) { setBusy(false); setError("Shëno numrin e fiskalizimit të marrë nga EDI i ATK-së."); return; }
+    if (!fiscalizationNumber) { setBusy(false); setError("Shëno numrin e fiskalizimit për TEST që ATK ta dërgoi me email pas kërkesës."); return; }
     const { data: authData } = await supabase.auth.getUser();
     if (!authData.user) { setBusy(false); setError("Sesioni ka skaduar. Hyr përsëri."); return; }
     const { error: saveError } = await supabase.from("fiskalo_atk_taxpayer_profiles").upsert({
@@ -177,7 +177,7 @@ export default function BusinessDashboard() {
     }, { onConflict: "organization_id" });
     setBusy(false);
     if (saveError) { setError(saveError.message); return; }
-    setNotice("Numri i fiskalizimit u ruajt. Ende nuk është verifikuar nga ATK."); await load();
+    setNotice("Numri i fiskalizimit për TEST u ruajt. Ende nuk është verifikuar nga ATK."); await load();
   }
 
   async function addAtkPosInstallation(event: React.FormEvent<HTMLFormElement>) {
@@ -253,7 +253,7 @@ export default function BusinessDashboard() {
   async function verifyAtkPos(pos: AtkPosInstallation) {
     setAgentBusy(true); setAgentError(""); setAgentNotice("");
     try {
-      if (!atkProfile?.fiscalization_number) throw new Error("Ruaje së pari numrin e fiskalizimit nga EDI.");
+      if (!atkProfile?.fiscalization_number) throw new Error("Ruaje së pari numrin e fiskalizimit për TEST nga emaili i ATK-së.");
       const applicationId = Number(atkApplicationId);
       const nui = Number(org?.nui);
       if (!Number.isSafeInteger(applicationId) || applicationId <= 0) throw new Error("Shëno application ID-në e dhënë nga ATK.");
@@ -671,9 +671,9 @@ export default function BusinessDashboard() {
         </section>
         <div className="module-grid" style={{ display: "grid", gridTemplateColumns: "minmax(260px,340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
           <form onSubmit={saveAtkProfile} style={panel}>
-            <h3 style={{ marginTop: 0 }}>Të dhënat e fiskalizimit të biznesit</h3>
-            <label className="field-label">Numri i fiskalizimit (nga EDI)<input required value={atkProfileForm.fiscalization_number} onChange={(e) => setAtkProfileForm({ fiscalization_number: e.target.value })} style={field} /></label>
-            <p style={{ color: "var(--muted)", fontSize: 11, lineHeight: 1.5 }}>Ky numër merret nga EDI i ATK-së për biznesin. Mos vendos NUI-në në vend të tij.</p>
+            <h3 style={{ marginTop: 0 }}>Të dhënat e fiskalizimit për TEST</h3><p style={{ color: "var(--muted)", fontSize: 11 }}>Apliko te <a href="https://apps.atk-ks.org/sefaplikimi/PreApplication/Create" target="_blank" rel="noreferrer">ATK · Testo para Aplikimit</a>. ATK gjeneron numrin e fiskalizimit për test dhe dërgon Application ID + numrin me email. Nëse je person fizik, plotëso të dhënat personale te aplikanti; fusha e veçantë e fiskalizimit kërkon NUI-në e tatimpaguesit që do të testohet.</p>
+            <label className="field-label">Numri i fiskalizimit për TEST (nga emaili i ATK-së)<input required value={atkProfileForm.fiscalization_number} onChange={(e) => setAtkProfileForm({ fiscalization_number: e.target.value })} style={field} /></label>
+            <p style={{ color: "var(--muted)", fontSize: 11, lineHeight: 1.5 }}>Përdor numrin e fiskalizimit për TEST që gjenerohet në kërkesën “Testo para Aplikimit” dhe dërgohet me email. Kodi unik i prodhimit nga EDI është identifikues tjetër.</p>
             <button disabled={busy} style={{ ...primary, width: "100%" }}>Ruaj të dhënat</button>
             {atkProfile?.last_verified_at && <small>Verifikuar: {new Date(atkProfile.last_verified_at).toLocaleString("sq-XK")}</small>}
             {atkProfile?.business_name_from_atk && <small>Emri sipas ATK-së: {atkProfile.business_name_from_atk}</small>}
