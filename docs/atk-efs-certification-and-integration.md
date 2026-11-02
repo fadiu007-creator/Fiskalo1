@@ -187,3 +187,51 @@ The sample code is a protocol reference, not a substitute for the current ATK 20
 ---
 
 **Release rule:** Until ATK formally certifies the provider and Fiskalo solution, keep fiscalization disabled and clearly distinguish Fiskalo's internal invoices from official fiscal coupons.
+
+
+## 11. Direct review of the ATK-provided GitHub examples
+
+Reviewed the public organization at https://github.com/fiskalizimi/ and its repositories:
+- `pos-csharp` — selected as the primary implementation reference because it contains the .NET 8 example, `models.proto`, generated C# models, PKI/CSR code, ECDSA signer, coupon builder, onboarding utility and test Swagger reference.
+- `pos-golang` — cross-checked for the same Protobuf contract and signing/submission flow.
+- `pos-php` — confirms the same Protobuf + ECDSA + HTTP integration pattern.
+- `pos-ruby` — listed by the organization, but not selected as the implementation baseline.
+
+The exact C# schema reviewed is `fiskalizimi/pos-csharp/models.proto`. It defines CouponType (Sale=1, Cancel=2, Return=3), PaymentType (Cash=1, CreditCard=2, Voucher=3, Cheque=4, CryptoCurrency=5, Other=6), CouponItem, Payment, TaxGroup, PosCoupon and CitizenCoupon.
+
+### Documented test API sequence
+
+The C# README documents these test-host endpoints:
+1. `POST https://fiskalizimi-test.atk-ks.org/ca/verify/{nui}` with `fiscalization_no`, `pos_id`, `branch_id` and `application_id`; response includes `business_name` and `verification_code`.
+2. Generate a P-256 ECDSA key pair locally and create a PEM CSR with country RKS, organization NUI, organizational unit POS ID, locality branch ID and business name.
+3. `POST https://fiskalizimi-test.atk-ks.org/ca/signcsr` with `business_name`, `business_id`, `branch_id`, `verification_code`, `pos_id`, `application_id` and `csr`; response includes `signed_certificate`.
+4. Serialize the POS coupon using the exact Protobuf schema; Base64-encode the serialized bytes; SHA-256 hash the UTF-8 bytes of that Base64 string; sign with ECDSA; Base64-encode the signature.
+5. `POST https://fiskalizimi-test.atk-ks.org/pos/coupon` with `details` (Base64 Protobuf) and `signature`. The example documents a response containing `transaction_id`.
+6. The citizen QR verification sample uses `POST /citizen/coupon` with `citizen_id` and `qr_code`. This is a citizen-verification/testing path, not a substitute for POS coupon submission.
+
+These request shapes are transcribed from the public sample repository. They must still be checked against the live test Swagger and current ATK technical package before release.
+
+### Monetary representation
+
+The sample explicitly uses two integer scales:
+- Unit item prices: EUR × 10,000. Example: €1.50 is `15000`.
+- Coupon totals, line totals, tax amounts and payment amounts: cents. Example: €4.50 is `450`.
+
+Do not apply one scale to all monetary fields. The sample builder's tax numbers are illustrative and explicitly not a tax-calculation guide. Use ATK's current tax and category documentation for production calculations.
+
+### Test certification sequence
+
+The ATK application page currently states that technical testing must be completed with the same NUI / personal number and must include onboarding plus POS coupon tests for **Sale, Cancel and Return** before the certification application can be submitted. Do not mark testing complete after only a successful Sale.
+
+## 12. Fiskalo implementation state after repository review
+
+The following is now implemented in Fiskalo's data model and business UI:
+- Taxpayer fiscalization-number profile (entered by the business; not verified against ATK yet).
+- Per-POS records with ATK branch ID, POS ID, environment, status and certificate metadata.
+- Test-only POS creation from the customer UI. Customer-side insertion is restricted to the test environment and initial unregistered status.
+- Fiscal document storage model for Sale / Cancel / Return, business-wide coupon uniqueness, source-invoice linkage, signed Protobuf payloads, QR payload, ATK transaction ID and response.
+- Append-only fiscal event history.
+- Tenant-safe composite foreign keys and RLS. Fiscal documents/events are read-only to ordinary authenticated users; a future trusted local-agent/backend channel must perform submissions and state transitions.
+- Provider certification settings are private to the platform and not exposed to customer accounts. Production cannot be enabled unless the provider profile is marked certified.
+
+**Not implemented yet:** local key generation/storage, CSR onboarding calls, certificate installation, Protobuf coupon builder, ECDSA signing, POS coupon HTTP submission, Sale/Cancel/Return test runs and ATK response verification. No ATK request has been sent from Fiskalo yet.
