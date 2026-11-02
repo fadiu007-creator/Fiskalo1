@@ -33,3 +33,8 @@ This is an Android-native POS client scaffold using Expo/React Native and the ex
 - The Android project has not yet been built or tested on a physical Android device. EAS custom builds are required for the native module; Expo Go cannot load it.
 
 Do not use the app to issue official fiscal coupons before ATK certification.
+
+
+## CI debug APK artifact
+
+The Android POS workflow now assembles a debug APK after the native Kotlin compilation step and uploads it as the GitHub Actions artifact `fiskalo-android-pos-debug-apk` (14-day retention). This is an installable internal test build, not a Play Store release or a production-signed APK. Download it from the successful **Android POS CI** run → Artifacts. Install only on a test device and do not use it for real fiscalization.
