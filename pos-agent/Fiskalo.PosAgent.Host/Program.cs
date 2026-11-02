@@ -134,7 +134,7 @@ app.MapGet(StatusPath, (HttpContext context) =>
         paired = true,
         fiscalizationEnabled = false,
         capabilities = new[] { "health", "secure-local-pairing" },
-        nextStep = "certificate-and-key-vault-not-installed"
+        nextStep = "host-integration-and-certificate-onboarding-pending"
     });
 });
 
