@@ -273,6 +273,7 @@ public sealed class FiscalQueueStore
         {
             if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
             CryptographicOperations.ZeroMemory(plaintext);
+            CryptographicOperations.ZeroMemory(encrypted);
         }
     }
 
