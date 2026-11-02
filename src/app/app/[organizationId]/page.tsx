@@ -445,12 +445,12 @@ export default function BusinessDashboard() {
         </div>
         <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>
           <Stat label="Fatura të lëshuara" value={String(periodInvoices.length)} />
-          <Stat label="Të hyra (bruto)" value={fmt(revenue)} />
-          <Stat label="TVSH në fatura" value={fmt(invoices.filter((i) => i.status === "issued").reduce((s, i) => s + Number(i.vat_total), 0))} />
-          <Stat label="Shpenzime të regjistruara" value={fmt(expenseTotal)} />
-          <Stat label="Blerje gjithsej" value={fmt(purchases.reduce((s, p) => s + Number(p.total), 0))} />
-          <Stat label="Borxhi ndaj furnitorëve" value={fmt(purchases.reduce((s, p) => s + Number(p.total) - Number(p.paid_total), 0))} />
-          <Stat label="Të hyra minus shpenzime operative" value={fmt(revenue - expenseTotal)} />
+          <Stat label="Të hyra (bruto)" value={fmt(periodRevenue)} />
+          <Stat label="TVSH në fatura" value={fmt(periodVat)} />
+          <Stat label="Shpenzime të regjistruara" value={fmt(periodExpenseTotal)} />
+          <Stat label="Blerje gjithsej" value={fmt(periodPurchaseTotal)} />
+          <Stat label="Borxhi ndaj furnitorëve" value={fmt(periodSupplierBalance)} />
+          <Stat label="Të hyra minus shpenzime operative" value={fmt(periodRevenue - periodExpenseTotal)} />
         </section>
         <section style={panel}><h3 style={{ marginTop: 0 }}>Shënim për raportet tatimore</h3><p style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.6 }}>Këto janë raporte të brendshme menaxheriale. Diferenca e të hyrave dhe shpenzimeve nuk është fitim neto: nuk përfshin ende koston e mallrave të shitura, amortizimin dhe të gjitha rregullimet kontabël. Blerjet e stokut shfaqen veçmas dhe nuk zbriten automatikisht si shpenzim. Këto nuk janë libra zyrtarë apo deklarata të pranuara nga ATK.</p></section>
       </section>}
