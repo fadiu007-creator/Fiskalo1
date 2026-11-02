@@ -29,7 +29,7 @@ For local development, set an exact semicolon-separated origin list, for example
 FISKALO_ALLOWED_ORIGINS="https://fiskalo.shqiptare.workers.dev;http://localhost:3000" dotnet run --project pos-agent/Fiskalo.PosAgent.Host/Fiskalo.PosAgent.Host.csproj
 ```
 
-Do not expose the pairing code or bearer token in screenshots, logs, support tickets, URLs or query strings. The code and session are in-memory in this initial host milestone: restarting the process invalidates the session and creates a new pairing code. The next milestone must add OS-protected token/key storage and managed service installation before this is suitable for unattended production use.
+Do not expose the pairing code or bearer token in screenshots, logs, support tickets, URLs or query strings. The code and session are in-memory in this initial host milestone: restarting the process invalidates the session and creates a new pairing code. Windows DPAPI primitives for the signing key and queue encryption now exist in the core library, but the host does not yet wire them into startup/pairing. Managed service installation and persistent session management remain pending.
 
 ## Security and limitations
 
