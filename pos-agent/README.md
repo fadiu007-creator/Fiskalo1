@@ -55,3 +55,8 @@ dotnet test pos-agent/Fiskalo.PosAgent.Tests/Fiskalo.PosAgent.Tests.csproj --con
 The Windows host now connects the existing protocol client to explicit, authenticated test-only onboarding actions. The CSR endpoint uses the locally DPAPI-protected P-256 key. ATK verification and CSR-signing endpoints use the fixed official test hostname. A returned certificate is saved only after its ECDSA public key is confirmed to match the local key. No production hostname or environment switch exists.
 
 The host also exposes metadata-only inspection of the encrypted queue. It does not return stored payload/signature contents and does not yet submit coupons or run automatic retries.
+
+
+## Test coupon submission safeguards
+
+The host's test-only coupon route now uses the same local DPAPI key/certificate pair and verified installation profile. It persists the signed Protobuf document before submission, enforces a deterministic idempotency key based on NUI/branch/POS/coupon ID, and records the ATK transaction ID only after a successful response. Ambiguous outcomes are locked for manual reconciliation instead of automatically retried. This avoids assuming ATK supports remote idempotency.
