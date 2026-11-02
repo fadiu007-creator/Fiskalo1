@@ -14,6 +14,7 @@ const string StatusPath = "/api/v1/status";
 const string HealthPath = "/health";
 const string CsrPath = "/api/v1/keys/csr";
 const string QueuePath = "/api/v1/queue";
+const string QueueReconcilePath = "/api/v1/queue/reconcile";
 const string AtkVerifyPath = "/api/v1/atk/test/verify";
 const string AtkSignCsrPath = "/api/v1/atk/test/sign-csr";
 const string AtkCouponPath = "/api/v1/atk/test/coupon";
@@ -184,6 +185,42 @@ app.MapGet(QueuePath, async (HttpContext context, CancellationToken cancellation
         return Results.Ok(new { count = items.Count, items = items.Select(item => new { item.IdempotencyKey, item.DocumentType, item.CreatedAtUtc, item.RecoveryDeadlineUtc, item.NextAttemptAtUtc, status = item.Status.ToString(), item.AttemptCount, item.LastError, item.AtkTransactionId }) });
     } catch (Exception ex) when (ex is CryptographicException or IOException or UnauthorizedAccessException) {
         return Results.Problem("Unable to read the protected local fiscal queue.", statusCode: StatusCodes.Status500InternalServerError);
+    }
+});
+
+app.MapPost(QueueReconcilePath, async (QueueReconcileRequest request, HttpContext context, CancellationToken cancellationToken) =>
+{
+    if (!HasValidSession(context, sessionToken)) return Results.Unauthorized();
+    if (!OperatingSystem.IsWindows()) return Results.Problem("Protected queue reconciliation currently requires Windows DPAPI.", statusCode: StatusCodes.Status501NotImplemented);
+    if (string.IsNullOrWhiteSpace(request.IdempotencyKey) || string.IsNullOrWhiteSpace(request.Decision))
+        return Results.BadRequest(new { error = "idempotencyKey and decision are required." });
+    try
+    {
+        var resolved = request.Decision.Trim().ToLowerInvariant() switch
+        {
+            "accepted" => await queueStore.ResolveAsAcceptedAsync(request.IdempotencyKey, request.AtkTransactionId ?? "", cancellationToken),
+            "rejected" => await queueStore.ResolveAsRejectedAsync(request.IdempotencyKey, request.OperatorNote ?? "", cancellationToken),
+            "not_found_confirmed" => await queueStore.ResolveNotFoundAndRequeueAsync(request.IdempotencyKey, request.ConfirmedNoAtkRecord, cancellationToken: cancellationToken),
+            _ => null
+        };
+        if (resolved is null)
+            return Results.BadRequest(new { error = "decision_must_be_accepted_rejected_or_not_found_confirmed" });
+        return Results.Ok(new
+        {
+            idempotencyKey = resolved.IdempotencyKey,
+            status = resolved.Status.ToString(),
+            transactionId = resolved.AtkTransactionId,
+            lastError = resolved.LastError,
+            manualResubmissionPermitted = resolved.Status == FiscalQueueStatus.Queued,
+            automaticRetryEnabled = false
+        });
+    }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch (KeyNotFoundException) { return Results.NotFound(new { error = "fiscal_queue_item_not_found" }); }
+    catch (Exception ex) when (ex is CryptographicException or IOException or UnauthorizedAccessException)
+    {
+        return Results.Problem("Unable to update the protected fiscal queue.", statusCode: StatusCodes.Status500InternalServerError);
     }
 });
 
@@ -362,6 +399,13 @@ internal sealed record CsrRequest(
     [property: JsonPropertyName("businessNui")] ulong BusinessNui,
     [property: JsonPropertyName("branchId")] ulong BranchId,
     [property: JsonPropertyName("posId")] ulong PosId);
+
+internal sealed record QueueReconcileRequest(
+    [property: JsonPropertyName("idempotencyKey")] string IdempotencyKey,
+    [property: JsonPropertyName("decision")] string Decision,
+    [property: JsonPropertyName("atkTransactionId")] string? AtkTransactionId,
+    [property: JsonPropertyName("operatorNote")] string? OperatorNote,
+    [property: JsonPropertyName("confirmedNoAtkRecord")] bool ConfirmedNoAtkRecord);
 
 internal sealed record AtkVerifyRequest(
     [property: JsonPropertyName("nui")] ulong Nui,
