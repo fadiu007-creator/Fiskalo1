@@ -111,3 +111,8 @@ The current 2026 ATK requirements and certification gates are tracked in [`docs/
 - The ATK preparation module only stores taxpayer and POS metadata. It does not call ATK or create certificates.
 - The ATK test protocol is based on the official `fiskalizimi/pos-csharp` and `pos-golang` examples; the current implementation state and test sequence are in `docs/atk-efs-certification-and-integration.md`.
 - Official fiscalization must remain disabled until current ATK specifications, authorized test access, onboarding, Sale/Cancel/Return tests, and provider/solution certification have been completed.
+
+
+### ATK / POS Agent engineering status
+
+The .NET POS Agent now includes the ATK protocol core, a loopback-only local host with one-time browser pairing, encrypted durable queue abstractions, Windows DPAPI protection for queue data and P-256 signing keys, and automated tests. The local host is still a development scaffold: it does not yet integrate the queue/key store, perform certificate onboarding, print receipts or submit ATK transactions. Fiskalo remains uncertified and fiscalization is disabled.
