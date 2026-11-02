@@ -29,6 +29,10 @@ export default function App() {
   const [atkFingerprint, setAtkFingerprint] = useState("");
   const [atkHardwareBacked, setAtkHardwareBacked] = useState<boolean | null>(null);
   const [atkBusy, setAtkBusy] = useState(false);
+  const [atkFiscalizationNumber, setAtkFiscalizationNumber] = useState("");
+  const [atkApplicationId, setAtkApplicationId] = useState("");
+  const [atkVerification, setAtkVerification] = useState<{ businessName: string; verificationCode: string } | null>(null);
+  const [atkCertificateInstalled, setAtkCertificateInstalled] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState("");
@@ -164,11 +168,81 @@ export default function App() {
       setAtkCsr(result.csrPem);
       setAtkFingerprint(result.publicKeySha256);
       setAtkHardwareBacked(result.secureHardwareBacked);
+      setAtkCertificateInstalled(false); setAtkVerification(null);
       setMessage(result.secureHardwareBacked
         ? "CSR u krijua me çelës të mbrojtur nga hardueri në Android Keystore."
         : "CSR u krijua në Android Keystore, por pajisja nuk konfirmoi mbrojtje hardware-backed.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Nuk u krijua CSR në Android.");
+    } finally { setAtkBusy(false); }
+  }
+
+  async function verifyAndroidAtkPos() {
+    setError(""); setMessage("");
+    if (!atkFiscalizationNumber.trim() || !/^\\d{9}$/.test(organizationNui) ||
+        !/^\\d{1,20}$/.test(atkBranchId) || !/^\\d{1,20}$/.test(atkPosId) ||
+        !/^\\d+$/.test(atkApplicationId)) {
+      setError("Plotëso numrin e fiskalizimit për TEST, Application ID, NUI, ID e njësisë dhe POS ID sipas emailit/udhëzimeve të ATK-së.");
+      return;
+    }
+    setAtkBusy(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error("Sesioni ka skaduar. Hyr përsëri.");
+      const apiBase = process.env.EXPO_PUBLIC_FISKALO_API_URL || "https://fiskalo.shqiptare.workers.dev";
+      const response = await fetch(apiBase + "/api/atk/test/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+        body: JSON.stringify({
+          organizationId, nui: organizationNui, fiscalizationNumber: atkFiscalizationNumber.trim(),
+          branchId: atkBranchId, posId: atkPosId, applicationId: atkApplicationId,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.detail || result.error || "Verifikimi ATK dështoi.");
+      const verification = { businessName: result.businessName as string, verificationCode: result.verificationCode as string };
+      setAtkVerification(verification);
+      await SecureStore.setItemAsync("fiskalo-atk-verification:" + organizationId + ":" + atkBranchId + ":" + atkPosId, JSON.stringify(verification));
+      setMessage("ATK verifikoi POS-in në TEST. Tani mund të kërkosh certifikatën për CSR-në e këtij Android-i.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Verifikimi ATK dështoi.");
+    } finally { setAtkBusy(false); }
+  }
+
+  async function requestAndroidAtkCertificate() {
+    setError(""); setMessage("");
+    setAtkBusy(true);
+    try {
+      const alias = organizationId + "." + atkBranchId + "." + atkPosId;
+      const verificationKey = "fiskalo-atk-verification:" + organizationId + ":" + atkBranchId + ":" + atkPosId;
+      const verification = atkVerification ?? JSON.parse((await SecureStore.getItemAsync(verificationKey)) || "null");
+      if (!verification?.businessName || !verification?.verificationCode) throw new Error("Verifikoje fillimisht POS-in në ATK.");
+      const cachedCsr = await SecureStore.getItemAsync("fiskalo-atk-csr:" + alias);
+      if (!cachedCsr) throw new Error("Gjenero CSR-në në këtë Android para kërkesës për certifikatë.");
+      const csr = JSON.parse(cachedCsr) as { csrPem: string };
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error("Sesioni ka skaduar. Hyr përsëri.");
+      const apiBase = process.env.EXPO_PUBLIC_FISKALO_API_URL || "https://fiskalo.shqiptare.workers.dev";
+      const response = await fetch(apiBase + "/api/atk/test/sign-csr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+        body: JSON.stringify({
+          organizationId, nui: organizationNui, businessName: verification.businessName,
+          verificationCode: verification.verificationCode, branchId: atkBranchId,
+          posId: atkPosId, applicationId: atkApplicationId, csrPem: csr.csrPem,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.detail || result.error || "ATK nuk lëshoi certifikatën testuese.");
+      const matches = await FiskaloAtkCrypto.matchesCertificate(alias, result.signedCertificate);
+      if (!matches) throw new Error("Certifikata e ATK-së nuk përputhet me çelësin lokal të këtij Android-i. Nuk u ruajt.");
+      await SecureStore.setItemAsync("fiskalo-atk-certificate:" + alias, result.signedCertificate as string);
+      setAtkCertificateInstalled(true);
+      setMessage("Certifikata TEST u mor nga ATK dhe u verifikua se përputhet me çelësin Android Keystore. Nuk është certifikatë prodhimi.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Kërkesa për certifikatë dështoi.");
     } finally { setAtkBusy(false); }
   }
 
@@ -217,8 +291,13 @@ export default function App() {
           <Text style={{ color: ink, fontWeight: "800" }}>Identiteti i tatimpaguesit</Text>
           <Text style={{ color: "#687773", fontSize: 12 }}>Biznesi: {organizationName} · NUI: {organizationNui || "Nuk është regjistruar"}</Text>
           <TextInput placeholder="ID e njësisë / degës (e konfirmuar nga ATK)" keyboardType="number-pad" value={atkBranchId} onChangeText={setAtkBranchId} style={inputStyle} />
-          <TextInput placeholder="Numri i POS-it (i konfirmuar nga ATK)" keyboardType="number-pad" value={atkPosId} onChangeText={setAtkPosId} style={inputStyle} />
+          <TextInput placeholder="Numri i POS-it (i konfirmuar)" keyboardType="number-pad" value={atkPosId} onChangeText={setAtkPosId} style={inputStyle} />
+          <TextInput placeholder="Numri i fiskalizimit për TEST (nga emaili ATK)" value={atkFiscalizationNumber} onChangeText={setAtkFiscalizationNumber} style={inputStyle} />
+          <TextInput placeholder="Application ID (nga emaili ATK)" keyboardType="number-pad" value={atkApplicationId} onChangeText={setAtkApplicationId} style={inputStyle} />
           <Action label={atkBusy ? "Duke krijuar CSR..." : "Gjenero çelës dhe CSR në Android"} disabled={atkBusy} onPress={() => void createAndroidAtkCsr()} />
+          <Action label={atkBusy ? "Duke verifikuar..." : "Verifiko POS-in në ATK TEST"} secondary disabled={atkBusy} onPress={() => void verifyAndroidAtkPos()} />
+          <Action label={atkBusy ? "Duke kërkuar certifikatën..." : "Kërko certifikatën TEST"} secondary disabled={atkBusy || !atkVerification} onPress={() => void requestAndroidAtkCertificate()} />
+          {atkCertificateInstalled && <Text style={{ color: "#145b3a", fontSize: 12 }}>Certifikata TEST u instalua dhe përputhet me çelësin lokal.</Text>}
           {!!atkFingerprint && <Text selectable style={{ color: "#52635e", fontSize: 11 }}>SHA-256: {atkFingerprint} · Hardware-backed: {atkHardwareBacked ? "Po" : "Jo"}</Text>}
           {!!atkCsr && <>
             <Text style={{ color: ink, fontWeight: "700" }}>CSR (çelësi privat nuk përfshihet)</Text>
