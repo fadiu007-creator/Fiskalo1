@@ -11,6 +11,7 @@ type Customer = { id: string; name: string; business_number: string | null; emai
 type Invoice = { id: string; invoice_number: string | null; status: string; issue_date: string; total: number; vat_total: number; fiscalization_status: string; customer_id: string | null; payment_method: string; payment_status: string };
 type Expense = { id: string; description: string; supplier_name: string | null; category: string; amount: number; vat_rate: number; expense_date: string };
 type Member = { member_user_id: string; member_email: string; member_role: string; joined_at: string };
+type PendingInvitation = { invitation_id: string; invite_email: string; invite_role: string; invited_at: string };
 
 const panel: React.CSSProperties = { background: "white", border: "1px solid var(--line)", borderRadius: 14, padding: 18 };
 const field: React.CSSProperties = { width: "100%", minWidth: 0, border: "1px solid var(--line)", borderRadius: 8, padding: "10px 11px", background: "white", color: "var(--ink)" };
@@ -38,12 +39,14 @@ export default function BusinessDashboard() {
   const [invoiceForm, setInvoiceForm] = useState({ customer_id: "", payment_method: "cash" });
   const [invoiceLines, setInvoiceLines] = useState([{ product_id: "", quantity: "1" }]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([]);
   const [memberForm, setMemberForm] = useState({ email: "", role: "cashier" });
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
+    await supabase.rpc("fiskalo_accept_pending_team_invitations");
     const [orgResult, productResult, customerResult, invoiceResult, expenseResult] = await Promise.all([
       supabase.from("fiskalo_organizations").select("id,legal_name,municipality,nui,vat_registered,fiscalization_status").eq("id", organizationId).single(),
       supabase.from("fiskalo_products").select("*").eq("organization_id", organizationId).order("name"),
@@ -149,7 +152,7 @@ export default function BusinessDashboard() {
     if (!auth.user) { setBusy(false); setError("Sesioni ka skaduar."); return; }
     const { data: invoice, error: invoiceError } = await supabase.from("fiskalo_invoices").insert({
       organization_id: organizationId, created_by: auth.user.id, customer_id: invoiceForm.customer_id || null,
-      payment_method: invoiceForm.payment_method, payment_status: invoiceForm.payment_method === "credit" ? "unpaid" : "paid",
+      payment_method: invoiceForm.payment_method, payment_status: "unpaid",
       issue_date: new Date().toISOString().slice(0, 10),
     }).select("id").single();
     if (invoiceError || !invoice) { setBusy(false); setError(invoiceError?.message ?? "Fatura nuk u krijua."); return; }
@@ -167,19 +170,26 @@ export default function BusinessDashboard() {
 
   async function loadMembers() {
     setError(""); setNotice("");
-    const { data, error: memberError } = await supabase.rpc("fiskalo_list_members", { target_org: organizationId });
-    if (memberError) { setError(memberError.message.includes("No account found") ? "Ky email nuk ka ende llogari në Fiskalo. Anëtari duhet të regjistrohet te /register dhe pastaj mund ta shtosh këtu." : memberError.message); return; }
-    setMembers((data ?? []) as Member[]);
+    const [memberResult, invitationResult] = await Promise.all([
+      supabase.rpc("fiskalo_list_members", { target_org: organizationId }),
+      supabase.rpc("fiskalo_list_pending_team_invitations", { target_org: organizationId }),
+    ]);
+    if (memberResult.error) { setError(memberResult.error.message); return; }
+    if (invitationResult.error) { setError(invitationResult.error.message); return; }
+    setMembers((memberResult.data ?? []) as Member[]);
+    setPendingInvitations((invitationResult.data ?? []) as PendingInvitation[]);
   }
 
   async function addMember(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
-    const { error: memberError } = await supabase.rpc("fiskalo_add_existing_member", {
-      target_org: organizationId, target_email: memberForm.email.trim(), target_role: memberForm.role,
+    const { data, error: memberError } = await supabase.rpc("fiskalo_add_existing_member", {
+      target_org: organizationId, target_email: memberForm.email.trim().toLowerCase(), target_role: memberForm.role,
     });
     setBusy(false);
     if (memberError) { setError(memberError.message); return; }
-    setMemberForm({ email: "", role: "cashier" }); setNotice("Anëtari u shtua ose roli u përditësua."); await loadMembers();
+    setMemberForm({ email: "", role: "cashier" });
+    setNotice(data?.status === "invited" ? "Ftesa u ruajt. Qasja aktivizohet automatikisht kur personi regjistrohet dhe hyn me këtë email." : "Anëtari u shtua dhe ka qasje në biznes.");
+    await loadMembers();
   }
 
   async function removeMember(userId: string) {
@@ -311,14 +321,16 @@ export default function BusinessDashboard() {
       </section>}
 
       {tab === "team" && <section className="module-grid" style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
-        <form onSubmit={addMember} style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Shto anëtar të ekipit</h2>
-          <label className="field-label">Email i llogarisë<input required type="email" value={memberForm.email} onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })} style={field} /></label>
+        <form onSubmit={addMember} style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Fto anëtar në ekip</h2>
+          <label className="field-label">Email<input required type="email" autoComplete="email" value={memberForm.email} onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })} style={field} /></label>
           <label className="field-label">Roli<select value={memberForm.role} onChange={(e) => setMemberForm({ ...memberForm, role: e.target.value })} style={field}><option value="administrator">Administrator</option><option value="accountant">Kontabilist</option><option value="manager">Menaxher</option><option value="cashier">Arkëtar</option></select></label>
-          <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>Së pari, anëtari duhet të krijojë llogari në Fiskalo me të njëjtin email. <a href="/register" style={{ color: "var(--brand)", fontWeight: 700 }}>Hap regjistrimin</a>. Pastaj shkruaje email-in këtu dhe cakto rolin. Ftesat automatike me email ende nuk janë aktive.</p>
-          <button disabled={busy} style={{ ...primary, width: "100%" }}>Shto / përditëso rolin</button>
+          <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>Nëse personi nuk ka llogari ende, ftesa ruhet dhe qasja aktivizohet automatikisht kur regjistrohet dhe hyn me të njëjtin email.</p>
+          <button disabled={busy} style={{ ...primary, width: "100%" }}>Dërgo ftesën / shto anëtarin</button>
         </form>
         <section style={panel}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}><h2 style={{ fontSize: 18, marginTop: 0 }}>Anëtarët</h2><button style={secondary} onClick={() => void loadMembers()}>Rifresko</button></div>
-          <div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Email</th><th>Roli</th><th></th></tr></thead><tbody>{members.map((m) => <tr key={m.member_user_id}><td>{m.member_email}</td><td>{({ owner: "Pronar", administrator: "Administrator", accountant: "Kontabilist", manager: "Menaxher", cashier: "Arkëtar" } as Record<string,string>)[m.member_role] || m.member_role}</td><td>{m.member_role !== "owner" && <button style={secondary} onClick={() => void removeMember(m.member_user_id)}>Largo</button>}</td></tr>)}{!members.length && <tr><td colSpan={3}>Shtyp “Rifresko” për të parë anëtarët. Kjo pjesë është e disponueshme për pronarët dhe administratorët.</td></tr>}</tbody></table></div>
+          <div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Email</th><th>Roli</th><th></th></tr></thead><tbody>{members.map((m) => <tr key={m.member_user_id}><td>{m.member_email}</td><td>{({ owner: "Pronar", administrator: "Administrator", accountant: "Kontabilist", manager: "Menaxher", cashier: "Arkëtar" } as Record<string,string>)[m.member_role] || m.member_role}</td><td>{m.member_role !== "owner" && <button style={secondary} onClick={() => void removeMember(m.member_user_id)}>Largo</button>}</td></tr>)}{!members.length && <tr><td colSpan={3}>Nuk ka anëtarë shtesë.</td></tr>}</tbody></table></div>
+          <h3 style={{ fontSize: 15, margin: "22px 0 8px" }}>Ftesat në pritje</h3>
+          <div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Email</th><th>Roli</th><th>Statusi</th></tr></thead><tbody>{pendingInvitations.map((invite) => <tr key={invite.invitation_id}><td>{invite.invite_email}</td><td>{({ administrator: "Administrator", accountant: "Kontabilist", manager: "Menaxher", cashier: "Arkëtar" } as Record<string,string>)[invite.invite_role] || invite.invite_role}</td><td>Në pritje të regjistrimit / hyrjes</td></tr>)}{!pendingInvitations.length && <tr><td colSpan={3}>Nuk ka ftesa në pritje.</td></tr>}</tbody></table></div>
         </section>
       </section>}
       <footer style={{ marginTop: 24, color: "var(--muted)", fontSize: 11 }}>Të dhënat ruhen në hapësirën e këtij biznesi. Fiskalizimi zyrtar dhe certifikimi ATK nuk janë aktivizuar.</footer>
