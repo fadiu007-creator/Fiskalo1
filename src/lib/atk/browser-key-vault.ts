@@ -17,6 +17,7 @@ type StoredKey = {
   id: string;
   privateKey: CryptoKey;
   publicKeySpki: ArrayBuffer;
+  csrPem: string;
   createdAt: string;
 };
 
@@ -169,14 +170,15 @@ export async function createBrowserPosCsr(id: string, identity: BrowserCsrIdenti
   const algorithm = derSequence(derOid([0x2a, 0x86, 0x48, 0xce, 0x3d, 0x04, 0x03, 0x02]));
   const csr = derSequence(info, algorithm, der(0x03, concat(new Uint8Array([0]), ecdsaRawToDer(signature))));
   const createdAt = new Date().toISOString();
-  await writeKey({ id, privateKey, publicKeySpki, createdAt });
+  const csrPem = toPem("CERTIFICATE REQUEST", csr);
+  await writeKey({ id, privateKey, publicKeySpki, csrPem, createdAt });
 
   const fingerprint = await cryptoApi.subtle.digest("SHA-256", publicSpki);
   const fingerprintHex = Array.from(new Uint8Array(fingerprint), (b) => b.toString(16).padStart(2, "0")).join(":");
   let publicBinary = "";
   for (const byte of new Uint8Array(publicSpki)) publicBinary += String.fromCharCode(byte);
   return {
-    csrPem: toPem("CERTIFICATE REQUEST", csr),
+    csrPem,
     publicKeySpkiBase64: btoa(publicBinary),
     publicKeySha256: fingerprintHex,
     createdAt,
@@ -206,4 +208,13 @@ export async function deleteBrowserPosKey(id: string): Promise<void> {
       tx.onabort = () => reject(tx.error ?? new Error("Local POS key deletion was aborted."));
     });
   } finally { db.close(); }
+}
+
+export async function getBrowserPosCsr(id: string): Promise<{ csrPem: string; publicKeySha256: string; createdAt: string } | null> {
+  const cryptoApi = requireBrowserCrypto();
+  const record = await readKey(id);
+  if (!record) return null;
+  const fingerprint = await cryptoApi.subtle.digest("SHA-256", record.publicKeySpki);
+  const publicKeySha256 = Array.from(new Uint8Array(fingerprint), (b) => b.toString(16).padStart(2, "0")).join(":");
+  return { csrPem: record.csrPem, publicKeySha256, createdAt: record.createdAt };
 }
