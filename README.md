@@ -130,6 +130,8 @@ The web and Android clients currently issue **internal Fiskalo invoices**, not o
 
 ## POS applications
 
+See [POS clients and ATK testing](docs/pos-clients-and-atk-testing.md) for the platform scope and ATK onboarding sequence.
+
 ### Web POS
 Open the business dashboard and select **Hap POS**. The responsive browser checkout uses the existing invoice issue and payment ledger RPCs. A payment is posted only after the cashier confirms receipt; card processing is not performed by Fiskalo.
 
