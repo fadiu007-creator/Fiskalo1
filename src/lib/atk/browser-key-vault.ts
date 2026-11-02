@@ -18,6 +18,7 @@ type StoredKey = {
   privateKey: CryptoKey;
   publicKeySpki: ArrayBuffer;
   csrPem: string;
+  certificatePem?: string;
   createdAt: string;
 };
 
@@ -97,7 +98,7 @@ function derPrintable(value: string): Uint8Array { return der(0x13, new TextEnco
 function derInteger(bytes: Uint8Array): Uint8Array {
   let start = 0;
   while (start < bytes.length - 1 && bytes[start] === 0) start++;
-  let value = bytes.slice(start);
+  let value: Uint8Array = new Uint8Array(bytes.slice(start));
   if ((value[0] & 0x80) !== 0) value = concat(new Uint8Array([0]), value);
   return der(0x02, value);
 }
@@ -166,12 +167,12 @@ export async function createBrowserPosCsr(id: string, identity: BrowserCsrIdenti
     new Uint8Array(publicSpki),
     der(0xa0, new Uint8Array()),
   );
-  const signature = await cryptoApi.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, privateKey, info);
+  const signature = await cryptoApi.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, privateKey, info.buffer as ArrayBuffer);
   const algorithm = derSequence(derOid([0x2a, 0x86, 0x48, 0xce, 0x3d, 0x04, 0x03, 0x02]));
   const csr = derSequence(info, algorithm, der(0x03, concat(new Uint8Array([0]), ecdsaRawToDer(signature))));
   const createdAt = new Date().toISOString();
   const csrPem = toPem("CERTIFICATE REQUEST", csr);
-  await writeKey({ id, privateKey, publicKeySpki, csrPem, createdAt });
+  await writeKey({ id, privateKey, publicKeySpki: publicSpki, csrPem, createdAt });
 
   const fingerprint = await cryptoApi.subtle.digest("SHA-256", publicSpki);
   const fingerprintHex = Array.from(new Uint8Array(fingerprint), (b) => b.toString(16).padStart(2, "0")).join(":");
@@ -192,7 +193,7 @@ export async function signAtkBase64Payload(id: string, base64Payload: string): P
   const signature = await cryptoApi.subtle.sign(
     { name: "ECDSA", hash: "SHA-256" },
     record.privateKey,
-    new TextEncoder().encode(base64Payload),
+    new TextEncoder().encode(base64Payload).buffer as ArrayBuffer,
   );
   return btoa(String.fromCharCode(...new Uint8Array(signature)));
 }
