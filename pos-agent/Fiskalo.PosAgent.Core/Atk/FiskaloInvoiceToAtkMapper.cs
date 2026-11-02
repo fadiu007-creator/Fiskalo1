@@ -52,6 +52,13 @@ public static class FiskaloInvoiceToAtkMapper
         if (invoice.BusinessNui == 0 || invoice.CouponId == 0 || invoice.BranchId == 0 ||
             invoice.PosId == 0 || invoice.ApplicationId == 0)
             throw new ArgumentException("Business NUI, coupon, branch, POS and application identifiers are required.");
+        if (couponType == CouponType.UnknownType)
+            throw new ArgumentException("An ATK coupon type is required.", nameof(couponType));
+        if (couponType == CouponType.Sale && originalCouponId.HasValue)
+            throw new ArgumentException("A Sale coupon cannot reference an original coupon.", nameof(originalCouponId));
+        if (couponType is CouponType.Cancel or CouponType.Return &&
+            (!originalCouponId.HasValue || originalCouponId.Value == 0))
+            throw new ArgumentException("Cancel and Return coupons must reference the original ATK coupon.", nameof(originalCouponId));
         if (invoice.Lines is null || invoice.Lines.Count == 0)
             throw new ArgumentException("The invoice must contain at least one line.");
         if (invoice.Payments is null || invoice.Payments.Count == 0)
