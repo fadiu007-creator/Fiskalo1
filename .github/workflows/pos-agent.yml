@@ -34,3 +34,22 @@ jobs:
         run: dotnet build pos-agent/Fiskalo.PosAgent.Host/Fiskalo.PosAgent.Host.csproj --configuration Release
       - name: Run POS Agent tests
         run: dotnet test pos-agent/Fiskalo.PosAgent.Tests/Fiskalo.PosAgent.Tests.csproj --configuration Release
+
+  publish-windows:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build-and-test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Publish self-contained Windows POS Agent
+        run: dotnet publish pos-agent/Fiskalo.PosAgent.Host/Fiskalo.PosAgent.Host.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true
+      - name: Upload Windows POS Agent artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fiskalo-pos-agent-win-x64
+          path: pos-agent/Fiskalo.PosAgent.Host/bin/Release/net8.0/win-x64/publish/
+          if-no-files-found: error
+          retention-days: 14
