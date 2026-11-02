@@ -62,6 +62,8 @@ app.Use(async (context, next) =>
         context.Response.Headers.AccessControlAllowOrigin = origin;
         context.Response.Headers.AccessControlAllowMethods = "GET, POST, OPTIONS";
         context.Response.Headers.AccessControlAllowHeaders = "Authorization, Content-Type";
+        if (context.Request.Headers.ContainsKey("Access-Control-Request-Private-Network"))
+            context.Response.Headers["Access-Control-Allow-Private-Network"] = "true";
         context.Response.Headers.Vary = "Origin";
         context.Response.StatusCode = StatusCodes.Status204NoContent;
         return;
