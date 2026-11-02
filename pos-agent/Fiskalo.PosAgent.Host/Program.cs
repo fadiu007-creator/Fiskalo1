@@ -252,8 +252,6 @@ static bool SamePublicKey(ECDsa first, ECDsa second)
 
 app.Run();
 
-app.Run();
-
 static bool HasValidSession(HttpContext context, string? expectedToken)
 {
     if (string.IsNullOrEmpty(expectedToken)) return false;
