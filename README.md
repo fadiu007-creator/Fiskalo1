@@ -9,7 +9,7 @@ Implemented:
 - Business onboarding with NUI and municipality
 - Multiple business workspaces and isolated organization data
 - Role-based team membership: owner, administrator, accountant, manager, cashier
-- Products and services with Kosovo VAT rate options (0%, 8%, 18%)
+- Products and services with 8% and 18% VAT rates plus a 0% option for applicable exempt/zero-rated cases; the correct legal category must be confirmed for each supply
 - Customer register
 - Expense register
 - Invoice drafts, atomic sequential numbering, manual/partial payments and payment history
