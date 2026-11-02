@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 type Org = { id: string; legal_name: string; municipality: string; nui: string; vat_registered: boolean; fiscalization_status: string };
 type Product = { id: string; name: string; sku: string | null; unit_price: number; vat_rate: number; stock_quantity: number; item_type: string; track_stock: boolean; is_active: boolean };
 type Customer = { id: string; name: string; business_number: string | null; email: string | null; phone: string | null };
-type Invoice = { id: string; invoice_number: string | null; status: string; issue_date: string; total: number; vat_total: number; fiscalization_status: string; customer_id: string | null };
+type Invoice = { id: string; invoice_number: string | null; status: string; issue_date: string; total: number; vat_total: number; fiscalization_status: string; customer_id: string | null; payment_method: string; payment_status: string };
 type Expense = { id: string; description: string; supplier_name: string | null; category: string; amount: number; vat_rate: number; expense_date: string };
 type Member = { member_user_id: string; member_email: string; member_role: string; joined_at: string };
 
@@ -35,7 +35,7 @@ export default function BusinessDashboard() {
   const [productForm, setProductForm] = useState({ name: "", sku: "", unit_price: "", vat_rate: "18", item_type: "product", stock_quantity: "0", track_stock: true });
   const [customerForm, setCustomerForm] = useState({ name: "", business_number: "", email: "", phone: "" });
   const [expenseForm, setExpenseForm] = useState({ description: "", supplier_name: "", category: "Tjetër", amount: "", vat_rate: "0", expense_date: new Date().toISOString().slice(0, 10) });
-  const [invoiceForm, setInvoiceForm] = useState({ customer_id: "" });
+  const [invoiceForm, setInvoiceForm] = useState({ customer_id: "", payment_method: "cash" });
   const [invoiceLines, setInvoiceLines] = useState([{ product_id: "", quantity: "1" }]);
   const [members, setMembers] = useState<Member[]>([]);
   const [memberForm, setMemberForm] = useState({ email: "", role: "cashier" });
@@ -120,6 +120,7 @@ export default function BusinessDashboard() {
     if (!auth.user) { setBusy(false); setError("Sesioni ka skaduar."); return; }
     const { data: invoice, error: invoiceError } = await supabase.from("fiskalo_invoices").insert({
       organization_id: organizationId, created_by: auth.user.id, customer_id: invoiceForm.customer_id || null,
+      payment_method: invoiceForm.payment_method, payment_status: invoiceForm.payment_method === "credit" ? "unpaid" : "paid",
       issue_date: new Date().toISOString().slice(0, 10),
     }).select("id").single();
     if (invoiceError || !invoice) { setBusy(false); setError(invoiceError?.message ?? "Fatura nuk u krijua."); return; }
@@ -131,7 +132,7 @@ export default function BusinessDashboard() {
     const { data: invoiceNumber, error: issueError } = await supabase.rpc("fiskalo_issue_invoice", { target_invoice: invoice.id });
     setBusy(false);
     if (issueError) { setError("Fatura u ruajt si draft, por nuk u lëshua: " + issueError.message); await load(); return; }
-    setInvoiceForm({ customer_id: "" }); setInvoiceLines([{ product_id: "", quantity: "1" }]);
+    setInvoiceForm({ customer_id: "", payment_method: "cash" }); setInvoiceLines([{ product_id: "", quantity: "1" }]);
     setNotice("Fatura u lëshua me numër " + invoiceNumber + "."); await load();
   }
 
@@ -235,6 +236,7 @@ export default function BusinessDashboard() {
       {tab === "invoices" && <section style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
         <form onSubmit={createInvoice} style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Lësho faturë</h2>
           <label className="field-label">Klienti<select value={invoiceForm.customer_id} onChange={(e) => setInvoiceForm({ ...invoiceForm, customer_id: e.target.value })} style={field}><option value="">Klient pa emër</option>{customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+          <label className="field-label">Mënyra e pagesës<select value={invoiceForm.payment_method} onChange={(e) => setInvoiceForm({ ...invoiceForm, payment_method: e.target.value })} style={field}><option value="cash">Para në dorë</option><option value="card">Kartelë</option><option value="bank_transfer">Transfer bankar</option><option value="credit">Me afat / e papaguar</option></select></label>
           <h3 style={{ fontSize: 13, margin: "16px 0 6px" }}>Artikujt e faturës</h3>
           {invoiceLines.map((line, index) => <div key={index} style={{ border: "1px solid var(--line)", borderRadius: 9, padding: 10, marginBottom: 9 }}>
             <label className="field-label">Produkti / shërbimi<select required value={line.product_id} onChange={(e) => setInvoiceLines((current) => current.map((row, i) => i === index ? { ...row, product_id: e.target.value } : row))} style={field}><option value="">Zgjidh artikullin</option>{products.filter((p) => p.is_active).map((p) => <option key={p.id} value={p.id}>{p.name} — {fmt(Number(p.unit_price))}</option>)}</select></label>
@@ -296,7 +298,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 function InvoiceTable({ invoices, fmt, customers }: { invoices: Invoice[]; fmt: (value: number) => string; customers: Customer[] }) {
-  return <div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Numri</th><th>Data</th><th>Klienti</th><th>Statusi</th><th>Totali</th><th></th></tr></thead><tbody>{invoices.map((invoice) => <tr key={invoice.id}><td>{invoice.invoice_number || "Draft"}</td><td>{invoice.issue_date}</td><td>{customers.find((c) => c.id === invoice.customer_id)?.name || "—"}</td><td>{invoice.status === "issued" ? "E lëshuar" : invoice.status === "cancelled" ? "Anuluar" : "Draft"}</td><td>{fmt(Number(invoice.total))}</td><td>{invoice.status === "issued" && <button className="no-print" style={secondary} onClick={() => window.print()}>Printo</button>}</td></tr>)}{!invoices.length && <tr><td colSpan={6}>Nuk ka fatura ende.</td></tr>}</tbody></table></div>;
+  return <div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Numri</th><th>Data</th><th>Klienti</th><th>Statusi</th><th>Pagesa</th><th>Totali</th><th></th></tr></thead><tbody>{invoices.map((invoice) => <tr key={invoice.id}><td>{invoice.invoice_number || "Draft"}</td><td>{invoice.issue_date}</td><td>{customers.find((c) => c.id === invoice.customer_id)?.name || "—"}</td><td>{invoice.status === "issued" ? "E lëshuar" : invoice.status === "cancelled" ? "Anuluar" : "Draft"}</td><td>{invoice.payment_status === "paid" ? "Paguar" : invoice.payment_method === "credit" ? "Me afat" : "E papaguar"}</td><td>{fmt(Number(invoice.total))}</td><td>{invoice.status === "issued" && <button className="no-print" style={secondary} onClick={() => window.print()}>Printo</button>}</td></tr>)}{!invoices.length && <tr><td colSpan={7}>Nuk ka fatura ende.</td></tr>}</tbody></table></div>;
 }
 
 
