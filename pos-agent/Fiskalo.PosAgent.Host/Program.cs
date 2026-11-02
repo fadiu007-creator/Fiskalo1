@@ -2,11 +2,16 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
+using Fiskalo.PosAgent.Core.Atk;
+using Fiskalo.PosAgent.Core.Queue;
+using Fiskalo.PosAgent.Core.Security;
 
 const string AgentVersion = "0.1.0";
 const string PairPath = "/api/v1/pair";
 const string StatusPath = "/api/v1/status";
 const string HealthPath = "/health";
+const string CsrPath = "/api/v1/keys/csr";
+const string QueuePath = "/api/v1/queue";
 
 var allowedOrigins = (Environment.GetEnvironmentVariable("FISKALO_ALLOWED_ORIGINS")
     ?? "https://fiskalo.shqiptare.workers.dev")
@@ -17,6 +22,10 @@ var pairingCode = Base64Url(RandomNumberGenerator.GetBytes(32));
 string? sessionToken = null;
 var failedPairAttempts = 0;
 var pairLockedUntil = DateTimeOffset.MinValue;
+var dataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fiskalo", "PosAgent");
+var keyPath = Path.Combine(dataDirectory, "pos-signing-key.dpapi");
+var queuePath = Path.Combine(dataDirectory, "fiscal-queue.bin");
+var keyStore = new WindowsDpapiEcdsaKeyStore();
 
 Console.WriteLine("Fiskalo POS Agent " + AgentVersion);
 Console.WriteLine("Local endpoint: http://127.0.0.1:17843");
@@ -133,12 +142,47 @@ app.MapGet(StatusPath, (HttpContext context) =>
         version = AgentVersion,
         paired = true,
         fiscalizationEnabled = false,
-        capabilities = new[] { "health", "secure-local-pairing" },
-        nextStep = "host-integration-and-certificate-onboarding-pending"
+        capabilities = new[] { "health", "secure-local-pairing", "windows-dpapi-key-csr", "encrypted-queue-inspection" },
+        windowsKeyStoreAvailable = OperatingSystem.IsWindows(),
+        signingKeyInitialized = OperatingSystem.IsWindows() && File.Exists(keyPath),
+        queueInitialized = OperatingSystem.IsWindows() && File.Exists(queuePath),
+        nextStep = "ATK-test-certificate-onboarding-required"
     });
 });
 
+app.MapPost(CsrPath, (CsrRequest request, HttpContext context) => {
+    if (!HasValidSession(context, sessionToken)) return Results.Unauthorized();
+    if (!OperatingSystem.IsWindows()) return Results.Problem("Local signing-key storage currently requires Windows DPAPI.", statusCode: StatusCodes.Status501NotImplemented);
+    if (request.BusinessNui == 0 || request.BranchId == 0 || request.PosId == 0 || string.IsNullOrWhiteSpace(request.BusinessName)) return Results.BadRequest(new { error = "business_name, business_nui, branch_id and pos_id are required" });
+    try {
+        Directory.CreateDirectory(dataDirectory);
+        using var key = keyStore.LoadOrCreate(keyPath);
+        var csr = AtkPki.CreateCsrPem(key, request.BusinessName, request.BusinessNui, request.BranchId, request.PosId);
+        return Results.Ok(new { csrPem = csr, keyAlgorithm = "ECDSA-P256", privateKeyExported = false, storage = "Windows DPAPI CurrentUser", certificateStatus = "not-issued", fiscalizationEnabled = false });
+    } catch (Exception ex) when (ex is CryptographicException or IOException or UnauthorizedAccessException) {
+        return Results.Problem("Unable to create or load the locally protected signing key.", statusCode: StatusCodes.Status500InternalServerError);
+    }
+});
+
+app.MapGet(QueuePath, async (HttpContext context, CancellationToken cancellationToken) => {
+    if (!HasValidSession(context, sessionToken)) return Results.Unauthorized();
+    if (!OperatingSystem.IsWindows()) return Results.Problem("Local encrypted queue currently requires Windows DPAPI.", statusCode: StatusCodes.Status501NotImplemented);
+    try {
+        var store = new FiscalQueueStore(queuePath, new WindowsDpapiFiscalQueueProtector());
+        var items = await store.GetAllAsync(cancellationToken);
+        return Results.Ok(new { count = items.Count, items = items.Select(item => new { item.IdempotencyKey, item.DocumentType, item.CreatedAtUtc, item.RecoveryDeadlineUtc, item.NextAttemptAtUtc, status = item.Status.ToString(), item.AttemptCount, item.LastError, item.AtkTransactionId }) });
+    } catch (Exception ex) when (ex is CryptographicException or IOException or UnauthorizedAccessException) {
+        return Results.Problem("Unable to read the protected local fiscal queue.", statusCode: StatusCodes.Status500InternalServerError);
+    }
+});
+
 app.Run();
+
+internal sealed record CsrRequest(
+    [property: JsonPropertyName("businessName")] string BusinessName,
+    [property: JsonPropertyName("businessNui")] ulong BusinessNui,
+    [property: JsonPropertyName("branchId")] ulong BranchId,
+    [property: JsonPropertyName("posId")] ulong PosId);app.Run();
 
 static bool HasValidSession(HttpContext context, string? expectedToken)
 {
