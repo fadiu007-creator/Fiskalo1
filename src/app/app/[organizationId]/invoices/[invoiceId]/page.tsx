@@ -169,6 +169,7 @@ export default function InvoiceDetailPage() {
       </section>
       <section style={{ marginTop: 22, padding: 16, background: "var(--canvas)", borderRadius: 10 }}>
         <h2 style={{ fontSize: 15, margin: "0 0 10px" }}>Pagesat</h2>
+        <p style={{ margin: "0 0 12px", color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>Regjistro vetëm shumën që klienti ta ka paguar realisht. Mund të shtosh disa pagesa në data të ndryshme; bilanci ulet pas secilës pagesë dhe fatura shënohet “Paguar” kur bilanci arrin zero.</p>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, lineHeight: 1.8 }}><span>Paguar deri tani</span><strong>{fmt(payments.reduce((sum, p) => sum + Number(p.amount), 0))}</strong></div>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, lineHeight: 1.8 }}><span>Bilanci i mbetur</span><strong>{fmt(Math.max(0, Number(invoice.total) - payments.reduce((sum, p) => sum + Number(p.amount), 0)))}</strong></div>
         {payments.length > 0 && <div style={{ marginTop: 10, overflowX: "auto" }}><table className="data-table"><thead><tr><th>Data</th><th>Mënyra</th><th>Referenca</th><th>Shuma</th></tr></thead><tbody>{payments.map((p) => <tr key={p.id}><td>{new Date(p.created_at).toLocaleDateString("sq-XK")}</td><td>{({ cash: "Para në dorë", card: "Kartelë", bank_transfer: "Transfer bankar" } as Record<string, string>)[p.payment_method]}</td><td>{p.reference || "—"}</td><td>{fmt(Number(p.amount))}</td></tr>)}</tbody></table></div>}
