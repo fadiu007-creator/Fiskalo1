@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "Fiskalo POS",
+    "slug": "fiskalo-pos",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "android": {
+      "package": "com.fiskalo.pos",
+      "versionCode": 1,
+      "permissions": []
+    },
+    "plugins": ["expo-secure-store"]
+  }
+}
