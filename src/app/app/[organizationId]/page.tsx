@@ -13,7 +13,7 @@ type Expense = { id: string; description: string; supplier_name: string | null; 
 type Member = { member_user_id: string; member_email: string; member_role: string; joined_at: string };
 type PendingInvitation = { invitation_id: string; invite_email: string; invite_role: string; invited_at: string };
 type Supplier = { id: string; name: string; business_number: string | null; email: string | null; phone: string | null; address: string | null };
-type Purchase = { id: string; supplier_id: string; reference: string | null; purchase_date: string; status: string; total: number; received_at: string | null };
+type Purchase = { id: string; supplier_id: string; reference: string | null; purchase_date: string; status: string; total: number; paid_total: number; payment_status: string; received_at: string | null };
 
 const panel: React.CSSProperties = { background: "white", border: "1px solid var(--line)", borderRadius: 14, padding: 18 };
 const field: React.CSSProperties = { width: "100%", minWidth: 0, border: "1px solid var(--line)", borderRadius: 8, padding: "10px 11px", background: "white", color: "var(--ink)" };
@@ -49,6 +49,8 @@ export default function BusinessDashboard() {
   const [supplierForm, setSupplierForm] = useState({ name: "", business_number: "", email: "", phone: "", address: "" });
   const [purchaseForm, setPurchaseForm] = useState({ supplier_id: "", reference: "", purchase_date: new Date().toISOString().slice(0, 10), notes: "" });
   const [purchaseLines, setPurchaseLines] = useState([{ product_id: "", quantity: "1", unit_cost: "", vat_rate: "0" }]);
+  const [payingPurchaseId, setPayingPurchaseId] = useState<string | null>(null);
+  const [purchasePaymentForm, setPurchasePaymentForm] = useState({ amount: "", method: "bank_transfer", reference: "" });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -188,6 +190,23 @@ export default function BusinessDashboard() {
     setPurchaseLines([{ product_id: "", quantity: "1", unit_cost: "", vat_rate: "0" }]);
     setNotice("Blerja u ruajt si draft. Pranoje pasi malli të arrijë fizikisht.");
     await load();
+  }
+
+  async function recordPurchasePayment(event: React.FormEvent<HTMLFormElement>, purchaseId: string) {
+    event.preventDefault(); setBusy(true); setError(""); setNotice("");
+    const amount = Number(purchasePaymentForm.amount);
+    const purchase = purchases.find((item) => item.id === purchaseId);
+    if (!purchase || !Number.isFinite(amount) || amount <= 0 || amount > Number(purchase.total) - Number(purchase.paid_total) + 0.005) {
+      setBusy(false); setError("Kontrollo shumën. Ajo duhet të jetë pozitive dhe jo më e madhe se borxhi i mbetur."); return;
+    }
+    const { error: paymentError } = await supabase.rpc("fiskalo_record_purchase_payment", {
+      target_purchase: purchaseId, payment_amount: amount, method: purchasePaymentForm.method,
+      payment_reference: purchasePaymentForm.reference.trim() || null,
+    });
+    setBusy(false);
+    if (paymentError) { setError(paymentError.message); return; }
+    setPayingPurchaseId(null); setPurchasePaymentForm({ amount: "", method: "bank_transfer", reference: "" });
+    setNotice("Pagesa ndaj furnitorit u regjistrua."); await load();
   }
 
   async function receivePurchase(purchaseId: string) {
@@ -399,7 +418,7 @@ export default function BusinessDashboard() {
         <section style={panel}>
           <h2 style={{ fontSize: 18, marginTop: 0 }}>Blerjet ({purchases.length})</h2>
           <div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Data</th><th>Furnitori</th><th>Referenca</th><th>Totali</th><th>Statusi</th><th>Veprimi</th></tr></thead><tbody>
-            {purchases.map((purchase) => <tr key={purchase.id}><td>{purchase.purchase_date}</td><td>{suppliers.find((s) => s.id === purchase.supplier_id)?.name || "—"}</td><td>{purchase.reference || "—"}</td><td>{fmt(Number(purchase.total))}</td><td>{purchase.status === "received" ? "Malli u pranua" : "Draft — në pritje"}</td><td>{purchase.status === "draft" && <button disabled={busy} onClick={() => void receivePurchase(purchase.id)} style={primary}>Prano mallin</button>}</td></tr>)}
+            {purchases.map((purchase) => <tr key={purchase.id}><td>{purchase.purchase_date}</td><td>{suppliers.find((s) => s.id === purchase.supplier_id)?.name || "—"}</td><td>{purchase.reference || "—"}</td><td>{fmt(Number(purchase.total))}</td><td>{purchase.status === "received" ? "Malli u pranua" : "Draft — në pritje"}<small>Paguar: {fmt(Number(purchase.paid_total))} · Mbetur: {fmt(Number(purchase.total)-Number(purchase.paid_total))}</small></td><td style={{ minWidth: 150 }}>{purchase.status === "draft" && <button disabled={busy} onClick={() => void receivePurchase(purchase.id)} style={primary}>Prano mallin</button>}{Number(purchase.total)-Number(purchase.paid_total)>0.005 && <button type="button" disabled={busy} onClick={() => { setPayingPurchaseId(payingPurchaseId===purchase.id ? null : purchase.id); setPurchasePaymentForm({ amount: "", method: "bank_transfer", reference: "" }); }} style={{ ...secondary, marginTop: 6 }}>Regjistro pagesë</button>}{payingPurchaseId===purchase.id && <form onSubmit={(event) => void recordPurchasePayment(event,purchase.id)} style={{ display: "grid", gap: 6, minWidth: 210, marginTop: 8 }}><input required type="number" min="0.01" max={Number(purchase.total)-Number(purchase.paid_total)} step="0.01" placeholder="Shuma (€)" value={purchasePaymentForm.amount} onChange={(e) => setPurchasePaymentForm({ ...purchasePaymentForm, amount: e.target.value })} style={field} /><select value={purchasePaymentForm.method} onChange={(e) => setPurchasePaymentForm({ ...purchasePaymentForm, method: e.target.value })} style={field}><option value="bank_transfer">Transfer bankar</option><option value="cash">Para në dorë</option><option value="card">Kartelë</option></select><input placeholder="Referenca (opsionale)" value={purchasePaymentForm.reference} onChange={(e) => setPurchasePaymentForm({ ...purchasePaymentForm, reference: e.target.value })} style={field} /><button disabled={busy} style={primary}>Ruaj pagesën</button></form>}</td></tr>)}
             {!purchases.length && <tr><td colSpan={6}>Nuk ka blerje të regjistruara.</td></tr>}
           </tbody></table></div>
           <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>Pranimi rrit stokun dhe krijon lëvizje inventari e gjurmë auditimi. Pagesat ndaj furnitorëve dhe libri zyrtar i blerjeve për ATK nuk janë ende të integruara.</p>
