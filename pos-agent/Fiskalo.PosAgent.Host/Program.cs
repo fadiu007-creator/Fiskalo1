@@ -150,6 +150,7 @@ app.MapGet(StatusPath, (HttpContext context) =>
         windowsKeyStoreAvailable = OperatingSystem.IsWindows(),
         signingKeyInitialized = OperatingSystem.IsWindows() && File.Exists(keyPath),
         queueInitialized = OperatingSystem.IsWindows() && File.Exists(queuePath),
+        testCertificateInstalled = OperatingSystem.IsWindows() && File.Exists(certificatePath),
         nextStep = "ATK-test-certificate-onboarding-required"
     });
 });
