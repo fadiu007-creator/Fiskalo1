@@ -9,7 +9,7 @@ Implemented:
 - Business onboarding with NUI and municipality
 - Multiple business workspaces and isolated organization data
 - Role-based team membership: owner, administrator, accountant, manager, cashier
-- Products and services with 8% and 18% VAT rates plus a 0% option for applicable exempt/zero-rated cases; the correct legal category must be confirmed for each supply
+- Products and services with four-decimal unit-price precision and simplified VAT entry; the correct ATK tax category must be confirmed for each supply
 - Customer register
 - Expense register
 - Invoice drafts, atomic sequential numbering, manual/partial payments and payment history
@@ -54,6 +54,7 @@ Apply migrations in order:
 8. `supabase/migrations/0008_opening_stock_audit.sql`
 9. `supabase/migrations/0009_invoice_draft_and_line_integrity.sql`
 10. `supabase/migrations/0010_invoice_payment_ledger.sql`
+11. `supabase/migrations/0011_unit_price_precision.sql`
 
 Required public environment variables:
 - `NEXT_PUBLIC_SUPABASE_URL`
