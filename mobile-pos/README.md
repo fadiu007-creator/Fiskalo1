@@ -8,7 +8,7 @@ This is an Android-native POS client scaffold using Expo/React Native and the ex
 2. Set the Fiskalo Supabase project URL and publishable key. Never put a service-role key in the app.
 3. From this folder run `npm install`.
 4. Run `npx expo start` and open the project on an Android device with Expo Go.
-5. To create an installable internal-test APK, install/configure EAS and run `npx eas-cli build --platform android --profile preview`.
+5. Expo Go supports ordinary POS screens only. The local ATK crypto module requires a custom native build; create an installable internal-test APK with `npx eas-cli build --platform android --profile preview`.
 
 ## Implemented
 
@@ -20,13 +20,16 @@ This is an Android-native POS client scaffold using Expo/React Native and the ex
 - Explicit cashier confirmation before recording a cash/card/transfer payment.
 - Credit invoice option without a payment record.
 - SecureStore-backed Supabase auth persistence.
+- Experimental native ATK crypto module using Android Keystore P-256 key generation, local PKCS#10 CSR creation and ECDSA/SHA-256 signing of ATK Base64 payloads.
+- ATK / Siguria e POS-it panel to generate and share a CSR on the Android device. The private key remains in Android Keystore; only the public CSR is shared.
 
 ## Important limitations
 
 - This is a standard business POS client, not an ATK-certified fiscal POS.
-- It does not yet sign or submit ATK coupons from Android. The current fiscal signing agent is Windows-only and uses Windows DPAPI. Android needs a separate native signing module using Android Keystore, a certificate lifecycle, and ATK-authorized test coverage.
+- The Android Keystore module is source-implemented but not yet built into an APK or verified on a physical device. CSR generation and ECDSA signing are not yet verified against ATK test responses.
+- Android certificate installation/renewal/revocation, ATK verification and certificate API calls, Protobuf coupon mapping/submission, offline queue and manual reconciliation are not yet integrated into checkout.
 - No offline invoice issuance, card terminal integration, barcode scanner integration or printer driver is included.
 - Card payments are recorded only after the cashier confirms that an external terminal/payment provider has accepted the payment. The app does not process card details.
-- The Android project has not yet been built or tested on a physical Android device.
+- The Android project has not yet been built or tested on a physical Android device. EAS custom builds are required for the native module; Expo Go cannot load it.
 
 Do not use the app to issue official fiscal coupons before ATK certification.
