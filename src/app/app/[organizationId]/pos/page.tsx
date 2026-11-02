@@ -178,7 +178,7 @@ export default function WebPosPage() {
       <strong>{issuedNumber ? "Fatura " + issuedNumber : "Draft i ruajtur"}</strong>
       <Link href={`/app/${organizationId}/invoices/${issuedInvoiceId}`} style={{ color: "var(--brand)", fontWeight: 750 }}>Hap faturën dhe pagesën →</Link>
     </div>}
-    <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.55fr) minmax(310px,0.85fr)", gap: 14, alignItems: "start" }}>
+    <div className="pos-layout" style={{ display: "grid", gridTemplateColumns: "minmax(0,1.55fr) minmax(310px,0.85fr)", gap: 14, alignItems: "start" }}>
       <section style={panel}>
         <input aria-label="Kërko produkt" placeholder="Kërko sipas emrit ose SKU..." value={search} onChange={(event) => setSearch(event.target.value)} style={{ ...field, marginBottom: 12 }} />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(145px,1fr))", gap: 9 }}>
@@ -222,6 +222,6 @@ export default function WebPosPage() {
       </aside>
     </div>
     <p style={{ color: "var(--muted)", fontSize: 11, lineHeight: 1.5, marginTop: 14 }}>Ky POS krijon dhe lëshon faturë të brendshme në Fiskalo. Nuk është ende POS fiskal i certifikuar nga ATK dhe nuk dërgon kupon fiskal. Pagesat me kartelë nuk procesohen nga aplikacioni.</p>
-    <style jsx>{`@media (max-width: 760px) { main > div:nth-of-type(2) { grid-template-columns: minmax(0,1fr) !important; } aside { position: static !important; } }`}</style>
+    <style jsx>{`.pos-layout { grid-template-columns: minmax(0,1.55fr) minmax(310px,0.85fr); } @media (max-width: 760px) { .pos-layout { grid-template-columns: minmax(0,1fr) !important; } .pos-layout aside { position: static !important; } }`}</style>
   </main>;
 }
