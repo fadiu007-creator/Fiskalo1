@@ -291,13 +291,17 @@ app.MapPost(AtkCouponPath, async (AtkCouponRequest request, HttpContext context,
         if (!string.Equals(request.IdempotencyKey, expectedIdempotencyKey, StringComparison.Ordinal)) return Results.BadRequest(new { error = "idempotencyKey_must_match_business_branch_pos_coupon_ids", expected = expectedIdempotencyKey });
         var signed = AtkCouponSigner.SignPosCoupon(coupon, key);
         var existing = (await queueStore.GetAllAsync(cancellationToken)).SingleOrDefault(x => x.IdempotencyKey == request.IdempotencyKey);
+        if (existing is not null && (existing.PayloadBase64 != signed.DetailsBase64 || existing.DocumentType != coupon.Type.ToString()))
+            return Results.Conflict(new { error = "idempotency_key_reused_with_different_coupon_content" });
         if (existing?.Status == FiscalQueueStatus.Accepted) return Results.Ok(new { status = "accepted", transactionId = existing.AtkTransactionId, duplicateRequest = true, environment = "ATK TEST" });
         if (existing is not null && existing.Status != FiscalQueueStatus.Queued) return Results.Conflict(new { status = existing.Status.ToString(), error = "document_requires_reconciliation_or_operator_review", existing.LastError });
         if (existing is null) await queueStore.EnqueueAsync(request.IdempotencyKey, coupon.Type.ToString(), signed.DetailsBase64, signed.SignatureBase64, cancellationToken: cancellationToken);
+        var persisted = existing ?? (await queueStore.GetAllAsync(cancellationToken)).Single(x => x.IdempotencyKey == request.IdempotencyKey);
+        var signedToSubmit = new SignedAtkCoupon(persisted.PayloadBase64, persisted.SignatureBase64, "");
         await queueStore.MarkSubmittingAsync(request.IdempotencyKey, cancellationToken);
         try {
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-            var result = await new AtkTestClient(http).SubmitSignedPosCouponAsync(signed, cancellationToken);
+            var result = await new AtkTestClient(http).SubmitSignedPosCouponAsync(signedToSubmit, cancellationToken);
             await queueStore.MarkAcceptedAsync(request.IdempotencyKey, result.TransactionId.ToString(), cancellationToken);
             return Results.Ok(new { status = "accepted", transactionId = result.TransactionId, message = result.Message, environment = "ATK TEST", productionEnabled = false });
         } catch (AtkApiException ex) when ((int)ex.StatusCode >= 400 && (int)ex.StatusCode < 500) {
