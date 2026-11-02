@@ -1,0 +1,27 @@
+name: POS Agent Core CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "pos-agent/**"
+      - ".github/workflows/pos-agent.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "pos-agent/**"
+      - ".github/workflows/pos-agent.yml"
+
+concurrency:
+  group: pos-agent-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - run: dotnet build pos-agent/Fiskalo.PosAgent.Core/Fiskalo.PosAgent.Core.csproj --configuration Release
