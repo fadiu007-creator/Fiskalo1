@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ legal_name: "", nui: "", municipality: "", address: "", phone: "", email: "", vat_registered: false });
+  const [form, setForm] = useState({ legal_name: "", trade_name: "", nui: "", fiscal_number: "", business_type: "", business_activity: "", municipality: "", address: "", phone: "", email: "", vat_registered: false });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -41,7 +41,11 @@ export default function OnboardingPage() {
       <p style={{ color: "var(--muted)", lineHeight: 1.6 }}>Plotëso të dhënat bazë. Të dhënat fiskale verifikohen para aktivizimit të fiskalizimit zyrtar.</p>
       <form onSubmit={submit} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 16, background: "white", padding: 24, border: "1px solid var(--line)", borderRadius: 16 }}>
         <Field label="Emri ligjor i biznesit" required value={form.legal_name} onChange={(v) => update("legal_name", v)} />
+        <Field label="Emri tregtar" value={form.trade_name} onChange={(v) => update("trade_name", v)} />
         <Field label="NUI" required value={form.nui} onChange={(v) => update("nui", v)} />
+        <Field label="Numri fiskal" value={form.fiscal_number} onChange={(v) => update("fiscal_number", v)} />
+        <Field label="Forma e biznesit" value={form.business_type} onChange={(v) => update("business_type", v)} />
+        <Field label="Veprimtaria" value={form.business_activity} onChange={(v) => update("business_activity", v)} />
         <Field label="Komuna" required value={form.municipality} onChange={(v) => update("municipality", v)} />
         <Field label="Adresa" value={form.address} onChange={(v) => update("address", v)} />
         <Field label="Telefoni" value={form.phone} onChange={(v) => update("phone", v)} />
