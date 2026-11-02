@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { FlatList, SafeAreaView, ScrollView, StatusBar, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { FlatList, SafeAreaView, ScrollView, Share, StatusBar, Text, TextInput, TouchableOpacity, View } from "react-native";
+import FiskaloAtkCrypto from "fiskalo-atk-crypto";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import { supabase } from "./src/supabase";
 
-type Org = { organization_id: string; role: string; fiskalo_organizations: { legal_name: string; municipality: string } | null };
+type Org = { organization_id: string; role: string; fiskalo_organizations: { legal_name: string; municipality: string; nui: string } | null };
 type Product = { id: string; name: string; sku: string | null; unit_price: number; vat_rate: number; stock_quantity: number; track_stock: boolean; item_type: string; is_active: boolean };
 type Customer = { id: string; name: string };
 type CartLine = { product: Product; quantity: number };
@@ -19,6 +20,14 @@ export default function App() {
   const [organizations, setOrganizations] = useState<Org[]>([]);
   const [organizationId, setOrganizationId] = useState("");
   const [organizationName, setOrganizationName] = useState("");
+  const [organizationNui, setOrganizationNui] = useState("");
+  const [showAtkSetup, setShowAtkSetup] = useState(false);
+  const [atkBranchId, setAtkBranchId] = useState("");
+  const [atkPosId, setAtkPosId] = useState("");
+  const [atkCsr, setAtkCsr] = useState("");
+  const [atkFingerprint, setAtkFingerprint] = useState("");
+  const [atkHardwareBacked, setAtkHardwareBacked] = useState<boolean | null>(null);
+  const [atkBusy, setAtkBusy] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState("");
@@ -54,7 +63,7 @@ export default function App() {
     if (!userData.user) { setSignedIn(false); setBusy(false); return; }
     await supabase.rpc("fiskalo_accept_pending_team_invitations");
     const { data, error: queryError } = await supabase.from("fiskalo_organization_users")
-      .select("organization_id,role,fiskalo_organizations(legal_name,municipality)")
+      .select("organization_id,role,fiskalo_organizations(legal_name,municipality,nui)")
       .eq("user_id", userData.user.id);
     setBusy(false);
     if (queryError) { setError(queryError.message); return; }
@@ -74,6 +83,8 @@ export default function App() {
     if (pError || cError) { setError(pError?.message ?? cError?.message ?? "Nuk u ngarkuan të dhënat."); return; }
     setOrganizationId(org.organization_id);
     setOrganizationName(org.fiskalo_organizations?.legal_name ?? "Biznesi");
+    setOrganizationNui(org.fiskalo_organizations?.nui ?? "");
+    setAtkCsr(""); setAtkFingerprint(""); setAtkHardwareBacked(null);
     setProducts((p ?? []) as Product[]);
     setCustomers((c ?? []) as Customer[]);
   }
@@ -126,9 +137,39 @@ export default function App() {
     await selectOrganization({ organization_id: organizationId, role: "", fiskalo_organizations: { legal_name: organizationName, municipality: "" } });
   }
 
+  async function createAndroidAtkCsr() {
+    setError(""); setMessage(""); setAtkCsr(""); setAtkFingerprint("");
+    if (!/^\\d{9}$/.test(organizationNui)) { setError("Biznesi nuk ka NUI valid me 9 shifra."); return; }
+    if (!/^\\d{1,20}$/.test(atkBranchId) || !/^\\d{1,20}$/.test(atkPosId)) {
+      setError("Vendos ID-në e njësisë dhe numrin e POS-it të konfirmuar nga ATK. Mos shpik identifikues.");
+      return;
+    }
+    setAtkBusy(true);
+    try {
+      const alias = organizationId + "." + atkBranchId + "." + atkPosId;
+      if (await FiskaloAtkCrypto.hasKey(alias)) {
+        throw new Error("Ky instalim ka tashmë çelës Android Keystore. Përdor CSR-në e ruajtur më parë ose kërko ri-regjistrim nga ATK; mos krijo çelës të ri pa arsye.");
+      }
+      const result = await FiskaloAtkCrypto.createCsr(alias, organizationName, organizationNui, atkBranchId, atkPosId);
+      setAtkCsr(result.csrPem);
+      setAtkFingerprint(result.publicKeySha256);
+      setAtkHardwareBacked(result.secureHardwareBacked);
+      setMessage(result.secureHardwareBacked
+        ? "CSR u krijua me çelës të mbrojtur nga hardueri në Android Keystore."
+        : "CSR u krijua në Android Keystore, por pajisja nuk konfirmoi mbrojtje hardware-backed.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Nuk u krijua CSR në Android.");
+    } finally { setAtkBusy(false); }
+  }
+
+  async function shareAndroidAtkCsr() {
+    if (!atkCsr) return;
+    await Share.share({ title: "Fiskalo ATK test CSR", message: atkCsr });
+  }
+
   async function signOut() {
     await supabase.auth.signOut();
-    setSignedIn(false); setOrganizations([]); setOrganizationId(""); setCart([]);
+    setSignedIn(false); setOrganizations([]); setOrganizationId(""); setOrganizationNui(""); setCart([]);
   }
 
   const filtered = products.filter((p) => p.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()) || (p.sku ?? "").toLocaleLowerCase().includes(search.toLocaleLowerCase()));
@@ -158,6 +199,25 @@ export default function App() {
       <Action label="Dil" secondary onPress={() => void signOut()} />
     </ScrollView> : <View style={{ flex: 1 }}>
       <View style={{ paddingHorizontal: 12, paddingTop: 10 }}>
+        <TouchableOpacity onPress={() => setShowAtkSetup((value) => !value)} style={{ padding: 12, marginBottom: 8, backgroundColor: "white", borderWidth: 1, borderColor: line, borderRadius: 9 }}>
+          <Text style={{ color: ink, fontWeight: "800" }}>ATK / Siguria e POS-it · {showAtkSetup ? "Mbyll" : "Hap konfigurimin"}</Text>
+          <Text style={{ color: "#687773", fontSize: 11, marginTop: 3 }}>Krijo çelësin dhe CSR në këtë pajisje Android. Vetëm për testim.</Text>
+        </TouchableOpacity>
+        {showAtkSetup && <View style={{ padding: 12, marginBottom: 9, backgroundColor: "white", borderWidth: 1, borderColor: line, borderRadius: 9, gap: 7 }}>
+          <Text style={{ color: ink, fontWeight: "800" }}>Identiteti i tatimpaguesit</Text>
+          <Text style={{ color: "#687773", fontSize: 12 }}>Biznesi: {organizationName} · NUI: {organizationNui || "Nuk është regjistruar"}</Text>
+          <TextInput placeholder="ID e njësisë / degës (e konfirmuar nga ATK)" keyboardType="number-pad" value={atkBranchId} onChangeText={setAtkBranchId} style={inputStyle} />
+          <TextInput placeholder="Numri i POS-it (i konfirmuar nga ATK)" keyboardType="number-pad" value={atkPosId} onChangeText={setAtkPosId} style={inputStyle} />
+          <Action label={atkBusy ? "Duke krijuar CSR..." : "Gjenero çelës dhe CSR në Android"} disabled={atkBusy} onPress={() => void createAndroidAtkCsr()} />
+          {!!atkFingerprint && <Text selectable style={{ color: "#52635e", fontSize: 11 }}>SHA-256: {atkFingerprint} · Hardware-backed: {atkHardwareBacked ? "Po" : "Jo"}</Text>}
+          {!!atkCsr && <>
+            <Text style={{ color: ink, fontWeight: "700" }}>CSR (çelësi privat nuk përfshihet)</Text>
+            <Text selectable style={{ color: "#52635e", fontSize: 9, maxHeight: 80 }}>{atkCsr}</Text>
+            <Action label="Ndaje CSR-në" secondary onPress={() => void shareAndroidAtkCsr()} />
+          </>}
+          <Text style={{ color: "#8a5a18", fontSize: 11 }}>Mos e dërgo çelësin privat askund. Ky modul krijon çelës lokal Android Keystore, por certifikata ATK dhe dërgimi i kuponëve ende nuk janë lidhur. Konfirmo me ATK pranueshmërinë e ruajtjes dhe pajisjes para përdorimit zyrtar.</Text>
+        </View>}
+      </View>
         <TextInput placeholder="Kërko produkt / SKU" value={search} onChangeText={setSearch} style={inputStyle} />
       </View>
       <View style={{ flex: 1 }}>
