@@ -218,3 +218,78 @@ export async function getBrowserPosCsr(id: string): Promise<{ csrPem: string; pu
   const publicKeySha256 = Array.from(new Uint8Array(fingerprint), (b) => b.toString(16).padStart(2, "0")).join(":");
   return { csrPem: record.csrPem, publicKeySha256, createdAt: record.createdAt };
 }
+
+type DerNode = { tag: number; contentStart: number; end: number; next: number };
+
+function readDerNode(bytes: Uint8Array, offset: number): DerNode {
+  if (offset + 2 > bytes.length) throw new Error("Malformed ATK certificate DER.");
+  const tag = bytes[offset];
+  let length = bytes[offset + 1];
+  let cursor = offset + 2;
+  if ((length & 0x80) !== 0) {
+    const count = length & 0x7f;
+    if (count === 0 || count > 4 || cursor + count > bytes.length) throw new Error("Malformed ATK certificate DER length.");
+    length = 0;
+    for (let i = 0; i < count; i++) length = length * 256 + bytes[cursor++];
+  }
+  const end = cursor + length;
+  if (end > bytes.length) throw new Error("ATK certificate DER is truncated.");
+  return { tag, contentStart: cursor, end, next: end };
+}
+
+function derChildren(bytes: Uint8Array, node: DerNode): DerNode[] {
+  const children: DerNode[] = [];
+  let cursor = node.contentStart;
+  while (cursor < node.end) {
+    const child = readDerNode(bytes, cursor);
+    children.push(child);
+    cursor = child.next;
+  }
+  if (cursor !== node.end) throw new Error("Malformed ATK certificate structure.");
+  return children;
+}
+
+function certificateSpki(certificatePem: string): Uint8Array {
+  const base64 = certificatePem
+    .replace(/-----BEGIN CERTIFICATE-----/g, "")
+    .replace(/-----END CERTIFICATE-----/g, "")
+    .replace(/\\s+/g, "");
+  const binary = atob(base64);
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  const root = readDerNode(bytes, 0);
+  if (root.tag !== 0x30) throw new Error("ATK returned an invalid X.509 certificate.");
+  const certificateFields = derChildren(bytes, root);
+  const tbs = certificateFields[0];
+  if (!tbs || tbs.tag !== 0x30) throw new Error("ATK certificate has no TBSCertificate.");
+  const fields = derChildren(bytes, tbs);
+  let index = fields[0]?.tag === 0xa0 ? 1 : 0;
+  index += 5; // serial, signature, issuer, validity, subject
+  const spki = fields[index];
+  if (!spki || spki.tag !== 0x30) throw new Error("ATK certificate has no SubjectPublicKeyInfo.");
+  return bytes.slice(index === -1 ? 0 : spki.contentStart - (spki.contentStart - (spki.contentStart)), spki.end);
+}
+
+function equalBytes(first: Uint8Array, second: Uint8Array): boolean {
+  if (first.length !== second.length) return false;
+  let difference = 0;
+  for (let i = 0; i < first.length; i++) difference |= first[i] ^ second[i];
+  return difference === 0;
+}
+
+export async function installBrowserPosCertificate(id: string, certificatePem: string): Promise<{ publicKeySha256: string; installed: boolean }> {
+  const cryptoApi = requireBrowserCrypto();
+  const record = await readKey(id);
+  if (!record) throw new Error("No local signing key exists for this POS.");
+  const certificateKey = certificateSpki(certificatePem);
+  if (!equalBytes(certificateKey, new Uint8Array(record.publicKeySpki))) {
+    throw new Error("ATK certificate public key does not match this browser POS private key. Certificate was not installed.");
+  }
+  const fingerprint = await cryptoApi.subtle.digest("SHA-256", record.publicKeySpki);
+  const publicKeySha256 = Array.from(new Uint8Array(fingerprint), (b) => b.toString(16).padStart(2, "0")).join(":");
+  await writeKey({ ...record, certificatePem });
+  return { publicKeySha256, installed: true };
+}
+
+export async function hasBrowserPosCertificate(id: string): Promise<boolean> {
+  return Boolean((await readKey(id))?.certificatePem);
+}
