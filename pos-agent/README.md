@@ -12,7 +12,7 @@ This is the .NET 8 protocol core for the future local Fiskalo POS Agent. It is b
 - Citizen coupon QR payload construction (`Base64(Protobuf)|Base64(signature)`).
 - Test-only HTTP calls for `/ca/verify/{nui}`, `/ca/signcsr` and `/pos/coupon`.
 
-## Important security boundary
+## Local host milestone\n\nA runnable loopback-only host now lives in `Fiskalo.PosAgent.Host`. It binds to `127.0.0.1:17843`, enforces exact browser-origin allowlisting, uses a one-time console pairing code and bearer session, and exposes authenticated status. The pairing/session are memory-only in this first iteration; unattended installation and OS-protected persistence are not yet implemented. Fiscalization remains disabled. See `Fiskalo.PosAgent.Host/README.md`.\n\n## Important security boundary
 
 This library deliberately does **not** export, write or persist private keys. The installed POS Agent must provide an ECDsa key handle backed by OS-protected local storage. The next agent milestone will implement the installed local service and platform-specific key storage after the accepted ATK key-custody requirements are confirmed.
 
