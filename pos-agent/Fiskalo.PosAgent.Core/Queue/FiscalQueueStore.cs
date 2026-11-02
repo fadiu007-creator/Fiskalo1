@@ -122,6 +122,56 @@ public sealed class FiscalQueueStore
         }, cancellationToken);
     }
 
+    public Task<FiscalQueueItem> MarkSubmittingAsync(
+        string idempotencyKey,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(idempotencyKey, item =>
+        {
+            if (item.Status != FiscalQueueStatus.Queued)
+                throw new InvalidOperationException("Only a queued document can begin submission.");
+            return item with { Status = FiscalQueueStatus.Submitting, AttemptCount = checked(item.AttemptCount + 1) };
+        }, cancellationToken);
+
+    public Task<FiscalQueueItem> MarkNeedsReconciliationAsync(
+        string idempotencyKey,
+        string reason,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(idempotencyKey, item =>
+        {
+            if (item.Status != FiscalQueueStatus.Submitting)
+                throw new InvalidOperationException("Only an in-flight document can require reconciliation.");
+            return item with
+            {
+                Status = FiscalQueueStatus.NeedsReconciliation,
+                LastError = Truncate(reason, 500)
+            };
+        }, cancellationToken);
+
+    public async Task<int> RecoverInterruptedSubmissionsAsync(CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var items = await LoadAsync(cancellationToken);
+            var recovered = 0;
+            for (var i = 0; i < items.Count; i++)
+            {
+                if (items[i].Status == FiscalQueueStatus.Submitting)
+                {
+                    items[i] = items[i] with
+                    {
+                        Status = FiscalQueueStatus.NeedsReconciliation,
+                        LastError = "Agent restarted during submission; reconcile with ATK before retrying."
+                    };
+                    recovered++;
+                }
+            }
+            if (recovered > 0) await SaveAsync(items, cancellationToken);
+            return recovered;
+        }
+        finally { _gate.Release(); }
+    }
+
     public Task<FiscalQueueItem> MarkAcceptedAsync(
         string idempotencyKey,
         string atkTransactionId,
@@ -132,7 +182,7 @@ public sealed class FiscalQueueStore
 
         return MutateAsync(idempotencyKey, item =>
         {
-            EnsureQueued(item);
+            EnsureSubmitting(item);
             return item with
             {
                 Status = FiscalQueueStatus.Accepted,
@@ -148,7 +198,7 @@ public sealed class FiscalQueueStore
         CancellationToken cancellationToken = default) =>
         MutateAsync(idempotencyKey, item =>
         {
-            EnsureQueued(item);
+            EnsureSubmitting(item);
             return item with
             {
                 Status = FiscalQueueStatus.Rejected,
@@ -226,10 +276,10 @@ public sealed class FiscalQueueStore
         }
     }
 
-    private static void EnsureQueued(FiscalQueueItem item)
+    private static void EnsureSubmitting(FiscalQueueItem item)
     {
-        if (item.Status != FiscalQueueStatus.Queued)
-            throw new InvalidOperationException("Only queued fiscal documents can change submission state.");
+        if (item.Status != FiscalQueueStatus.Submitting)
+            throw new InvalidOperationException("Only an in-flight fiscal document can receive an ATK result.");
     }
 
     private static string Truncate(string? value, int maxLength)
