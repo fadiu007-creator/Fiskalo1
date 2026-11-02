@@ -89,6 +89,21 @@ These calls have not been run. Do not send test requests until ATK has provided 
 - The agent does not yet create/submit fiscal coupons or automatically process the queue.
 - No production ATK URL, production switch, or production credential support exists.
 
+## Manual fiscal queue reconciliation
+
+The authenticated `POST /api/v1/queue/reconcile` endpoint resolves an item in `NeedsReconciliation` only after an operator checks the ATK test records.
+
+Request fields:
+- `idempotencyKey`: exact queue key.
+- `decision`: `accepted`, `rejected`, or `not_found_confirmed`.
+- `atkTransactionId`: required for `accepted`.
+- `operatorNote`: required for `rejected`.
+- `confirmedNoAtkRecord`: must be true for `not_found_confirmed`.
+
+Use `accepted` only after locating the matching accepted ATK transaction and recording its transaction ID. Use `rejected` only after confirming rejection. Use `not_found_confirmed` only after checking ATK records and confirming that no matching transaction exists. That decision returns the exact persisted signed document to `Queued` for an explicit operator resubmission; it does not send it automatically. Expired recovery windows cannot be reopened.
+
+This endpoint does not query ATK itself and does not prove the operator's review. It is protected by the local paired session. Keep the queue key and session token private. Never choose `not_found_confirmed` merely because a request timed out or the portal is temporarily unavailable.
+
 ## ATK test coupon route and duplicate-safety
 
 `POST /api/v1/atk/test/coupon` accepts a `PosCouponInput` and an idempotency key. It requires a locally stored test certificate and DPAPI key, checks certificate validity dates and confirms the certificate public key matches the private key. It also checks that taxpayer NUI, branch, POS, application ID and verification number match the DPAPI-protected installation profile created during ATK verification/onboarding.
