@@ -9,6 +9,7 @@ type Invoice = { id: string; invoice_number: string | null; status: string; issu
 type Org = { legal_name: string; trade_name: string | null; nui: string; fiscal_number: string | null; address: string | null; municipality: string; phone: string | null; email: string | null };
 type Line = { id: string; product_id: string | null; description: string; quantity: number; unit_price: number; vat_rate: number; line_subtotal: number; line_vat: number };
 type Product = { id: string; name: string; unit_price: number; vat_rate: number; stock_quantity: number; track_stock: boolean; is_active: boolean };
+type CustomerOption = { id: string; name: string };
 const fieldStyle: React.CSSProperties = { width: "100%", minWidth: 0, border: "1px solid var(--line)", borderRadius: 8, padding: "10px 11px", background: "white", color: "var(--ink)" };
 type Payment = { id: string; amount: number; payment_method: string; reference: string | null; created_at: string };
 
@@ -20,6 +21,7 @@ export default function InvoiceDetailPage() {
   const [customer, setCustomer] = useState<{ name: string; business_number: string | null; address: string | null; email: string | null } | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [customerOptions, setCustomerOptions] = useState<CustomerOption[]>([]);
   const [draftCustomerId, setDraftCustomerId] = useState("");
   const [draftPaymentMethod, setDraftPaymentMethod] = useState("cash");
   const [draftLines, setDraftLines] = useState<{ product_id: string; quantity: string }[]>([]);
@@ -36,24 +38,28 @@ export default function InvoiceDetailPage() {
 
   useEffect(() => {
     async function load() {
-      const [inv, business, items, paymentRows, productRows] = await Promise.all([
+      const [inv, business, items, paymentRows, productRows, customerRows] = await Promise.all([
         supabase.from("fiskalo_invoices").select("*").eq("id", params.invoiceId).eq("organization_id", params.organizationId).single(),
         supabase.from("fiskalo_organizations").select("legal_name,trade_name,nui,fiscal_number,address,municipality,phone,email").eq("id", params.organizationId).single(),
         supabase.from("fiskalo_invoice_items").select("*").eq("invoice_id", params.invoiceId),
         supabase.from("fiskalo_invoice_payments").select("*").eq("invoice_id", params.invoiceId).order("created_at"),
         supabase.from("fiskalo_products").select("id,name,unit_price,vat_rate,stock_quantity,track_stock,is_active").eq("organization_id", params.organizationId).eq("is_active", true).order("name"),
+        supabase.from("fiskalo_customers").select("id,name").eq("organization_id", params.organizationId).order("name"),
       ]);
+      if (inv.error || business.error || items.error || paymentRows.error || productRows.error || customerRows.error || !inv.data || !business.data) {
         setError("Fatura nuk u gjet ose nuk ke qasje.");
         setLoading(false);
         return;
       }
+      const loadedLines = (items.data ?? []) as Line[];
       setInvoice(inv.data as Invoice);
       setOrg(business.data as Org);
-      setLines((items.data ?? []) as Line[]);
+      setLines(loadedLines);
       setProducts((productRows.data ?? []) as Product[]);
+      setCustomerOptions((customerRows.data ?? []) as CustomerOption[]);
       setDraftCustomerId(inv.data.customer_id || "");
       setDraftPaymentMethod(inv.data.payment_method || "cash");
-      setDraftLines(((items.data ?? []) as Line[]).map((line) => ({ product_id: line.product_id || "", quantity: String(line.quantity) })));
+      setDraftLines(loadedLines.map((line) => ({ product_id: line.product_id || "", quantity: String(line.quantity) })));
       setPayments((paymentRows.data ?? []) as Payment[]);
       if (inv.data.customer_id) {
         const { data } = await supabase.from("fiskalo_customers").select("name,business_number,address,email").eq("id", inv.data.customer_id).single();
@@ -64,12 +70,12 @@ export default function InvoiceDetailPage() {
     void load();
   }, [params.invoiceId, params.organizationId, supabase]);
 
-  async function saveDraft() {
-    if (!invoice || invoice.status !== "draft") return;
+  async function saveDraft(): Promise<boolean> {
+    if (!invoice || invoice.status !== "draft") return false;
     setDraftBusy(true); setDraftMessage("");
     const validLines = draftLines.filter((line) => line.product_id && Number(line.quantity) > 0);
     if (!validLines.length || validLines.length !== draftLines.length) {
-      setDraftBusy(false); setDraftMessage("Shto së paku një artikull dhe kontrollo sasitë."); return;
+      setDraftBusy(false); setDraftMessage("Shto së paku një artikull dhe kontrollo sasitë."); return false;
     }
     const { error: saveError } = await supabase.rpc("fiskalo_update_draft_invoice", {
       target_invoice: invoice.id,
@@ -77,26 +83,24 @@ export default function InvoiceDetailPage() {
       target_payment_method: draftPaymentMethod,
       target_items: validLines.map((line) => ({ product_id: line.product_id, quantity: Number(line.quantity) })),
     });
-    if (saveError) { setDraftBusy(false); setDraftMessage(saveError.message); return; }
+    if (saveError) { setDraftBusy(false); setDraftMessage(saveError.message); return false; }
     const [freshInvoice, freshItems] = await Promise.all([
       supabase.from("fiskalo_invoices").select("*").eq("id", invoice.id).single(),
       supabase.from("fiskalo_invoice_items").select("*").eq("invoice_id", invoice.id),
     ]);
     if (freshInvoice.data) setInvoice(freshInvoice.data as Invoice);
     if (freshItems.data) {
-      setLines(freshItems.data as Line[]);
-      setDraftLines((freshItems.data as Line[]).map((line) => ({ product_id: line.product_id || "", quantity: String(line.quantity) })));
+      const refreshed = freshItems.data as Line[];
+      setLines(refreshed);
+      setDraftLines(refreshed.map((line) => ({ product_id: line.product_id || "", quantity: String(line.quantity) })));
     }
-    setDraftBusy(false); setDraftMessage("Drafti u përditësua. Kontrollo stokun dhe provo lëshimin përsëri.");
+    setDraftBusy(false); setDraftMessage("Drafti u përditësua.");
+    return true;
   }
 
   async function issueDraft() {
-    await saveDraft();
-    // The save call above validates and persists edits; issue only after a successful save.
-    // A fresh RPC is made by the explicit button below to keep stock validation authoritative.
-  }
-
-  async function issueSavedDraft() {
+    const saved = await saveDraft();
+    if (!saved) return;
     setDraftBusy(true); setDraftMessage("");
     const { data: number, error: issueError } = await supabase.rpc("fiskalo_issue_invoice", { target_invoice: params.invoiceId });
     if (issueError) { setDraftBusy(false); setDraftMessage(issueError.message); return; }
@@ -140,7 +144,7 @@ export default function InvoiceDetailPage() {
         <h2 style={{ margin: "0 0 8px", fontSize: 17 }}>Draft — mund ta redaktosh</h2>
         <p style={{ margin: "0 0 14px", color: "var(--muted)", fontSize: 12 }}>Ndrysho sasitë, hiq artikujt ose shto të rinj. Stoku kontrollohet përsëri kur provon ta lëshosh faturën.</p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 10, marginBottom: 12 }}>
-          <label style={{ display: "grid", gap: 5, fontSize: 12 }}>Klienti<select value={draftCustomerId} onChange={(e) => setDraftCustomerId(e.target.value)} style={fieldStyle}><option value="">Klient pa emër</option>{/* Customers are resolved by invoice selection below when available */}{customer && <option value={invoice.customer_id || ""}>{customer.name}</option>}</select></label>
+          <label style={{ display: "grid", gap: 5, fontSize: 12 }}>Klienti<select value={draftCustomerId} onChange={(e) => setDraftCustomerId(e.target.value)} style={fieldStyle}><option value="">Klient pa emër</option>{/* Customers are resolved by invoice selection below when available */}{customerOptions.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>
           <label style={{ display: "grid", gap: 5, fontSize: 12 }}>Mënyra e pagesës<select value={draftPaymentMethod} onChange={(e) => setDraftPaymentMethod(e.target.value)} style={fieldStyle}><option value="cash">Para në dorë</option><option value="card">Kartelë</option><option value="bank_transfer">Transfer bankar</option><option value="credit">Me afat / e papaguar</option></select></label>
         </div>
         {draftLines.map((line, index) => <div key={index} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 110px auto", gap: 8, alignItems: "end", marginBottom: 8 }}>
@@ -151,7 +155,7 @@ export default function InvoiceDetailPage() {
         <button type="button" onClick={() => setDraftLines((rows) => [...rows, { product_id: "", quantity: "1" }])} style={{ ...fieldStyle, margin: "4px 0 12px", cursor: "pointer" }}>+ Shto artikull</button>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button type="button" disabled={draftBusy} onClick={saveDraft} style={{ border: 0, borderRadius: 8, background: "var(--brand)", color: "white", padding: "10px 14px", fontWeight: 700 }}>{draftBusy ? "Duke ruajtur..." : "Ruaj draftin"}</button>
-          <button type="button" disabled={draftBusy} onClick={async () => { await saveDraft(); }} style={{ ...fieldStyle, width: "auto", cursor: "pointer" }}>Ruaj ndryshimet</button>
+          <button type="button" disabled={draftBusy} onClick={issueDraft} style={{ ...fieldStyle, width: "auto", cursor: "pointer" }}>Ruaj dhe provo lëshimin</button>
         </div>
         {draftMessage && <p role="status" style={{ marginBottom: 0, fontSize: 12 }}>{draftMessage}</p>}
       </section>}
