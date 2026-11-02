@@ -590,6 +590,19 @@ export default function BusinessDashboard() {
             <a href="https://github.com/fiskalizimi/pos-csharp" target="_blank" rel="noreferrer" style={{ color: "var(--brand)", fontWeight: 700 }}>Shembulli zyrtar C#</a>
           </div>
         </section>
+        <section style={panel}>
+          <h3 style={{ marginTop: 0 }}>POS Agent lokal — lidhja me kompjuterin</h3>
+          <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.6 }}>POS Agent duhet të jetë duke punuar në të njëjtin kompjuter Windows ku është hapur ky panel. Nise programin dhe shkruaje këtu kodin njëpërdorimësh që shfaqet në terminal.</p>
+          <form onSubmit={pairPosAgent} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
+            <label className="field-label" style={{ flex: "1 1 260px" }}>Kodi i lidhjes<input type="password" autoComplete="off" value={agentPairingCode} onChange={(e) => setAgentPairingCode(e.target.value)} style={field} /></label>
+            <button disabled={agentBusy || !agentPairingCode.trim()} style={primary}>{agentBusy ? "Duke u lidhur..." : "Lidhe POS Agent"}</button>
+            {agentToken && <button type="button" disabled={agentBusy} onClick={refreshAgentStatus} style={secondary}>Rifresko statusin</button>}
+          </form>
+          {agentStatus && <p style={{ fontSize: 12, marginBottom: 0 }}>Agent {String(agentStatus.agentVersion || "")} · Windows DPAPI: {agentStatus.windowsKeyStoreAvailable ? "i disponueshëm" : "jo i disponueshëm"} · Çelësi lokal: {agentStatus.signingKeyInitialized ? "i krijuar" : "nuk është krijuar"} · Certifikata testuese: {agentStatus.testCertificateInstalled ? "e instaluar" : "nuk është instaluar"}</p>}
+          <label className="field-label" style={{ maxWidth: 340, marginTop: 10 }}>ATK application ID<input type="number" min="1" step="1" value={atkApplicationId} onChange={(e) => setAtkApplicationId(e.target.value)} placeholder="ID e dhënë nga ATK" style={field} /></label>
+          {agentError && <p role="alert" style={{ color: "#9d2d26", fontSize: 12 }}>{agentError}</p>}
+          {agentNotice && <p role="status" style={{ color: "#155c3c", fontSize: 12 }}>{agentNotice}</p>}
+        </section>
         <div className="module-grid" style={{ display: "grid", gridTemplateColumns: "minmax(260px,340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
           <form onSubmit={saveAtkProfile} style={panel}>
             <h3 style={{ marginTop: 0 }}>Të dhënat e fiskalizimit të biznesit</h3>
@@ -614,9 +627,9 @@ export default function BusinessDashboard() {
         </div>
         <section style={panel}>
           <h3 style={{ marginTop: 0 }}>Pajisjet POS të regjistruara në Fiskalo ({atkPosInstallations.length})</h3>
-          <div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Pajisja</th><th>Dega ATK</th><th>POS ID</th><th>Mjedisi</th><th>Statusi</th><th>Certifikata</th></tr></thead><tbody>
-            {atkPosInstallations.map((pos) => <tr key={pos.id}><td>{pos.label}<small>{pos.location || "Lokacioni nuk është shënuar"}</small></td><td>{pos.atk_branch_id}</td><td>{pos.pos_id}</td><td>{pos.environment === "test" ? "Test" : "Prodhim"}</td><td>{({ unregistered: "Pa regjistruar në ATK", verification_pending: "Verifikimi në pritje", certificate_pending: "Certifikata në pritje", active: "Aktive", suspended: "Pezulluar", revoked: "Revokuar" } as Record<string,string>)[pos.status] || pos.status}</td><td>{pos.certificate_serial ? pos.certificate_serial : "Nuk ka certifikatë"}</td></tr>)}
-            {!atkPosInstallations.length && <tr><td colSpan={6}>Nuk ka pajisje POS të regjistruara.</td></tr>}
+          <div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Pajisja</th><th>Dega ATK</th><th>POS ID</th><th>Mjedisi</th><th>Statusi</th><th>Certifikata</th><th>Veprimet testuese</th></tr></thead><tbody>
+            {atkPosInstallations.map((pos) => <tr key={pos.id}><td>{pos.label}<small>{pos.location || "Lokacioni nuk është shënuar"}</small></td><td>{pos.atk_branch_id}</td><td>{pos.pos_id}</td><td>{pos.environment === "test" ? "Test" : "Prodhim"}</td><td>{({ unregistered: "Pa regjistruar në ATK", verification_pending: "Verifikimi në pritje", certificate_pending: "Certifikata në pritje", active: "Aktive", suspended: "Pezulluar", revoked: "Revokuar" } as Record<string,string>)[pos.status] || pos.status}</td><td>{pos.certificate_serial ? pos.certificate_serial : "Nuk ka certifikatë"}</td><td><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}><button type="button" disabled={agentBusy || !agentToken || !atkApplicationId} onClick={() => void verifyAtkPos(pos)} style={secondary}>Verifiko ATK</button><button type="button" disabled={agentBusy || !agentToken || !agentVerifications[pos.id] || !atkApplicationId} onClick={() => void requestAtkTestCertificate(pos)} style={secondary}>Kërko certifikatën</button></div>{agentVerifications[pos.id] && <small>Verifikimi u krye në këtë sesion.</small>}</td></tr>)}
+            {!atkPosInstallations.length && <tr><td colSpan={7}>Nuk ka pajisje POS të regjistruara.</td></tr>}
           </tbody></table></div>
           <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>Lista paraqet vetëm konfigurimin lokal të Fiskalo-s. Verifikimi, nënshkrimi i CSR-së dhe lëshimi i certifikatës nga ATK nuk janë kryer.</p>
         </section>
