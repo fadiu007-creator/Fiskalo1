@@ -217,7 +217,7 @@ export default function BusinessDashboard() {
           <p style={{ color: "var(--muted)", lineHeight: 1.6, fontSize: 13 }}>Regjistro artikujt, klientët, faturat dhe shpenzimet. Faturat e lëshuara ruhen me numër unik dhe nuk mund të ndryshohen. Ky version nuk kryen fiskalizim zyrtar dhe nuk zëvendëson pajisjen ose softuerin e certifikuar nga ATK.</p>
           <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}><button style={primary} onClick={() => setTab("invoices")}>+ Krijo faturë</button><button style={secondary} onClick={() => setTab("products")}>+ Shto produkt</button><button style={secondary} onClick={() => setTab("expenses")}>+ Regjistro shpenzim</button></div>
         </section>
-        <section style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Faturat e fundit</h2><InvoiceTable invoices={invoices.slice(0, 5)} fmt={fmt} customers={customers} /></section>
+        <section style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Faturat e fundit</h2><InvoiceTable invoices={invoices.slice(0, 5)} fmt={fmt} customers={customers} organizationId={organizationId} /></section>
       </>}
 
       {tab === "products" && <section style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
@@ -265,7 +265,7 @@ export default function BusinessDashboard() {
           <button disabled={busy || products.length === 0} style={{ ...primary, width: "100%" }}>{busy ? "Duke ruajtur..." : "Krijo dhe lësho faturën"}</button>
           {!products.length && <small>Shto së pari një produkt ose shërbim.</small>}
         </form>
-        <section style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Faturat ({invoices.length})</h2><InvoiceTable invoices={invoices} fmt={fmt} customers={customers} /></section>
+        <section style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Faturat ({invoices.length})</h2><InvoiceTable invoices={invoices} fmt={fmt} customers={customers} organizationId={organizationId} /></section>
       </section>}
 
       {tab === "expenses" && <section style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
@@ -315,8 +315,8 @@ function Stat({ label, value }: { label: string; value: string }) {
   return <article style={panel}><div style={{ color: "var(--muted)", fontSize: 12 }}>{label}</div><strong style={{ display: "block", fontSize: 22, marginTop: 8 }}>{value}</strong></article>;
 }
 
-function InvoiceTable({ invoices, fmt, customers }: { invoices: Invoice[]; fmt: (value: number) => string; customers: Customer[] }) {
-  return <div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Numri</th><th>Data</th><th>Klienti</th><th>Statusi</th><th>Pagesa</th><th>Totali</th><th></th></tr></thead><tbody>{invoices.map((invoice) => <tr key={invoice.id}><td>{invoice.invoice_number || "Draft"}</td><td>{invoice.issue_date}</td><td>{customers.find((c) => c.id === invoice.customer_id)?.name || "—"}</td><td>{invoice.status === "issued" ? "E lëshuar" : invoice.status === "cancelled" ? "Anuluar" : "Draft"}</td><td>{invoice.payment_status === "paid" ? "Paguar" : invoice.payment_method === "credit" ? "Me afat" : "E papaguar"}</td><td>{fmt(Number(invoice.total))}</td><td>{invoice.status === "issued" && <button className="no-print" style={secondary} onClick={() => window.print()}>Printo</button>}</td></tr>)}{!invoices.length && <tr><td colSpan={7}>Nuk ka fatura ende.</td></tr>}</tbody></table></div>;
+function InvoiceTable({ invoices, fmt, customers, organizationId }: { invoices: Invoice[]; fmt: (value: number) => string; customers: Customer[]; organizationId: string }) {
+  return <div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Numri</th><th>Data</th><th>Klienti</th><th>Statusi</th><th>Pagesa</th><th>Totali</th><th></th></tr></thead><tbody>{invoices.map((invoice) => <tr key={invoice.id}><td><Link href={`/app/${organizationId}/invoices/${invoice.id}`} style={{ color: "var(--brand)", fontWeight: 700 }}>{invoice.invoice_number || "Draft"}</Link></td><td>{invoice.issue_date}</td><td>{customers.find((c) => c.id === invoice.customer_id)?.name || "—"}</td><td>{invoice.status === "issued" ? "E lëshuar" : invoice.status === "cancelled" ? "Anuluar" : "Draft"}</td><td>{invoice.payment_status === "paid" ? "Paguar" : invoice.payment_method === "credit" ? "Me afat" : "E papaguar"}</td><td>{fmt(Number(invoice.total))}</td><td>{invoice.status === "issued" && <button className="no-print" style={secondary} onClick={() => window.print()}>Printo</button>}</td></tr>)}{!invoices.length && <tr><td colSpan={7}>Nuk ka fatura ende.</td></tr>}</tbody></table></div>;
 }
 
 
