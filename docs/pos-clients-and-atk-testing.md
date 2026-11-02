@@ -2,11 +2,11 @@
 
 ## Which POS exists today?
 
-| Client | Current capability | ATK signing |
+| Client | Current capability | ATK test capability |
 |---|---|---|
-| Web POS | Responsive browser checkout; internal Fiskalo invoices and payment ledger | Not in browser; browser pairing to Windows agent is an integration target |
-| Android POS | Native Expo/React Native checkout; internal invoices and payment ledger | Not implemented; requires Android Keystore-based agent |
-| Windows POS Agent | Local signing key, ATK test certificate onboarding, signed test-coupon submission and encrypted queue | Test-only implementation |
+| Web POS | Responsive browser checkout; internal Fiskalo invoices and payment ledger; experimental browser-local P-256 CSR | CSR generation prototype; ATK verify/certificate workflow is available through the paired Windows Agent. Browser-only certificate acceptance and coupon submission are not complete. |
+| Android POS | Native Expo/React Native checkout; internal invoices and payment ledger; native Android Keystore P-256 key/CSR | Android CSR generation, authenticated server-proxied ATK test verification and test-certificate request, and local certificate/public-key match check are implemented in source. Not yet physically tested. No Android Protobuf coupon submission or durable fiscal queue yet. |
+| Windows POS Agent | Local signing key, ATK test certificate onboarding, signed test-coupon submission and encrypted queue | Test-only end-to-end path in source; still requires authorized ATK identifiers and actual test runs. |
 
 The browser and Android clients are sales-entry clients. They do not independently make Fiskalo an ATK-certified EFS. The current local signing implementation is Windows-specific because it uses Windows DPAPI for key and queue protection.
 
@@ -39,7 +39,7 @@ The mapper deliberately does not convert a Fiskalo VAT percentage into an ATK ta
 
 The Android project in mobile-pos/ is a native client for ordinary Fiskalo sales/invoice management. It uses the existing Supabase Auth and RLS tenant boundaries and stores the login session in Android SecureStore. The Android workflow now attempts to assemble a debug APK and upload it as a 14-day GitHub Actions artifact; the first build is still running and is not yet verified. It has not been exercised on physical hardware.
 
-Android ATK support is a separate milestone: Android Keystore-backed P-256 key management, CSR/certificate lifecycle, Protobuf signing, durable encrypted queue, network ambiguity reconciliation and ATK test evidence must be implemented and tested on real Android hardware. Do not copy a Windows DPAPI private key or certificate into Android.
+Remaining Android ATK milestones: verify CSR/certificate onboarding on a physical Android device against an ATK-authorized test taxpayer; implement the ATK Protobuf coupon encoder and validate its ECDSA signature encoding against the official reference; add signed Sale/Cancel/Return submission, encrypted durable queue and manual reconciliation; then collect ATK test evidence. Do not copy a Windows DPAPI private key into Android.
 
 ## Explicit limitations
 
@@ -70,3 +70,11 @@ Administrative Instruction (MF) 01/2026, Article 34(3), requires the taxpayer to
 - Every installed SEF has its own private key. Do not share one key between browser profiles, Android devices or POS installations.
 
 References: [ATK Administrative Instruction 01/2026, Article 34](https://apps.atk-ks.org/sefaplikimi/) and [official ATK C# POS integration](https://github.com/fiskalizimi/pos-csharp).
+
+
+## Current implementation milestone — 2 November 2026
+
+- Dashboard labels now explain that the ATK unit number comes from the taxpayer's registered unit/location records, and that the POS number is unique per register. Fiskalo's internal branch UUID is explicitly not the ATK unit number.
+- Android native module exposes Android Keystore P-256 CSR generation, P1363 ECDSA signing and X.509 certificate public-key matching.
+- Android app has ATK TEST fiscalization number/Application ID fields, server-proxied Verify and Sign CSR actions, and local certificate-match validation.
+- Android CI now runs native compilation and attempts to assemble a debug APK, then upload the APK as an Actions artifact. Latest run must complete successfully before claiming an installable APK exists.
