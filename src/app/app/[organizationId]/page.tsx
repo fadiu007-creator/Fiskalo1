@@ -184,7 +184,7 @@ export default function BusinessDashboard() {
         <div style={{ alignSelf: "center", fontSize: 12, color: "var(--muted)", maxWidth: 290 }}>Fiskalizimi zyrtar: <strong>{org.fiscalization_status === "certified" ? "I konfiguruar" : "Jo aktiv"}</strong><br />Fiskalo nuk është i certifikuar nga ATK.</div>
       </section>
       <nav className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
-        {tabItems.map((item) => <button key={item.id} onClick={() => { setTab(item.id); setNotice(""); setError(""); }} style={{ ...secondary, ...(tab === item.id ? { background: "var(--brand)", color: "white", borderColor: "var(--brand)" } : {}) }}>{item.label}</button>)}
+        {tabItems.map((item) => <button key={item.id} onClick={() => { setTab(item.id); setNotice(""); setError(""); if (item.id === "team") void loadMembers(); }} style={{ ...secondary, ...(tab === item.id ? { background: "var(--brand)", color: "white", borderColor: "var(--brand)" } : {}) }}>{item.label}</button>)}
       </nav>
       {error && <p role="alert" style={{ background: "#fff0ef", color: "#9d2d26", padding: 12, borderRadius: 9, fontSize: 13 }}>{error}</p>}
       {notice && <p role="status" style={{ background: "#edf7f1", color: "#155c3c", padding: 12, borderRadius: 9, fontSize: 13 }}>{notice}</p>}
