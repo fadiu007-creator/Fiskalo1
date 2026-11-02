@@ -46,6 +46,27 @@ After pairing, the Windows host exposes authenticated test-only endpoints:
 
 The ATK test calls are explicit operator actions; no calls occur at startup. The endpoints require the paired bearer session. They are not production endpoints. The certificate is not treated as a production credential, and fiscalization remains disabled. The current host still does not submit POS coupons or run an automatic queue worker.
 
+## Windows installation package
+
+The Windows x64 CI artifact now includes:
+- `Fiskalo.PosAgent.Host.exe` and its self-contained runtime files.
+- `Install-FiskaloPosAgent.ps1` — copies the application to the current user's Programs folder and creates a desktop shortcut.
+- `Start-FiskaloPosAgent.ps1` — validates the exact HTTPS origin allowlist and starts the foreground host.
+- `Uninstall-FiskaloPosAgent.ps1` — removes application files but deliberately preserves protected fiscal data.
+
+Installation steps:
+1. Download and extract the latest successful `fiskalo-pos-agent-win-x64` artifact from the POS Agent Actions run.
+2. Open PowerShell in the extracted folder.
+3. Run `powershell -NoProfile -ExecutionPolicy Bypass -File .\\Install-FiskaloPosAgent.ps1`.
+4. Start **Fiskalo POS Agent** from the desktop shortcut. Keep its console window open.
+5. Pair from the Fiskalo dashboard only after the dashboard pairing flow is deployed and verified.
+
+The launcher defaults to the production Fiskalo HTTPS origin. For a different trusted HTTPS origin, run the launcher with `-AllowedOrigins 'https://your-exact-host.example'`. Do not add wildcard origins or plain HTTP origins.
+
+This is an installer/launcher, not a Windows service. It does not auto-start at login, does not run unattended, and does not yet provide a secure persistent pairing session. The one-time pairing code is printed in the console and must be treated as a secret. Do not publish it or place it in logs.
+
+To remove application files, close the agent and run `powershell -NoProfile -ExecutionPolicy Bypass -File .\\Uninstall-FiskaloPosAgent.ps1`. Protected keys, certificates and queue data are retained intentionally; follow the approved retention/backup process before deleting them manually.
+
 ## Downloadable Windows build
 
 After the POS Agent CI matrix passes, the `publish-windows` job publishes a self-contained `fiskalo-pos-agent-win-x64` artifact for 14 days. Download it from the successful GitHub Actions run; it does not require a separately installed .NET runtime. The agent is still a foreground development host, not an installed Windows service.
