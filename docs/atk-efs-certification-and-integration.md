@@ -252,3 +252,15 @@ These milestones are local engineering foundations only. No ATK request was sent
 ### Automated verification added
 
 A .NET test project now exercises queue idempotency, retry timing, 48-hour expiry, accepted-state immutability, encrypted-at-rest storage and Windows DPAPI key/queue persistence. POS Agent CI is configured to build the core and local host and run tests on Ubuntu and Windows. The run triggered by the latest changes must be checked in GitHub Actions before treating this milestone as verified.
+
+
+## 13. POS Agent ATK test-onboarding implementation update
+
+The local Windows host now has explicit authenticated routes for:
+- Generating/reusing a P-256 key protected with Windows DPAPI and returning its CSR.
+- Calling the fixed ATK test-only `/ca/verify/{nui}` endpoint using operator-supplied NUI, EDI fiscalization number, branch ID, POS ID and application ID.
+- Calling the fixed ATK test-only `/ca/signcsr` endpoint using the ATK verification code.
+- Parsing the returned certificate and checking that its ECDSA public key matches the locally protected private key before saving the public certificate.
+- Inspecting encrypted queue metadata without exposing signed payloads or signatures.
+
+Mock-based tests now cover the ATK test client route contract and error mapping. These routes do not call ATK automatically; a user/operator must explicitly invoke them. The ATK test environment has **not** been contacted from this development session. POS coupon submission, queue worker/reconciliation, certificate renewal/revocation, and printer integration remain incomplete. Production fiscalization is still hard-disabled.
