@@ -25,3 +25,9 @@ dotnet build pos-agent/Fiskalo.PosAgent.Core/Fiskalo.PosAgent.Core.csproj
 ```
 
 The ATK sample's monetary examples are not tax-calculation rules. Use the current ATK technical specification and category/unit catalogues for tax mapping.
+
+## Durable fiscal queue foundation
+
+The core now includes an encrypted-at-rest queue store with idempotency-key collision checks, immutable signed payload/signature fields, retry backoff, ATK transaction acceptance/rejection states and a 48-hour recovery deadline. Queue snapshots are written through a temporary file and atomically replaced. Expired queued records are moved to an explicit expired state when due items are queried.
+
+The queue deliberately requires an injected `IFiscalQueueProtector`. There is no plaintext fallback and no built-in OS protector yet. Until a Windows DPAPI / macOS Keychain / Linux Secret Service implementation is added and tested, the durable queue cannot be enabled by the host. The current host does not yet call this queue or submit fiscal documents.
