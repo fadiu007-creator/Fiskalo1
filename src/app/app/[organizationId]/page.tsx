@@ -35,7 +35,8 @@ export default function BusinessDashboard() {
   const [productForm, setProductForm] = useState({ name: "", sku: "", unit_price: "", vat_rate: "18", item_type: "product", stock_quantity: "0", track_stock: true });
   const [customerForm, setCustomerForm] = useState({ name: "", business_number: "", email: "", phone: "" });
   const [expenseForm, setExpenseForm] = useState({ description: "", supplier_name: "", category: "Tjetër", amount: "", vat_rate: "0", expense_date: new Date().toISOString().slice(0, 10) });
-  const [invoiceForm, setInvoiceForm] = useState({ customer_id: "", product_id: "", quantity: "1" });
+  const [invoiceForm, setInvoiceForm] = useState({ customer_id: "" });
+  const [invoiceLines, setInvoiceLines] = useState([{ product_id: "", quantity: "1" }]);
   const [members, setMembers] = useState<Member[]>([]);
   const [memberForm, setMemberForm] = useState({ email: "", role: "cashier" });
 
@@ -111,8 +112,10 @@ export default function BusinessDashboard() {
 
   async function createInvoice(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
-    const product = products.find((item) => item.id === invoiceForm.product_id);
-    if (!product) { setBusy(false); setError("Zgjidh një produkt ose shërbim."); return; }
+    const selectedLines = invoiceLines.map((line) => ({ line, product: products.find((item) => item.id === line.product_id) }));
+    if (selectedLines.some(({ line, product }) => !product || !(Number(line.quantity) > 0))) {
+      setBusy(false); setError("Zgjidh produktin dhe sasinë për secilin rresht."); return;
+    }
     const { data: auth } = await supabase.auth.getUser();
     if (!auth.user) { setBusy(false); setError("Sesioni ka skaduar."); return; }
     const { data: invoice, error: invoiceError } = await supabase.from("fiskalo_invoices").insert({
@@ -120,15 +123,15 @@ export default function BusinessDashboard() {
       issue_date: new Date().toISOString().slice(0, 10),
     }).select("id").single();
     if (invoiceError || !invoice) { setBusy(false); setError(invoiceError?.message ?? "Fatura nuk u krijua."); return; }
-    const { error: itemError } = await supabase.from("fiskalo_invoice_items").insert({
-      invoice_id: invoice.id, product_id: product.id, description: product.name, quantity: Number(invoiceForm.quantity),
-      unit_price: Number(product.unit_price), vat_rate: Number(product.vat_rate),
-    });
-    if (itemError) { setBusy(false); setError("Fatura draft u krijua, por artikulli nuk u shtua: " + itemError.message); await load(); return; }
+    const { error: itemError } = await supabase.from("fiskalo_invoice_items").insert(selectedLines.map(({ line, product }) => ({
+      invoice_id: invoice.id, product_id: product!.id, description: product!.name, quantity: Number(line.quantity),
+      unit_price: Number(product!.unit_price), vat_rate: Number(product!.vat_rate),
+    })));
+    if (itemError) { setBusy(false); setError("Fatura draft u krijua, por artikujt nuk u shtuan: " + itemError.message); await load(); return; }
     const { data: invoiceNumber, error: issueError } = await supabase.rpc("fiskalo_issue_invoice", { target_invoice: invoice.id });
     setBusy(false);
     if (issueError) { setError("Fatura u ruajt si draft, por nuk u lëshua: " + issueError.message); await load(); return; }
-    setInvoiceForm({ customer_id: "", product_id: "", quantity: "1" });
+    setInvoiceForm({ customer_id: "" }); setInvoiceLines([{ product_id: "", quantity: "1" }]);
     setNotice("Fatura u lëshua me numër " + invoiceNumber + "."); await load();
   }
 
@@ -232,9 +235,13 @@ export default function BusinessDashboard() {
       {tab === "invoices" && <section style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
         <form onSubmit={createInvoice} style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Lësho faturë</h2>
           <label className="field-label">Klienti<select value={invoiceForm.customer_id} onChange={(e) => setInvoiceForm({ ...invoiceForm, customer_id: e.target.value })} style={field}><option value="">Klient pa emër</option>{customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
-          <label className="field-label">Produkti / shërbimi<select required value={invoiceForm.product_id} onChange={(e) => setInvoiceForm({ ...invoiceForm, product_id: e.target.value })} style={field}><option value="">Zgjidh artikullin</option>{products.filter((p) => p.is_active).map((p) => <option key={p.id} value={p.id}>{p.name} — {fmt(Number(p.unit_price))}</option>)}</select></label>
-          <label className="field-label">Sasia<input required type="number" min="0.001" step="0.001" value={invoiceForm.quantity} onChange={(e) => setInvoiceForm({ ...invoiceForm, quantity: e.target.value })} style={field} /></label>
-          <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>Fatura numërohet automatikisht kur lëshohet. Pas lëshimit, të dhënat nuk mund të ndryshohen.</p>
+          <h3 style={{ fontSize: 13, margin: "16px 0 6px" }}>Artikujt e faturës</h3>
+          {invoiceLines.map((line, index) => <div key={index} style={{ border: "1px solid var(--line)", borderRadius: 9, padding: 10, marginBottom: 9 }}>
+            <label className="field-label">Produkti / shërbimi<select required value={line.product_id} onChange={(e) => setInvoiceLines((current) => current.map((row, i) => i === index ? { ...row, product_id: e.target.value } : row))} style={field}><option value="">Zgjidh artikullin</option>{products.filter((p) => p.is_active).map((p) => <option key={p.id} value={p.id}>{p.name} — {fmt(Number(p.unit_price))}</option>)}</select></label>
+            <div style={{ display: "flex", gap: 8, alignItems: "end" }}><label className="field-label" style={{ flex: 1 }}>Sasia<input required type="number" min="0.001" step="0.001" value={line.quantity} onChange={(e) => setInvoiceLines((current) => current.map((row, i) => i === index ? { ...row, quantity: e.target.value } : row))} style={field} /></label>{invoiceLines.length > 1 && <button type="button" onClick={() => setInvoiceLines((current) => current.filter((_, i) => i !== index))} style={secondary}>Hiq</button>}</div>
+          </div>)}
+          <button type="button" onClick={() => setInvoiceLines((current) => [...current, { product_id: "", quantity: "1" }])} style={{ ...secondary, width: "100%" }}>+ Shto artikull</button>
+          <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>Numri i faturës caktohet automatikisht gjatë lëshimit. Stoku kontrollohet para lëshimit dhe zbritet në mënyrë atomike. Faturat e lëshuara nuk mund të ndryshohen.</p>
           <button disabled={busy || products.length === 0} style={{ ...primary, width: "100%" }}>{busy ? "Duke ruajtur..." : "Krijo dhe lësho faturën"}</button>
           {!products.length && <small>Shto së pari një produkt ose shërbim.</small>}
         </form>
