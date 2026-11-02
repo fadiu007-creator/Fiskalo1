@@ -222,6 +222,34 @@ app.MapPost(AtkSignCsrPath, async (AtkSignCsrRequest request, HttpContext contex
         return Results.Problem("ATK response was not a valid certificate matching the locally protected POS key.", statusCode: StatusCodes.Status502BadGateway);
     }
 });
+static X509Certificate2 ParseCertificate(string certificate)
+{
+    if (string.IsNullOrWhiteSpace(certificate))
+        throw new CryptographicException("ATK returned an empty certificate.");
+    if (certificate.Contains("-----BEGIN CERTIFICATE-----", StringComparison.Ordinal))
+        return X509Certificate2.CreateFromPem(certificate);
+    try
+    {
+        return new X509Certificate2(Convert.FromBase64String(certificate));
+    }
+    catch (FormatException ex)
+    {
+        throw new CryptographicException("ATK certificate encoding is not PEM or Base64 DER.", ex);
+    }
+}
+
+static bool SamePublicKey(ECDsa first, ECDsa second)
+{
+    var a = first.ExportParameters(false);
+    var b = second.ExportParameters(false);
+    return a.Curve.Oid.Value == b.Curve.Oid.Value &&
+        a.Q.X is not null && a.Q.Y is not null &&
+        b.Q.X is not null && b.Q.Y is not null &&
+        CryptographicOperations.FixedTimeEquals(a.Q.X, b.Q.X) &&
+        CryptographicOperations.FixedTimeEquals(a.Q.Y, b.Q.Y);
+}
+
+
 app.Run();
 
 app.Run();
@@ -269,30 +297,3 @@ internal sealed record AtkSignCsrRequest(
     [property: JsonPropertyName("verificationCode")] string VerificationCode,
     [property: JsonPropertyName("posId")] ulong PosId,
     [property: JsonPropertyName("applicationId")] ulong ApplicationId);
-
-static X509Certificate2 ParseCertificate(string certificate)
-{
-    if (string.IsNullOrWhiteSpace(certificate))
-        throw new CryptographicException("ATK returned an empty certificate.");
-    if (certificate.Contains("-----BEGIN CERTIFICATE-----", StringComparison.Ordinal))
-        return X509Certificate2.CreateFromPem(certificate);
-    try
-    {
-        return new X509Certificate2(Convert.FromBase64String(certificate));
-    }
-    catch (FormatException ex)
-    {
-        throw new CryptographicException("ATK certificate encoding is not PEM or Base64 DER.", ex);
-    }
-}
-
-static bool SamePublicKey(ECDsa first, ECDsa second)
-{
-    var a = first.ExportParameters(false);
-    var b = second.ExportParameters(false);
-    return a.Curve.Oid.Value == b.Curve.Oid.Value &&
-        a.Q.X is not null && a.Q.Y is not null &&
-        b.Q.X is not null && b.Q.Y is not null &&
-        CryptographicOperations.FixedTimeEquals(a.Q.X, b.Q.X) &&
-        CryptographicOperations.FixedTimeEquals(a.Q.Y, b.Q.Y);
-}
