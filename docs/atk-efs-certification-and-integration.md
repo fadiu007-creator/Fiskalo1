@@ -138,12 +138,12 @@ The sample code is a protocol reference, not a substitute for the current ATK 20
 |---|---|---|
 | Business onboarding and NUI | Partial | Add fiscalization number and ATK installation details |
 | Branch model | Basic branch exists | Add ATK unit identifiers and branch/POS registration workflow |
-| POS installations | Missing | Add POS registry and one secure key/certificate per installation |
+| POS installations | Test-only POS registry exists | Build local Agent and secure per-device key/certificate lifecycle |
 | Developer SEF code | Missing | Obtain after provider/solution registration; configure release metadata |
-| Fiscal coupon model | Missing | Implement ATK-specific Protobuf models and validation |
-| Digital signing | Missing | Implement in local POS Agent; never in shared cloud storage |
-| ATK real-time API | Missing | Integrate test endpoints and response handling |
-| QR fiscal coupon | Missing | Generate only from valid ATK-defined payload/signature |
+| Fiscal coupon model | Protobuf models and fiscal-document storage exist | Map Fiskalo sales to validated ATK payloads and tax groups |
+| Digital signing | P-256 / CSR / ECDSA protocol core implemented | Connect to OS-protected local key storage and test certificates |
+| ATK real-time API | Test-only verify / signcsr / POS client methods implemented, not exercised | Run authorized ATK tests and verify responses |
+| QR fiscal coupon | Citizen QR payload helper implemented | Validate against ATK test flow and render on receipt |
 | Offline queue | Missing | Local encrypted queue, retry, idempotency and 48-hour controls |
 | B2B tax invoices | Internal workflow exists | Validate legal fields, document semantics and reporting |
 | B2C POS receipts | Missing | Build dedicated POS/coupon workflow |
@@ -232,6 +232,7 @@ The following is now implemented in Fiskalo's data model and business UI:
 - Fiscal document storage model for Sale / Cancel / Return, business-wide coupon uniqueness, source-invoice linkage, signed Protobuf payloads, QR payload, ATK transaction ID and response.
 - Append-only fiscal event history.
 - Tenant-safe composite foreign keys and RLS. Fiscal documents/events are read-only to ordinary authenticated users; a future trusted local-agent/backend channel must perform submissions and state transitions.
+- Explicit database grants were checked and tightened after detecting shared-project default ACL grants: ATK fiscal documents/events are SELECT-only for authenticated users; POS registry is SELECT/INSERT only; taxpayer profile is SELECT/INSERT/UPDATE; anonymous access is denied; provider settings are inaccessible to customer roles. RLS remains enabled on every ATK table.
 - Provider certification settings are private to the platform and not exposed to customer accounts. Production cannot be enabled unless the provider profile is marked certified.
 
 The new `pos-agent/Fiskalo.PosAgent.Core` library now contains the ATK Protobuf schema/models, P-256 key and CSR generation helpers, exact money-unit conversion, Protobuf Base64 serialization, ECDSA signing, citizen QR payload construction, and test-only HTTP client methods for `/ca/verify`, `/ca/signcsr` and `/pos/coupon`.
