@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 
 type Org = { id: string; legal_name: string; municipality: string; nui: string; vat_registered: boolean; fiscalization_status: string };
 type Product = { id: string; name: string; sku: string | null; unit_price: number; vat_rate: number; stock_quantity: number; item_type: string; track_stock: boolean; is_active: boolean };
-type Customer = { id: string; name: string; business_number: string | null; email: string | null; phone: string | null };
+type Customer = { id: string; name: string; business_number: string | null; email: string | null; phone: string | null; address: string | null };
 type Invoice = { id: string; invoice_number: string | null; status: string; issue_date: string; total: number; vat_total: number; fiscalization_status: string; customer_id: string | null; payment_method: string; payment_status: string };
 type Expense = { id: string; description: string; supplier_name: string | null; category: string; amount: number; vat_rate: number; expense_date: string };
 type Member = { member_user_id: string; member_email: string; member_role: string; joined_at: string };
@@ -33,7 +33,7 @@ export default function BusinessDashboard() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [productForm, setProductForm] = useState({ name: "", sku: "", unit_price: "", vat_rate: "18", item_type: "product", stock_quantity: "0", track_stock: true });
-  const [customerForm, setCustomerForm] = useState({ name: "", business_number: "", email: "", phone: "" });
+  const [customerForm, setCustomerForm] = useState({ name: "", business_number: "", email: "", phone: "", address: "" });
   const [expenseForm, setExpenseForm] = useState({ description: "", supplier_name: "", category: "Tjetër", amount: "", vat_rate: "0", expense_date: new Date().toISOString().slice(0, 10) });
   const [invoiceForm, setInvoiceForm] = useState({ customer_id: "", payment_method: "cash" });
   const [invoiceLines, setInvoiceLines] = useState([{ product_id: "", quantity: "1" }]);
@@ -99,11 +99,11 @@ export default function BusinessDashboard() {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
     const { error: saveError } = await supabase.from("fiskalo_customers").insert({
       organization_id: organizationId, name: customerForm.name.trim(), business_number: customerForm.business_number.trim() || null,
-      email: customerForm.email.trim() || null, phone: customerForm.phone.trim() || null,
+      email: customerForm.email.trim() || null, phone: customerForm.phone.trim() || null, address: customerForm.address.trim() || null,
     });
     setBusy(false);
     if (saveError) { setError(saveError.message); return; }
-    setCustomerForm({ name: "", business_number: "", email: "", phone: "" }); setNotice("Klienti u ruajt."); await load();
+    setCustomerForm({ name: "", business_number: "", email: "", phone: "", address: "" }); setNotice("Klienti u ruajt."); await load();
   }
 
   async function addExpense(event: React.FormEvent<HTMLFormElement>) {
@@ -246,9 +246,10 @@ export default function BusinessDashboard() {
           <label className="field-label">NUI / numri i biznesit<input value={customerForm.business_number} onChange={(e) => setCustomerForm({ ...customerForm, business_number: e.target.value })} style={field} /></label>
           <label className="field-label">Email<input type="email" value={customerForm.email} onChange={(e) => setCustomerForm({ ...customerForm, email: e.target.value })} style={field} /></label>
           <label className="field-label">Telefoni<input value={customerForm.phone} onChange={(e) => setCustomerForm({ ...customerForm, phone: e.target.value })} style={field} /></label>
+          <label className="field-label">Adresa<input value={customerForm.address} onChange={(e) => setCustomerForm({ ...customerForm, address: e.target.value })} style={field} /></label>
           <button disabled={busy} style={{ ...primary, width: "100%", marginTop: 10 }}>Ruaj klientin</button>
         </form>
-        <section style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Klientët ({customers.length})</h2><div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Emri</th><th>NUI</th><th>Email</th><th>Telefoni</th></tr></thead><tbody>{customers.map((c) => <tr key={c.id}><td>{c.name}</td><td>{c.business_number || "—"}</td><td>{c.email || "—"}</td><td>{c.phone || "—"}</td></tr>)}{!customers.length && <tr><td colSpan={4}>Nuk ka klientë ende.</td></tr>}</tbody></table></div></section>
+        <section style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Klientët ({customers.length})</h2><div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Emri</th><th>NUI</th><th>Email</th><th>Telefoni</th><th>Adresa</th></tr></thead><tbody>{customers.map((c) => <tr key={c.id}><td>{c.name}</td><td>{c.business_number || "—"}</td><td>{c.email || "—"}</td><td>{c.phone || "—"}</td><td>{c.address || "—"}</td></tr>)}{!customers.length && <tr><td colSpan={5}>Nuk ka klientë ende.</td></tr>}</tbody></table></div></section>
       </section>}
 
       {tab === "invoices" && <section style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
