@@ -228,7 +228,7 @@ export default function App() {
           <Text style={{ color: "#8a5a18", fontSize: 11 }}>Mos e dërgo çelësin privat askund. Ky modul krijon çelës lokal Android Keystore, por certifikata ATK dhe dërgimi i kuponëve ende nuk janë lidhur. Konfirmo me ATK pranueshmërinë e ruajtjes dhe pajisjes para përdorimit zyrtar.</Text>
         </View>}
       </View>
-        <TextInput placeholder="Kërko produkt / SKU" value={search} onChangeText={setSearch} style={inputStyle} />
+        <View style={{ paddingHorizontal: 12, paddingTop: 10 }}><TextInput placeholder="Kërko produkt / SKU" value={search} onChangeText={setSearch} style={inputStyle} /></View>
       </View>
       <View style={{ flex: 1 }}>
         <FlatList
