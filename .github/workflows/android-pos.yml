@@ -42,9 +42,10 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
       - name: Install JavaScript dependencies
         run: npm install --no-audit --no-fund
+      - name: Accept Android SDK licences
+        run: yes | sdkmanager --licenses
       - name: Install Android SDK platform
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - name: Generate native Android project
