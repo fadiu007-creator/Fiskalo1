@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, SafeAreaView, ScrollView, Share, StatusBar, Text, TextInput, TouchableOpacity, View } from "react-native";
 import FiskaloAtkCrypto from "fiskalo-atk-crypto";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
+import * as SecureStore from "expo-secure-store";
 import { supabase } from "./src/supabase";
 
 type Org = { organization_id: string; role: string; fiskalo_organizations: { legal_name: string; municipality: string; nui: string } | null };
@@ -147,10 +148,19 @@ export default function App() {
     setAtkBusy(true);
     try {
       const alias = organizationId + "." + atkBranchId + "." + atkPosId;
+      const cacheKey = "fiskalo-atk-csr:" + alias;
+      const cached = await SecureStore.getItemAsync(cacheKey);
+      if (cached) {
+        const previous = JSON.parse(cached) as { csrPem: string; publicKeySha256: string; secureHardwareBacked: boolean };
+        setAtkCsr(previous.csrPem); setAtkFingerprint(previous.publicKeySha256); setAtkHardwareBacked(previous.secureHardwareBacked);
+        setMessage("U rikthye CSR-ja ekzistuese. Çelësi privat mbetet në Android Keystore.");
+        return;
+      }
       if (await FiskaloAtkCrypto.hasKey(alias)) {
-        throw new Error("Ky instalim ka tashmë çelës Android Keystore. Përdor CSR-në e ruajtur më parë ose kërko ri-regjistrim nga ATK; mos krijo çelës të ri pa arsye.");
+        throw new Error("Ky instalim ka çelës Android Keystore, por CSR-ja lokale nuk u gjet. Mos fshi ose zëvendëso çelësin; kontakto mbështetjen për rikuperim të sigurt.");
       }
       const result = await FiskaloAtkCrypto.createCsr(alias, organizationName, organizationNui, atkBranchId, atkPosId);
+      await SecureStore.setItemAsync(cacheKey, JSON.stringify(result));
       setAtkCsr(result.csrPem);
       setAtkFingerprint(result.publicKeySha256);
       setAtkHardwareBacked(result.secureHardwareBacked);
