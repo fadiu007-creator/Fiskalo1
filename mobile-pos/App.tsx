@@ -195,7 +195,8 @@ export default function App() {
           <Text style={{ color: ink }}>{paymentConfirmed ? "☑" : "□"} Konfirmoj se pagesa është pranuar</Text>
         </TouchableOpacity>}
         <Action label={busy ? "Duke regjistruar..." : paymentMethod === "credit" ? "Lësho faturën" : "Përfundo shitjen"} disabled={busy || !cart.length} onPress={() => void checkout()} />
-        <Action label="Ndërro biznesin / dil" secondary onPress={() => { setOrganizationId(""); setCart([]); }} />
+        <Action label="Ndërro biznesin" secondary onPress={() => { setOrganizationId(""); setCart([]); }} />
+        <Action label="Dil nga llogaria" secondary onPress={() => void signOut()} />
       </View>
     </View>}
   </SafeAreaView>;
