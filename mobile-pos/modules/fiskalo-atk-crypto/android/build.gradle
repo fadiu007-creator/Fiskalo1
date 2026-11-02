@@ -1,0 +1,18 @@
+apply plugin: 'com.android.library'
+apply plugin: 'org.jetbrains.kotlin.android'
+
+group = 'com.fiskalo.atkcrypto'
+version = '0.1.0'
+
+android {
+  namespace 'com.fiskalo.atkcrypto'
+  compileSdkVersion 35
+
+  defaultConfig {
+    minSdkVersion 23
+  }
+}
+
+dependencies {
+  implementation project(':expo-modules-core')
+}
