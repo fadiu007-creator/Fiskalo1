@@ -220,7 +220,7 @@ export default function BusinessDashboard() {
         <section style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Faturat e fundit</h2><InvoiceTable invoices={invoices.slice(0, 5)} fmt={fmt} customers={customers} organizationId={organizationId} /></section>
       </>}
 
-      {tab === "products" && <section style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
+      {tab === "products" && <section className="module-grid" style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
         <form onSubmit={addProduct} style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Shto produkt / shërbim</h2>
           <label className="field-label">Emri<input required value={productForm.name} onChange={(e) => setProductForm({ ...productForm, name: e.target.value })} style={field} /></label>
           <label className="field-label">Kodi / SKU<input value={productForm.sku} onChange={(e) => setProductForm({ ...productForm, sku: e.target.value })} style={field} /></label>
