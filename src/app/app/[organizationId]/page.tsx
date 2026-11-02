@@ -301,8 +301,9 @@ function InvoiceTable({ invoices, fmt, customers }: { invoices: Invoice[]; fmt: 
 
 
 
+
 function downloadCsv(filename: string, rows: (string | number)[][]) {
-  const csv = rows.map((row) => row.map((cell) => \`"\${String(cell).replace(/"/g, '""')}"\`).join(",")).join("\r\n");
+  const csv = rows.map((row) => row.map((cell) => '"' + String(cell).replace(/"/g, '""') + '"').join(",")).join("\r\n");
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
