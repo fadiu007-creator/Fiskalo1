@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using Fiskalo.PosAgent.Core.Atk;
 using Fiskalo.PosAgent.Core.Queue;
 using Fiskalo.PosAgent.Core.Security;
+using Atk;
 
 const string AgentVersion = "0.1.0";
 const string PairPath = "/api/v1/pair";
@@ -15,6 +16,7 @@ const string CsrPath = "/api/v1/keys/csr";
 const string QueuePath = "/api/v1/queue";
 const string AtkVerifyPath = "/api/v1/atk/test/verify";
 const string AtkSignCsrPath = "/api/v1/atk/test/sign-csr";
+const string AtkCouponPath = "/api/v1/atk/test/coupon";
 
 var allowedOrigins = (Environment.GetEnvironmentVariable("FISKALO_ALLOWED_ORIGINS")
     ?? "https://fiskalo.shqiptare.workers.dev")
@@ -30,6 +32,7 @@ var keyPath = Path.Combine(dataDirectory, "pos-signing-key.dpapi");
 var queuePath = Path.Combine(dataDirectory, "fiscal-queue.bin");
 var certificatePath = Path.Combine(dataDirectory, "atk-test-certificate.pem");
 var keyStore = new WindowsDpapiEcdsaKeyStore();
+var queueStore = new FiscalQueueStore(queuePath, new WindowsDpapiFiscalQueueProtector());
 
 Console.WriteLine("Fiskalo POS Agent " + AgentVersion);
 Console.WriteLine("Local endpoint: http://127.0.0.1:17843");
@@ -174,7 +177,7 @@ app.MapGet(QueuePath, async (HttpContext context, CancellationToken cancellation
     if (!OperatingSystem.IsWindows()) return Results.Problem("Local encrypted queue currently requires Windows DPAPI.", statusCode: StatusCodes.Status501NotImplemented);
     try {
         var store = new FiscalQueueStore(queuePath, new WindowsDpapiFiscalQueueProtector());
-        var items = await store.GetAllAsync(cancellationToken);
+        var items = await queueStore.GetAllAsync(cancellationToken);
         return Results.Ok(new { count = items.Count, items = items.Select(item => new { item.IdempotencyKey, item.DocumentType, item.CreatedAtUtc, item.RecoveryDeadlineUtc, item.NextAttemptAtUtc, status = item.Status.ToString(), item.AttemptCount, item.LastError, item.AtkTransactionId }) });
     } catch (Exception ex) when (ex is CryptographicException or IOException or UnauthorizedAccessException) {
         return Results.Problem("Unable to read the protected local fiscal queue.", statusCode: StatusCodes.Status500InternalServerError);
@@ -251,6 +254,46 @@ static bool SamePublicKey(ECDsa first, ECDsa second)
 }
 
 
+app.MapPost(AtkCouponPath, async (AtkCouponRequest request, HttpContext context, CancellationToken cancellationToken) => {
+    if (!HasValidSession(context, sessionToken)) return Results.Unauthorized();
+    if (!OperatingSystem.IsWindows()) return Results.Problem("ATK coupon signing and encrypted queue currently require Windows DPAPI.", statusCode: StatusCodes.Status501NotImplemented);
+    if (string.IsNullOrWhiteSpace(request.IdempotencyKey)) return Results.BadRequest(new { error = "idempotencyKey is required." });
+    if (!File.Exists(certificatePath) || !File.Exists(keyPath)) return Results.Conflict(new { error = "test_certificate_and_local_key_required", fiscalizationEnabled = false });
+    try {
+        using var key = keyStore.LoadOrCreate(keyPath);
+        using var certificate = X509Certificate2.CreateFromPem(await File.ReadAllTextAsync(certificatePath, cancellationToken));
+        if (DateTime.UtcNow < certificate.NotBefore.ToUniversalTime() || DateTime.UtcNow > certificate.NotAfter.ToUniversalTime()) return Results.Conflict(new { error = "test_certificate_not_current" });
+        using var certificateKey = certificate.GetECDsaPublicKey();
+        if (certificateKey is null || !SamePublicKey(key, certificateKey)) return Results.Conflict(new { error = "certificate_key_mismatch" });
+        var coupon = PosCouponBuilder.Build(request.Coupon);
+        var expectedIdempotencyKey = coupon.BusinessId + ":" + coupon.BranchId + ":" + coupon.PosId + ":" + coupon.CouponId;
+        if (!string.Equals(request.IdempotencyKey, expectedIdempotencyKey, StringComparison.Ordinal)) return Results.BadRequest(new { error = "idempotencyKey_must_match_business_branch_pos_coupon_ids", expected = expectedIdempotencyKey });
+        var signed = AtkCouponSigner.SignPosCoupon(coupon, key);
+        var existing = (await queueStore.GetAllAsync(cancellationToken)).SingleOrDefault(x => x.IdempotencyKey == request.IdempotencyKey);
+        if (existing?.Status == FiscalQueueStatus.Accepted) return Results.Ok(new { status = "accepted", transactionId = existing.AtkTransactionId, duplicateRequest = true, environment = "ATK TEST" });
+        if (existing is not null && existing.Status != FiscalQueueStatus.Queued) return Results.Conflict(new { status = existing.Status.ToString(), error = "document_requires_reconciliation_or_operator_review", existing.LastError });
+        if (existing is null) await queueStore.EnqueueAsync(request.IdempotencyKey, coupon.Type.ToString(), signed.DetailsBase64, signed.SignatureBase64, cancellationToken: cancellationToken);
+        await queueStore.MarkSubmittingAsync(request.IdempotencyKey, cancellationToken);
+        try {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+            var result = await new AtkTestClient(http).SubmitSignedPosCouponAsync(signed, cancellationToken);
+            await queueStore.MarkAcceptedAsync(request.IdempotencyKey, result.TransactionId.ToString(), cancellationToken);
+            return Results.Ok(new { status = "accepted", transactionId = result.TransactionId, message = result.Message, environment = "ATK TEST", productionEnabled = false });
+        } catch (AtkApiException ex) when ((int)ex.StatusCode >= 400 && (int)ex.StatusCode < 500) {
+            await queueStore.MarkRejectedAsync(request.IdempotencyKey, "ATK rejected the test coupon with HTTP " + (int)ex.StatusCode, cancellationToken);
+            return Results.Problem("ATK rejected the test coupon (HTTP " + (int)ex.StatusCode + "). Review the payload and ATK response before creating a corrected test document.", statusCode: StatusCodes.Status422UnprocessableEntity);
+        } catch (Exception ex) when (ex is AtkApiException or HttpRequestException or TaskCanceledException) {
+            await queueStore.MarkNeedsReconciliationAsync(request.IdempotencyKey, "Submission outcome is uncertain. Check ATK test records before any retry.", cancellationToken);
+            return Results.Problem("ATK submission outcome is uncertain. The document is locked for reconciliation to prevent duplicate fiscalization.", statusCode: StatusCodes.Status502BadGateway);
+        }
+    } catch (ArgumentException ex) {
+        return Results.BadRequest(new { error = ex.Message });
+    } catch (InvalidOperationException ex) {
+        return Results.Conflict(new { error = ex.Message });
+    } catch (CryptographicException) {
+        return Results.Problem("Local test certificate or signing key could not be validated.", statusCode: StatusCodes.Status500InternalServerError);
+    }
+});
 app.Run();
 
 static bool HasValidSession(HttpContext context, string? expectedToken)
@@ -296,3 +339,7 @@ internal sealed record AtkSignCsrRequest(
     [property: JsonPropertyName("verificationCode")] string VerificationCode,
     [property: JsonPropertyName("posId")] ulong PosId,
     [property: JsonPropertyName("applicationId")] ulong ApplicationId);
+
+internal sealed record AtkCouponRequest(
+    [property: JsonPropertyName("idempotencyKey")] string IdempotencyKey,
+    [property: JsonPropertyName("coupon")] PosCouponInput Coupon);
