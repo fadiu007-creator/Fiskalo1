@@ -104,6 +104,24 @@ export default function BusinessDashboard() {
 
   useEffect(() => { void load(); }, [load]);
 
+  useEffect(() => {
+    const savedToken = window.sessionStorage.getItem("fiskalo-pos-agent-session");
+    if (!savedToken) return;
+    setAgentToken(savedToken);
+    fetch("http://127.0.0.1:17843/api/v1/status", { headers: { Authorization: "Bearer " + savedToken } })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.detail || "Sesioni lokal i POS Agent nuk është më aktiv.");
+        setAgentStatus(data);
+      })
+      .catch((e) => {
+        window.sessionStorage.removeItem("fiskalo-pos-agent-session");
+        setAgentToken("");
+        setAgentStatus(null);
+        setAgentError(e instanceof Error ? e.message : "Nuk u rikthye lidhja me POS Agent.");
+      });
+  }, []);
+
   async function saveAtkProfile(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
     const fiscalizationNumber = atkProfileForm.fiscalization_number.trim();
@@ -161,6 +179,7 @@ export default function BusinessDashboard() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.sessionToken) throw new Error(data.message || "Nuk u lidh POS Agent. Kontrollo kodin dhe sigurohu që programi po punon në këtë kompjuter.");
       setAgentToken(data.sessionToken);
+      window.sessionStorage.setItem("fiskalo-pos-agent-session", data.sessionToken);
       setAgentPairingCode("");
       const statusResponse = await fetch("http://127.0.0.1:17843/api/v1/status", {
         headers: { Authorization: "Bearer " + data.sessionToken },
@@ -171,6 +190,7 @@ export default function BusinessDashboard() {
       setAgentNotice("POS Agent u lidh në këtë sesion të shfletuesit.");
     } catch (e) {
       setAgentToken(""); setAgentStatus(null);
+      window.sessionStorage.removeItem("fiskalo-pos-agent-session");
       setAgentError(e instanceof Error ? e.message : "Gabim gjatë lidhjes me POS Agent.");
     } finally { setAgentBusy(false); }
   }
@@ -226,6 +246,8 @@ export default function BusinessDashboard() {
   }
 
   async function signOut() {
+    window.sessionStorage.removeItem("fiskalo-pos-agent-session");
+    setAgentToken("");
     await supabase.auth.signOut();
     router.replace("/login");
     router.refresh();
@@ -582,7 +604,7 @@ export default function BusinessDashboard() {
       {tab === "atk" && <section style={{ display: "grid", gap: 14 }}>
         <section style={{ ...panel, borderColor: "#d7b56d" }}>
           <h2 style={{ marginTop: 0, fontSize: 19 }}>Lidhja me ATK — faza e testimit</h2>
-          <p style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.6 }}>Këtu përgatiten të dhënat e tatimpaguesit dhe pajisjeve POS për integrimin testues. Ruajtja e këtyre të dhënave në Fiskalo nuk kryen kërkesë ndaj ATK-së, nuk gjeneron certifikatë dhe nuk lëshon kupon fiskal.</p>
+          <p style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.6 }}>Këtu përgatiten të dhënat e tatimpaguesit dhe pajisjeve POS për integrimin testues. Ruajtja e të dhënave nuk dërgon kërkesë. Veprimet “Verifiko ATK” dhe “Kërko certifikatën” dërgojnë kërkesa reale vetëm në mjedisin TEST të ATK-së.</p>
           <p style={{ fontSize: 13, marginBottom: 0 }}><strong>Statusi aktual:</strong> Fiskalo nuk është certifikuar. Mjedisi i prodhimit është i çaktivizuar.</p>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 12, fontSize: 13 }}>
             <a href="https://apps.atk-ks.org/sefaplikimi/" target="_blank" rel="noreferrer" style={{ color: "var(--brand)", fontWeight: 700 }}>Portali zyrtar SEF</a>
@@ -631,7 +653,7 @@ export default function BusinessDashboard() {
             {atkPosInstallations.map((pos) => <tr key={pos.id}><td>{pos.label}<small>{pos.location || "Lokacioni nuk është shënuar"}</small></td><td>{pos.atk_branch_id}</td><td>{pos.pos_id}</td><td>{pos.environment === "test" ? "Test" : "Prodhim"}</td><td>{({ unregistered: "Pa regjistruar në ATK", verification_pending: "Verifikimi në pritje", certificate_pending: "Certifikata në pritje", active: "Aktive", suspended: "Pezulluar", revoked: "Revokuar" } as Record<string,string>)[pos.status] || pos.status}</td><td>{pos.certificate_serial ? pos.certificate_serial : "Nuk ka certifikatë"}</td><td><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}><button type="button" disabled={agentBusy || !agentToken || !atkApplicationId} onClick={() => void verifyAtkPos(pos)} style={secondary}>Verifiko ATK</button><button type="button" disabled={agentBusy || !agentToken || !agentVerifications[pos.id] || !atkApplicationId} onClick={() => void requestAtkTestCertificate(pos)} style={secondary}>Kërko certifikatën</button></div>{agentVerifications[pos.id] && <small>Verifikimi u krye në këtë sesion.</small>}</td></tr>)}
             {!atkPosInstallations.length && <tr><td colSpan={7}>Nuk ka pajisje POS të regjistruara.</td></tr>}
           </tbody></table></div>
-          <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>Lista paraqet vetëm konfigurimin lokal të Fiskalo-s. Verifikimi, nënshkrimi i CSR-së dhe lëshimi i certifikatës nga ATK nuk janë kryer.</p>
+          <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>Lista paraqet konfigurimin e POS-it në Fiskalo. Veprimet testuese aktivizohen vetëm pasi të lidhësh POS Agent-in dhe të vendosësh application ID-në e dhënë nga ATK.</p>
         </section>
       </section>}
       {tab === "reports" && <section style={{ display: "grid", gap: 14 }}>
