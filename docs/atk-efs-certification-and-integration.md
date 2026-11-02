@@ -141,10 +141,10 @@ The sample code is a protocol reference, not a substitute for the current ATK 20
 | POS installations | Test-only POS registry exists | Build local Agent and secure per-device key/certificate lifecycle |
 | Developer SEF code | Missing | Obtain after provider/solution registration; configure release metadata |
 | Fiscal coupon model | Protobuf models and fiscal-document storage exist | Map Fiskalo sales to validated ATK payloads and tax groups |
-| Digital signing | P-256 / CSR / ECDSA protocol core implemented | Connect to OS-protected local key storage and test certificates |
+| Digital signing | P-256 / CSR / ECDSA core + Windows DPAPI key-store primitive | Host integration, certificate import/renewal/revocation and ATK test certificates |
 | ATK real-time API | Test-only verify / signcsr / POS client methods implemented, not exercised | Run authorized ATK tests and verify responses |
 | QR fiscal coupon | Citizen QR payload helper implemented | Validate against ATK test flow and render on receipt |
-| Offline queue | Missing | Local encrypted queue, retry, idempotency and 48-hour controls |
+| Offline queue | Encrypted queue abstraction + Windows DPAPI protector implemented in core | Host integration, non-Windows protectors, automated tests, recovery operations and ATK reconciliation |
 | B2B tax invoices | Internal workflow exists | Validate legal fields, document semantics and reporting |
 | B2C POS receipts | Missing | Build dedicated POS/coupon workflow |
 | Returns/cancellations | Missing | Linked immutable fiscal correction flow |
@@ -244,6 +244,6 @@ The new `pos-agent/Fiskalo.PosAgent.Core` library now contains the ATK Protobuf 
 
 The repository now contains an initial runnable local host at `pos-agent/Fiskalo.PosAgent.Host`. It binds only to loopback (`127.0.0.1:17843`), checks the Host header, allowlists exact browser origins, uses a one-time console pairing code and an in-memory bearer session, rate-limits failed pairing attempts, and exposes authenticated status. It explicitly reports fiscalization disabled. Pairing/session state is memory-only; unattended service installation and persistent OS-protected credentials are not complete.
 
-The .NET core also contains a durable encrypted queue abstraction. It stores signed payloads and signatures only after an injected `IFiscalQueueProtector` encrypts the complete queue snapshot, uses atomic file replacement, enforces idempotency-key consistency, schedules exponential retry, records accepted/rejected states and expires entries after the 48-hour recovery window. **No concrete OS protector has been implemented yet**, so the host must not enable the queue until DPAPI/Keychain/Secret Service protection is available and tested.
+The .NET core also contains a durable encrypted queue abstraction. It stores signed payloads and signatures only after an injected `IFiscalQueueProtector` encrypts the complete queue snapshot, uses atomic file replacement, enforces idempotency-key consistency, schedules exponential retry, records accepted/rejected states and expires entries after the 48-hour recovery window. A Windows `CurrentUser` DPAPI queue protector and DPAPI-backed P-256 private-key store are implemented in the core. Both fail closed off Windows. macOS Keychain and Linux Secret Service providers, automated tests, and host integration remain pending.
 
 These milestones are local engineering foundations only. No ATK request was sent, no certificate was issued, and no ATK transaction or fiscal receipt has been verified. The POS Agent is not ready for unattended or customer production use.
