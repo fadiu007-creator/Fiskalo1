@@ -11,6 +11,7 @@ type FiskaloAtkCryptoModuleType = {
   hasKey(alias: string): Promise<boolean>;
   createCsr(alias: string, businessName: string, nui: string, branchId: string, posId: string): Promise<AtkAndroidKeyResult>;
   signBase64(alias: string, base64Payload: string): Promise<string>;
+  matchesCertificate(alias: string, certificatePem: string): Promise<boolean>;
   deleteKey(alias: string): Promise<boolean>;
 };
 
