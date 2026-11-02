@@ -50,12 +50,43 @@ public sealed class FiscalQueueStoreTests
     {
         using var fixture = new QueueFixture();
         await fixture.Store.EnqueueAsync("sale-103", "Sale", "cGF5bG9hZA==", "c2ln");
+        await fixture.Store.MarkSubmittingAsync("sale-103");
         var accepted = await fixture.Store.MarkAcceptedAsync("sale-103", "ATK-TX-123");
 
         Assert.Equal(FiscalQueueStatus.Accepted, accepted.Status);
         Assert.Equal("ATK-TX-123", accepted.AtkTransactionId);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             fixture.Store.MarkRejectedAsync("sale-103", "late rejection"));
+    }
+
+
+    [Fact]
+    public async Task InterruptedSubmissionRequiresReconciliationAndIsNotDueForRetry()
+    {
+        using var fixture = new QueueFixture();
+        await fixture.Store.EnqueueAsync("sale-105", "Sale", "cGF5bG9hZA==", "c2ln");
+        await fixture.Store.MarkSubmittingAsync("sale-105");
+
+        var recovered = await fixture.Store.RecoverInterruptedSubmissionsAsync();
+        var item = Assert.Single(await fixture.Store.GetAllAsync());
+
+        Assert.Equal(1, recovered);
+        Assert.Equal(FiscalQueueStatus.NeedsReconciliation, item.Status);
+        Assert.Empty(await fixture.Store.GetDueAsync());
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            fixture.Store.MarkSubmittingAsync("sale-105"));
+    }
+
+    [Fact]
+    public async Task UncertainSubmissionCannotBeAutomaticallyRetried()
+    {
+        using var fixture = new QueueFixture();
+        await fixture.Store.EnqueueAsync("sale-106", "Sale", "cGF5bG9hZA==", "c2ln");
+        await fixture.Store.MarkSubmittingAsync("sale-106");
+        var item = await fixture.Store.MarkNeedsReconciliationAsync("sale-106", "Connection dropped after request.");
+
+        Assert.Equal(FiscalQueueStatus.NeedsReconciliation, item.Status);
+        Assert.Empty(await fixture.Store.GetDueAsync());
     }
 
     [Fact]
