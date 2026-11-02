@@ -116,7 +116,7 @@ private object Der {
     return tagged(0x02, body)
   }
   fun subject(name: String, nui: String, branch: String, pos: String): ByteArray {
-    fun attribute(oid: ByteArray, value: ByteArray) = set(sequence(oid(oid), value))
+    fun attribute(oidBytes: ByteArray, value: ByteArray) = set(sequence(oid(oidBytes), value))
     return sequence(
       attribute(byteArrayOf(0x55, 0x04, 0x06), printable("RKS")),
       attribute(byteArrayOf(0x55, 0x04, 0x0A), utf8(nui)),
