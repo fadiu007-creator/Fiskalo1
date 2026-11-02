@@ -22,19 +22,9 @@ export default function OnboardingPage() {
       const supabase = createClient();
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) throw new Error("Sesioni ka skaduar. Hyr përsëri.");
-      const { data: organization, error: orgError } = await supabase
-        .from("organizations")
-        .insert({ ...form, created_by: user.id })
-        .select("id")
-        .single();
+      const { data: organizationId, error: orgError } = await supabase.rpc("fiskalo_create_organization", { payload: form });
       if (orgError) throw orgError;
-      const { error: memberError } = await supabase.from("organization_users").insert({
-        organization_id: organization.id,
-        user_id: user.id,
-        role: "owner",
-      });
-      if (memberError) throw memberError;
-      router.replace("/app");
+      router.replace(`/app/${organizationId}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Regjistrimi i biznesit dështoi.");
@@ -45,8 +35,9 @@ export default function OnboardingPage() {
 
   return (
     <main style={{ maxWidth: 680, margin: "0 auto", padding: "40px 24px" }}>
+      <a href="/app" style={{ color: "var(--brand)", fontWeight: 700 }}>← Kthehu te bizneset</a>
       <h1 style={{ fontSize: 32 }}>Regjistro biznesin</h1>
-      <p style={{ color: "var(--muted)", lineHeight: 1.6 }}>Plotëso të dhënat bazë. Të dhënat fiskale do të verifikohen para aktivizimit të funksioneve përkatëse.</p>
+      <p style={{ color: "var(--muted)", lineHeight: 1.6 }}>Plotëso të dhënat bazë. Të dhënat fiskale verifikohen para aktivizimit të fiskalizimit zyrtar.</p>
       <form onSubmit={submit} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 16, background: "white", padding: 24, border: "1px solid var(--line)", borderRadius: 16 }}>
         <Field label="Emri ligjor i biznesit" required value={form.legal_name} onChange={(v) => update("legal_name", v)} />
         <Field label="NUI" required value={form.nui} onChange={(v) => update("nui", v)} />
