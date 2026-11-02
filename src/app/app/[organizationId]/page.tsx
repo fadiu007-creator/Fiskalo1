@@ -283,6 +283,10 @@ export default function BusinessDashboard() {
     downloadCsv("fiskalo-shpenzimet.csv", [["Data", "Përshkrimi", "Furnitori", "Kategoria", "Shuma EUR"], ...expenses.map((e) => [e.expense_date, e.description, e.supplier_name || "", e.category, e.amount])]);
   }
 
+  function exportPurchases() {
+    downloadCsv("fiskalo-blerjet.csv", [["Data", "Furnitori", "Referenca", "Statusi", "Totali EUR", "Paguar EUR", "Mbetur EUR"], ...purchases.map((p) => [p.purchase_date, suppliers.find((s) => s.id === p.supplier_id)?.name || "", p.reference || "", p.status, p.total, p.paid_total, Number(p.total) - Number(p.paid_total)])]);
+  }
+
   const revenue = invoices.filter((invoice) => invoice.status === "issued").reduce((sum, invoice) => sum + Number(invoice.total), 0);
   const draftCount = invoices.filter((invoice) => invoice.status === "draft").length;
   const expenseTotal = expenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
@@ -313,7 +317,7 @@ export default function BusinessDashboard() {
           <Stat label="Qarkullimi i faturuar" value={fmt(revenue)} />
           <Stat label="Fatura gjithsej" value={String(invoices.length)} />
           <Stat label="Draft" value={String(draftCount)} />
-          <Stat label="Shpenzimet" value={fmt(expenseTotal)} />
+          <Stat label="Shpenzimet" value={fmt(expenseTotal)} /><Stat label="Blerjet" value={fmt(purchases.reduce((sum, p) => sum + Number(p.total), 0))} />
           <Stat label="Produkte / shërbime" value={String(products.length)} />
         </section>
         <section style={{ ...panel, marginBottom: 14 }}>
@@ -427,7 +431,7 @@ export default function BusinessDashboard() {
       {tab === "reports" && <section style={{ display: "grid", gap: 14 }}>
         <div style={{ ...panel, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
           <div><h2 style={{ margin: "0 0 5px", fontSize: 19 }}>Raporti i biznesit</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: 12 }}>Përmbledhje operative nga të dhënat e regjistruara në Fiskalo.</p></div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button style={secondary} onClick={exportInvoices}>Eksporto faturat CSV</button><button style={secondary} onClick={exportExpenses}>Eksporto shpenzimet CSV</button></div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button style={secondary} onClick={exportInvoices}>Eksporto faturat CSV</button><button style={secondary} onClick={exportExpenses}>Eksporto shpenzimet CSV</button><button style={secondary} onClick={exportPurchases}>Eksporto blerjet CSV</button></div>
         </div>
         <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>
           <Stat label="Fatura të lëshuara" value={String(invoices.filter((i) => i.status === "issued").length)} />
@@ -436,7 +440,7 @@ export default function BusinessDashboard() {
           <Stat label="Shpenzime të regjistruara" value={fmt(expenseTotal)} />
           <Stat label="Diferenca operative" value={fmt(revenue - expenseTotal)} />
         </section>
-        <section style={panel}><h3 style={{ marginTop: 0 }}>Shënim për raportet tatimore</h3><p style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.6 }}>Këto janë raporte të brendshme menaxheriale. Nuk janë libra zyrtarë të shitjes/blerjes, deklarata tatimore apo raportim i pranuar nga ATK. Klasifikimi dhe trajtimi tatimor duhet të verifikohen para përdorimit për deklarim.</p></section>
+        <section style={panel}><h3 style={{ marginTop: 0 }}>Shënim për raportet tatimore</h3><p style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.6 }}>Këto janë raporte të brendshme menaxheriale. Diferenca e të hyrave dhe shpenzimeve nuk është fitim neto: nuk përfshin ende koston e mallrave të shitura, amortizimin dhe të gjitha rregullimet kontabël. Blerjet e stokut shfaqen veçmas dhe nuk zbriten automatikisht si shpenzim. Këto nuk janë libra zyrtarë apo deklarata të pranuara nga ATK.</p></section>
       </section>}
 
       {tab === "team" && <section className="module-grid" style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
