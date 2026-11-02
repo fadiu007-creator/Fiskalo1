@@ -30,4 +30,12 @@ The ATK sample's monetary examples are not tax-calculation rules. Use the curren
 
 The core now includes an encrypted-at-rest queue store with idempotency-key collision checks, immutable signed payload/signature fields, retry backoff, ATK transaction acceptance/rejection states and a 48-hour recovery deadline. Queue snapshots are written through a temporary file and atomically replaced. Expired queued records are moved to an explicit expired state when due items are queried.
 
-The queue deliberately requires an injected `IFiscalQueueProtector`. There is no plaintext fallback and no built-in OS protector yet. Until a Windows DPAPI / macOS Keychain / Linux Secret Service implementation is added and tested, the durable queue cannot be enabled by the host. The current host does not yet call this queue or submit fiscal documents.
+The queue deliberately requires an injected `IFiscalQueueProtector`. A Windows `CurrentUser` DPAPI implementation now exists, and the P-256 private-key store also persists PKCS#8 only after DPAPI protection. Both fail closed on non-Windows systems; macOS Keychain and Linux Secret Service providers are not implemented. The host has not yet wired these stores into its startup or pairing flow. The current host does not yet call this queue or submit fiscal documents.
+
+
+## Windows key custody milestone
+
+- `WindowsDpapiFiscalQueueProtector` protects complete queue snapshots with Windows DPAPI `CurrentUser` scope.
+- `WindowsDpapiEcdsaKeyStore` creates or loads a P-256 ECDSA key, exports PKCS#8 only transiently, protects it with DPAPI before writing, uses atomic file replacement, and zeroes temporary key buffers.
+- The implementations reject non-Windows platforms instead of falling back to plaintext.
+- These primitives are in the core library but are not yet wired into the running host; certificate onboarding and lifecycle remain pending.
