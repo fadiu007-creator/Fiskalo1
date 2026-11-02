@@ -39,6 +39,7 @@ export default function BusinessDashboard() {
   const [invoiceLines, setInvoiceLines] = useState([{ product_id: "", quantity: "1" }]);
   const [members, setMembers] = useState<Member[]>([]);
   const [memberForm, setMemberForm] = useState({ email: "", role: "cashier" });
+  const [stockForm, setStockForm] = useState({ product_id: "", delta: "", note: "" });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -82,6 +83,16 @@ export default function BusinessDashboard() {
     if (saveError) { setError(saveError.message); return; }
     setProductForm({ name: "", sku: "", unit_price: "", vat_rate: "18", item_type: "product", stock_quantity: "0", track_stock: true });
     setNotice("Artikulli u ruajt."); await load();
+  }
+
+  async function adjustStock(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setError(""); setNotice("");
+    const { data, error: stockError } = await supabase.rpc("fiskalo_adjust_stock", {
+      target_product: stockForm.product_id, quantity_delta: Number(stockForm.delta), movement_note: stockForm.note,
+    });
+    setBusy(false);
+    if (stockError) { setError(stockError.message); return; }
+    setNotice("Stoku u përditësua. Gjendja e re: " + data + "."); setStockForm({ product_id: "", delta: "", note: "" }); await load();
   }
 
   async function addCustomer(event: React.FormEvent<HTMLFormElement>) {
@@ -219,7 +230,14 @@ export default function BusinessDashboard() {
           {productForm.item_type === "product" && <label className="field-label">Stoku fillestar<input type="number" step="0.001" value={productForm.stock_quantity} onChange={(e) => setProductForm({ ...productForm, stock_quantity: e.target.value })} style={field} /></label>}
           <button disabled={busy} style={{ ...primary, width: "100%", marginTop: 10 }}>Ruaj artikullin</button>
         </form>
-        <section style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Lista e artikujve ({products.length})</h2><div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Emri</th><th>Lloji</th><th>Çmimi</th><th>TVSH</th><th>Stoku</th></tr></thead><tbody>{products.map((p) => <tr key={p.id}><td>{p.name}<small>{p.sku || ""}</small></td><td>{p.item_type === "service" ? "Shërbim" : "Produkt"}</td><td>{fmt(Number(p.unit_price))}</td><td>{p.vat_rate}%</td><td>{p.track_stock ? p.stock_quantity : "—"}</td></tr>)}{!products.length && <tr><td colSpan={5}>Nuk ka artikuj ende.</td></tr>}</tbody></table></div></section>
+        <div style={{ display: "grid", gap: 14 }}>
+          <section style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Lista e artikujve ({products.length})</h2><div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Emri</th><th>Lloji</th><th>Çmimi</th><th>TVSH</th><th>Stoku</th></tr></thead><tbody>{products.map((p) => <tr key={p.id}><td>{p.name}<small>{p.sku || ""}</small></td><td>{p.item_type === "service" ? "Shërbim" : "Produkt"}</td><td>{fmt(Number(p.unit_price))}</td><td>{p.vat_rate}%</td><td>{p.track_stock ? p.stock_quantity : "—"}</td></tr>)}{!products.length && <tr><td colSpan={5}>Nuk ka artikuj ende.</td></tr>}</tbody></table></div></section>
+          <form onSubmit={adjustStock} style={panel}><h2 style={{ fontSize: 17, marginTop: 0 }}>Rregullo stokun</h2><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10 }}>
+            <label className="field-label">Produkti<select required value={stockForm.product_id} onChange={(e) => setStockForm({ ...stockForm, product_id: e.target.value })} style={field}><option value="">Zgjidh produktin</option>{products.filter((p) => p.track_stock).map((p) => <option key={p.id} value={p.id}>{p.name} · {p.stock_quantity}</option>)}</select></label>
+            <label className="field-label">Ndryshimi (+ / -)<input required type="number" step="0.001" value={stockForm.delta} onChange={(e) => setStockForm({ ...stockForm, delta: e.target.value })} style={field} /></label>
+            <label className="field-label">Shënim<input value={stockForm.note} onChange={(e) => setStockForm({ ...stockForm, note: e.target.value })} style={field} /></label>
+          </div><button disabled={busy || !products.some((p) => p.track_stock)} style={primary}>Ruaj ndryshimin e stokut</button></form>
+        </div>
       </section>}
 
       {tab === "customers" && <section style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
