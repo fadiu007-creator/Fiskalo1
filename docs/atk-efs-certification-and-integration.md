@@ -234,4 +234,6 @@ The following is now implemented in Fiskalo's data model and business UI:
 - Tenant-safe composite foreign keys and RLS. Fiscal documents/events are read-only to ordinary authenticated users; a future trusted local-agent/backend channel must perform submissions and state transitions.
 - Provider certification settings are private to the platform and not exposed to customer accounts. Production cannot be enabled unless the provider profile is marked certified.
 
-**Not implemented yet:** local key generation/storage, CSR onboarding calls, certificate installation, Protobuf coupon builder, ECDSA signing, POS coupon HTTP submission, Sale/Cancel/Return test runs and ATK response verification. No ATK request has been sent from Fiskalo yet.
+The new `pos-agent/Fiskalo.PosAgent.Core` library now contains the ATK Protobuf schema/models, P-256 key and CSR generation helpers, exact money-unit conversion, Protobuf Base64 serialization, ECDSA signing, citizen QR payload construction, and test-only HTTP client methods for `/ca/verify`, `/ca/signcsr` and `/pos/coupon`.
+
+**Still not implemented or exercised:** an installed local POS Agent service, OS-protected persistent key storage, certificate installation/renewal, complete sale-to-coupon/tax-group mapping from Fiskalo records, durable offline queue, printer integration, real ATK test calls, Sale/Cancel/Return test completion and ATK response verification. The new client methods have not yet been run against ATK; no ATK request has been sent from Fiskalo.
