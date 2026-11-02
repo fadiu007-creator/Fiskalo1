@@ -112,9 +112,19 @@ export default function InvoiceDetailPage() {
   }
 
   async function recordPayment(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setPaymentBusy(true); setPaymentMessage("");
+    event.preventDefault();
+    const amount = Number(paymentForm.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setPaymentMessage("Shkruaj një shumë më të madhe se zero.");
+      return;
+    }
+    if (amount - remainingBalance > 0.005) {
+      setPaymentMessage("Shuma është më e madhe se bilanci i mbetur.");
+      return;
+    }
+    setPaymentBusy(true); setPaymentMessage("");
     const { error: payError } = await supabase.rpc("fiskalo_record_payment", {
-      target_invoice: params.invoiceId, payment_amount: Number(paymentForm.amount),
+      target_invoice: params.invoiceId, payment_amount: amount,
       method: paymentForm.method, payment_reference: paymentForm.reference,
     });
     if (payError) { setPaymentMessage(payError.message); setPaymentBusy(false); return; }
@@ -175,13 +185,22 @@ export default function InvoiceDetailPage() {
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, lineHeight: 1.8 }}><span>Paguar deri tani</span><strong>{fmt(totalPaid)}</strong></div>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, lineHeight: 1.8 }}><span>Bilanci i mbetur</span><strong>{fmt(remainingBalance)}</strong></div>
         {payments.length > 0 && <div style={{ marginTop: 10, overflowX: "auto" }}><table className="data-table"><thead><tr><th>Data</th><th>Mënyra</th><th>Referenca</th><th>Shuma</th></tr></thead><tbody>{payments.map((p) => <tr key={p.id}><td>{new Date(p.created_at).toLocaleDateString("sq-XK")}</td><td>{({ cash: "Para në dorë", card: "Kartelë", bank_transfer: "Transfer bankar" } as Record<string, string>)[p.payment_method]}</td><td>{p.reference || "—"}</td><td>{fmt(Number(p.amount))}</td></tr>)}</tbody></table></div>}
-        {invoice.status === "issued" && remainingBalance > 0.005 && <form className="no-print" onSubmit={recordPayment} style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 9 }}>
-          <label style={{ display: "grid", gap: 5, fontSize: 11 }}>Shuma (€)<input required type="number" min="0.01" max={remainingBalance} step="0.01" value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })} style={{ ...fieldStyle }} /></label>
-          <label style={{ display: "grid", gap: 5, fontSize: 11 }}>Mënyra<select value={paymentForm.method} onChange={(e) => setPaymentForm({ ...paymentForm, method: e.target.value })} style={fieldStyle}><option value="cash">Para në dorë</option><option value="card">Kartelë</option><option value="bank_transfer">Transfer bankar</option></select></label>
-          <label style={{ display: "grid", gap: 5, fontSize: 11 }}>Referenca<input value={paymentForm.reference} onChange={(e) => setPaymentForm({ ...paymentForm, reference: e.target.value })} style={fieldStyle} /></label>
-          <button disabled={paymentBusy} style={{ alignSelf: "end", border: 0, borderRadius: 8, background: "var(--brand)", color: "white", padding: 10, fontWeight: 700 }}>{paymentBusy ? "Duke ruajtur..." : "Regjistro pagesën"}</button>
-          {paymentMessage && <p role="status" style={{ gridColumn: "1 / -1", fontSize: 12 }}>{paymentMessage}</p>}
+        {invoice.status === "draft" && <p className="no-print" style={{ margin: "14px 0 0", padding: 12, borderRadius: 8, background: "#fff8e8", fontSize: 12 }}>Për të regjistruar pagesë, së pari lësho faturën me butonin “Ruaj dhe provo lëshimin” më lart. Draftet nuk pranojnë pagesa.</p>}
+        {invoice.status === "issued" && remainingBalance > 0.005 && <form className="no-print" onSubmit={recordPayment} style={{ marginTop: 16, padding: 14, border: "2px solid var(--brand)", borderRadius: 10, background: "white", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 12 }}>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Regjistro pagesë të re</h3>
+            <p style={{ margin: 0, color: "var(--muted)", fontSize: 12 }}>Mund të regjistrosh vetëm një pjesë të shumës, p.sh. 40.00 €.</p>
+          </div>
+          <label style={{ display: "grid", gap: 6, fontSize: 12, fontWeight: 700 }}>Shuma që u pagua (€)<input required type="number" inputMode="decimal" min="0.01" max={remainingBalance} step="0.01" placeholder="p.sh. 40.00" value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })} style={{ ...fieldStyle, fontSize: 16, padding: 12 }} /></label>
+          <label style={{ display: "grid", gap: 6, fontSize: 12 }}>Mënyra<select value={paymentForm.method} onChange={(e) => setPaymentForm({ ...paymentForm, method: e.target.value })} style={fieldStyle}><option value="cash">Para në dorë</option><option value="card">Kartelë</option><option value="bank_transfer">Transfer bankar</option></select></label>
+          <label style={{ display: "grid", gap: 6, fontSize: 12 }}>Referenca (opsionale)<input placeholder="Nr. i transaksionit" value={paymentForm.reference} onChange={(e) => setPaymentForm({ ...paymentForm, reference: e.target.value })} style={fieldStyle} /></label>
+          <div style={{ display: "flex", gap: 8, alignItems: "end", flexWrap: "wrap" }}>
+            <button type="submit" disabled={paymentBusy} style={{ border: 0, borderRadius: 8, background: "var(--brand)", color: "white", padding: "11px 14px", fontWeight: 700 }}>{paymentBusy ? "Duke ruajtur..." : "Regjistro pagesën"}</button>
+            <button type="button" disabled={paymentBusy} onClick={() => setPaymentForm({ ...paymentForm, amount: remainingBalance.toFixed(2) })} style={{ ...fieldStyle, width: "auto", cursor: "pointer" }}>Paguaj krejt</button>
+          </div>
+          {paymentMessage && <p role="alert" style={{ gridColumn: "1 / -1", margin: 0, color: "#9d2d26", fontSize: 12 }}>{paymentMessage}</p>}
         </form>}
+        {invoice.status === "issued" && remainingBalance <= 0.005 && <p role="status" style={{ margin: "14px 0 0", fontSize: 12 }}>Fatura është paguar plotësisht. Nuk ka bilanc të mbetur.</p>}
       </section>
       {invoice.notes && <p style={{ marginTop: 24, fontSize: 12 }}>Shënim: {invoice.notes}</p>}
       <footer style={{ borderTop: "1px solid var(--line)", marginTop: 30, paddingTop: 16, color: "var(--muted)", fontSize: 11, lineHeight: 1.6 }}>Dokument i krijuar në Fiskalo. Ky dokument nuk është fiskalizuar zyrtarisht dhe nuk përbën kupon fiskal të certifikuar nga ATK.</footer>
