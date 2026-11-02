@@ -27,6 +27,8 @@ public sealed class FiskaloInvoiceToAtkMapperTests
         Assert.Equal("piece", mapped.Items[0].Unit);
         Assert.Equal("1", mapped.Items[0].TaxRate);
         Assert.Equal("0", mapped.Items[0].ItemType);
+        var coupon = PosCouponBuilder.Build(mapped);
+        Assert.Equal((ulong)123, coupon.CouponId);
     }
 
     [Theory]
@@ -45,6 +47,9 @@ public sealed class FiskaloInvoiceToAtkMapperTests
         var mapped = FiskaloInvoiceToAtkMapper.Map(Invoice(), type, 77);
         Assert.Equal(type, mapped.Type);
         Assert.Equal((ulong)77, mapped.ReferenceCouponId);
+        var coupon = PosCouponBuilder.Build(mapped);
+        Assert.Equal(type, coupon.Type);
+        Assert.Equal((ulong)77, coupon.ReferenceNo);
     }
 
     [Fact]
