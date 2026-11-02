@@ -8,6 +8,9 @@ export default async function BusinessHome() {
   const userId = claimsData?.claims?.sub;
   if (!userId) redirect("/login");
 
+  // Accept any pending team invitations matching the authenticated account email.
+  await supabase.rpc("fiskalo_accept_pending_team_invitations");
+
   const { data: memberships, error } = await supabase
     .from("fiskalo_organization_users")
     .select("organization_id, role, fiskalo_organizations(legal_name, municipality)")
