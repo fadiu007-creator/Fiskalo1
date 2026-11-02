@@ -362,6 +362,49 @@ export default function BusinessDashboard() {
         </form>
         <section style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Shpenzimet ({expenses.length})</h2><div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Data</th><th>Përshkrimi</th><th>Furnitori</th><th>Kategoria</th><th>Shuma</th></tr></thead><tbody>{expenses.map((e) => <tr key={e.id}><td>{e.expense_date}</td><td>{e.description}</td><td>{e.supplier_name || "—"}</td><td>{e.category}</td><td>{fmt(Number(e.amount))}</td></tr>)}{!expenses.length && <tr><td colSpan={5}>Nuk ka shpenzime ende.</td></tr>}</tbody></table></div></section>
       </section>}
+
+      {tab === "purchases" && <section style={{ display: "grid", gap: 14 }}>
+        <div className="module-grid" style={{ display: "grid", gridTemplateColumns: "minmax(250px,320px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
+          <form onSubmit={addSupplier} style={panel}>
+            <h2 style={{ fontSize: 18, marginTop: 0 }}>Shto furnitor</h2>
+            <label className="field-label">Emri i furnitorit<input required value={supplierForm.name} onChange={(e) => setSupplierForm({ ...supplierForm, name: e.target.value })} style={field} /></label>
+            <label className="field-label">NUI<input value={supplierForm.business_number} onChange={(e) => setSupplierForm({ ...supplierForm, business_number: e.target.value })} style={field} /></label>
+            <label className="field-label">Email<input type="email" value={supplierForm.email} onChange={(e) => setSupplierForm({ ...supplierForm, email: e.target.value })} style={field} /></label>
+            <label className="field-label">Telefoni<input value={supplierForm.phone} onChange={(e) => setSupplierForm({ ...supplierForm, phone: e.target.value })} style={field} /></label>
+            <label className="field-label">Adresa<input value={supplierForm.address} onChange={(e) => setSupplierForm({ ...supplierForm, address: e.target.value })} style={field} /></label>
+            <button disabled={busy} style={{ ...primary, width: "100%", marginTop: 10 }}>Ruaj furnitorin</button>
+          </form>
+          <form onSubmit={createPurchase} style={panel}>
+            <h2 style={{ fontSize: 18, marginTop: 0 }}>Regjistro blerje / furnizim</h2>
+            <p style={{ color: "var(--muted)", fontSize: 12, marginTop: -8 }}>Regjistro faturën e furnitorit si draft. Pranoje vetëm pasi malli të arrijë.</p>
+            <label className="field-label">Furnitori<select required value={purchaseForm.supplier_id} onChange={(e) => setPurchaseForm({ ...purchaseForm, supplier_id: e.target.value })} style={field}><option value="">Zgjidh furnitorin</option>{suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8 }}>
+              <label className="field-label">Nr. faturës së furnitorit<input value={purchaseForm.reference} onChange={(e) => setPurchaseForm({ ...purchaseForm, reference: e.target.value })} style={field} /></label>
+              <label className="field-label">Data e blerjes<input required type="date" value={purchaseForm.purchase_date} onChange={(e) => setPurchaseForm({ ...purchaseForm, purchase_date: e.target.value })} style={field} /></label>
+            </div>
+            <h3 style={{ fontSize: 14 }}>Artikujt e blerjes</h3>
+            {purchaseLines.map((line, index) => <div key={index} style={{ display: "grid", gridTemplateColumns: "minmax(140px,2fr) repeat(3,minmax(85px,1fr)) auto", gap: 7, alignItems: "end", border: "1px solid var(--line)", borderRadius: 9, padding: 9, marginBottom: 8 }}>
+              <label className="field-label">Produkti<select required value={line.product_id} onChange={(e) => setPurchaseLines((rows) => rows.map((row,i) => i===index ? { ...row, product_id: e.target.value } : row))} style={field}><option value="">Zgjidh</option>{products.filter((p) => p.track_stock && p.item_type === "product").map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+              <label className="field-label">Sasia<input required type="number" min="0.001" step="0.001" value={line.quantity} onChange={(e) => setPurchaseLines((rows) => rows.map((row,i) => i===index ? { ...row, quantity: e.target.value } : row))} style={field} /></label>
+              <label className="field-label">Kosto / njësi (€)<input required type="number" min="0" step="0.0001" value={line.unit_cost} onChange={(e) => setPurchaseLines((rows) => rows.map((row,i) => i===index ? { ...row, unit_cost: e.target.value } : row))} style={field} /></label>
+              <label className="field-label">TVSH<select value={line.vat_rate} onChange={(e) => setPurchaseLines((rows) => rows.map((row,i) => i===index ? { ...row, vat_rate: e.target.value } : row))} style={field}><option value="0">0%</option><option value="8">8%</option><option value="18">18%</option></select></label>
+              {purchaseLines.length > 1 && <button type="button" onClick={() => setPurchaseLines((rows) => rows.filter((_,i) => i!==index))} style={secondary}>Hiq</button>}
+            </div>)}
+            <button type="button" style={{ ...secondary, width: "100%" }} onClick={() => setPurchaseLines((rows) => [...rows,{ product_id: "", quantity: "1", unit_cost: "", vat_rate: "0" }])}>+ Shto artikull</button>
+            <label className="field-label">Shënime<textarea value={purchaseForm.notes} onChange={(e) => setPurchaseForm({ ...purchaseForm, notes: e.target.value })} style={{ ...field, minHeight: 65 }} /></label>
+            <button disabled={busy || !suppliers.length || !products.some((p) => p.track_stock && p.item_type === "product")} style={{ ...primary, width: "100%", marginTop: 10 }}>{busy ? "Duke ruajtur..." : "Ruaj blerjen si draft"}</button>
+            {!suppliers.length && <small>Regjistro së pari një furnitor.</small>}
+          </form>
+        </div>
+        <section style={panel}>
+          <h2 style={{ fontSize: 18, marginTop: 0 }}>Blerjet ({purchases.length})</h2>
+          <div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Data</th><th>Furnitori</th><th>Referenca</th><th>Totali</th><th>Statusi</th><th>Veprimi</th></tr></thead><tbody>
+            {purchases.map((purchase) => <tr key={purchase.id}><td>{purchase.purchase_date}</td><td>{suppliers.find((s) => s.id === purchase.supplier_id)?.name || "—"}</td><td>{purchase.reference || "—"}</td><td>{fmt(Number(purchase.total))}</td><td>{purchase.status === "received" ? "Malli u pranua" : "Draft — në pritje"}</td><td>{purchase.status === "draft" && <button disabled={busy} onClick={() => void receivePurchase(purchase.id)} style={primary}>Prano mallin</button>}</td></tr>)}
+            {!purchases.length && <tr><td colSpan={6}>Nuk ka blerje të regjistruara.</td></tr>}
+          </tbody></table></div>
+          <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>Pranimi rrit stokun dhe krijon lëvizje inventari e gjurmë auditimi. Pagesat ndaj furnitorëve dhe libri zyrtar i blerjeve për ATK nuk janë ende të integruara.</p>
+        </section>
+      </section>}
       {tab === "reports" && <section style={{ display: "grid", gap: 14 }}>
         <div style={{ ...panel, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
           <div><h2 style={{ margin: "0 0 5px", fontSize: 19 }}>Raporti i biznesit</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: 12 }}>Përmbledhje operative nga të dhënat e regjistruara në Fiskalo.</p></div>
