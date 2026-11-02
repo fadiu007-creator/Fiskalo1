@@ -45,3 +45,25 @@ After pairing, the Windows host exposes authenticated test-only endpoints:
 - `GET /api/v1/queue` — returns queue metadata only, never fiscal payloads or signatures.
 
 The ATK test calls are explicit operator actions; no calls occur at startup. The endpoints require the paired bearer session. They are not production endpoints. The certificate is not treated as a production credential, and fiscalization remains disabled. The current host still does not submit POS coupons or run an automatic queue worker.
+
+## Downloadable Windows build
+
+After the POS Agent CI matrix passes, the `publish-windows` job publishes a self-contained `fiskalo-pos-agent-win-x64` artifact for 14 days. Download it from the successful GitHub Actions run; it does not require a separately installed .NET runtime. The agent is still a foreground development host, not an installed Windows service.
+
+## Operator test flow (Windows only)
+
+1. Start `Fiskalo.PosAgent.Host.exe` from a trusted local folder. Keep the one-time pairing code private.
+2. Pair the Fiskalo browser application using the local endpoint and code. The browser must send the bearer token only in the Authorization header.
+3. Create a CSR using the authenticated `POST /api/v1/keys/csr` endpoint with `businessName`, `businessNui`, `branchId`, and `posId`. The key is created locally and protected with DPAPI.
+4. Call `POST /api/v1/atk/test/verify` with the real ATK test NUI, EDI fiscalization number, POS ID, branch ID and ATK-issued application ID.
+5. Only after ATK returns a verification code, call `POST /api/v1/atk/test/sign-csr` with the business identity, same identifiers and verification code. The agent creates a CSR from the same local key, calls the ATK test host, validates the returned certificate's public key against the local key and stores the public certificate.
+6. Check authenticated `GET /api/v1/status` for `testCertificateInstalled: true`.
+
+These calls have not been run. Do not send test requests until ATK has provided the proper test registration/identifiers and the operator has approved the request. The current host has no UI integration to invoke these routes yet; they can be exercised with a local API client. Never paste real credentials, verification codes, bearer tokens, private keys or certificates into GitHub issues.
+
+## Current hard limits
+
+- Windows x64 is the only supported runtime for DPAPI-backed key/queue storage.
+- The executable runs in the foreground; no Windows service installer, auto-start, update mechanism or secure pairing UI exists yet.
+- The agent does not yet create/submit fiscal coupons or automatically process the queue.
+- No production ATK URL, production switch, or production credential support exists.
