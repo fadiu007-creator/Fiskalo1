@@ -226,7 +226,7 @@ export default function BusinessDashboard() {
           <label className="field-label">Kodi / SKU<input value={productForm.sku} onChange={(e) => setProductForm({ ...productForm, sku: e.target.value })} style={field} /></label>
           <label className="field-label">Lloji<select value={productForm.item_type} onChange={(e) => setProductForm({ ...productForm, item_type: e.target.value })} style={field}><option value="product">Produkt</option><option value="service">Shërbim</option></select></label>
           <label className="field-label">Çmimi (€)<input required type="number" min="0" step="0.01" value={productForm.unit_price} onChange={(e) => setProductForm({ ...productForm, unit_price: e.target.value })} style={field} /></label>
-          <label className="field-label">TVSH<select value={productForm.vat_rate} onChange={(e) => setProductForm({ ...productForm, vat_rate: e.target.value })} style={field}><option value="0">0%</option><option value="8">8%</option><option value="18">18%</option></select></label>
+          <label className="field-label">TVSH<select value={productForm.vat_rate} onChange={(e) => setProductForm({ ...productForm, vat_rate: e.target.value })} style={field}><option value="0">0% / përjashtim ose eksport</option><option value="8">8%</option><option value="18">18%</option></select></label>
           {productForm.item_type === "product" && <label className="field-label">Stoku fillestar<input type="number" step="0.001" value={productForm.stock_quantity} onChange={(e) => setProductForm({ ...productForm, stock_quantity: e.target.value })} style={field} /></label>}
           <button disabled={busy} style={{ ...primary, width: "100%", marginTop: 10 }}>Ruaj artikullin</button>
         </form>
@@ -274,7 +274,7 @@ export default function BusinessDashboard() {
           <label className="field-label">Furnitori<input value={expenseForm.supplier_name} onChange={(e) => setExpenseForm({ ...expenseForm, supplier_name: e.target.value })} style={field} /></label>
           <label className="field-label">Kategoria<select value={expenseForm.category} onChange={(e) => setExpenseForm({ ...expenseForm, category: e.target.value })} style={field}>{["Qira","Paga","Furnizim","Transport","Shërbime","Komunalitë","Tjetër"].map((v) => <option key={v}>{v}</option>)}</select></label>
           <label className="field-label">Shuma (€)<input required type="number" min="0.01" step="0.01" value={expenseForm.amount} onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })} style={field} /></label>
-          <label className="field-label">TVSH<select value={expenseForm.vat_rate} onChange={(e) => setExpenseForm({ ...expenseForm, vat_rate: e.target.value })} style={field}><option value="0">0%</option><option value="8">8%</option><option value="18">18%</option></select></label>
+          <label className="field-label">TVSH<select value={expenseForm.vat_rate} onChange={(e) => setExpenseForm({ ...expenseForm, vat_rate: e.target.value })} style={field}><option value="0">0% / përjashtim ose eksport</option><option value="8">8%</option><option value="18">18%</option></select></label>
           <label className="field-label">Data<input required type="date" value={expenseForm.expense_date} onChange={(e) => setExpenseForm({ ...expenseForm, expense_date: e.target.value })} style={field} /></label>
           <button disabled={busy} style={{ ...primary, width: "100%", marginTop: 10 }}>Ruaj shpenzimin</button>
         </form>
