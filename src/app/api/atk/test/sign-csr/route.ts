@@ -22,9 +22,6 @@ export async function POST(request: Request) {
   }
   const authorization = await authorizeAtkOrganization(supabase, user.id, organizationId, nui);
   if (!authorization.ok) return Response.json({ error: "organization_not_authorized", detail: authorization.detail }, { status: authorization.status });
-  if (businessName !== authorization.organization.legal_name) {
-    return Response.json({ error: "business_name_mismatch", detail: "Business name must match the registered Fiskalo organization name." }, { status: 400 });
-  }
 
   try {
     const response = await fetch("https://fiskalizimi-test.atk-ks.org/ca/signcsr", {
