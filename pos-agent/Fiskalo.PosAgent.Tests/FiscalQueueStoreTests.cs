@@ -1,0 +1,153 @@
+using System.Security.Cryptography;
+using System.Text;
+using Fiskalo.PosAgent.Core.Queue;
+using Xunit;
+
+namespace Fiskalo.PosAgent.Tests;
+
+public sealed class FiscalQueueStoreTests
+{
+    [Fact]
+    public async Task Enqueue_IsIdempotent_AndRejectsDifferentContentForSameKey()
+    {
+        using var fixture = new QueueFixture();
+        var first = await fixture.Store.EnqueueAsync("sale-100", "Sale", "cGF5bG9hZA==", "c2ln");
+        var repeated = await fixture.Store.EnqueueAsync("sale-100", "Sale", "cGF5bG9hZA==", "c2ln");
+
+        Assert.Equal(first.CreatedAtUtc, repeated.CreatedAtUtc);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            fixture.Store.EnqueueAsync("sale-100", "Sale", "b3RoZXI=", "c2ln"));
+    }
+
+    [Fact]
+    public async Task Failure_SchedulesExponentialRetry_AndDueQueryReturnsAfterDelay()
+    {
+        using var fixture = new QueueFixture();
+        var now = DateTimeOffset.Parse("2026-11-02T12:00:00Z");
+        await fixture.Store.EnqueueAsync("sale-101", "Sale", "cGF5bG9hZA==", "c2ln", now);
+
+        var failed = await fixture.Store.RecordFailureAsync("sale-101", "network unavailable", now);
+        Assert.Equal(1, failed.AttemptCount);
+        Assert.Equal(now.AddSeconds(15), failed.NextAttemptAtUtc);
+        Assert.Empty(await fixture.Store.GetDueAsync(now.AddSeconds(14)));
+        Assert.Single(await fixture.Store.GetDueAsync(now.AddSeconds(15)));
+    }
+
+    [Fact]
+    public async Task RecoveryDeadline_ExpiresQueuedDocuments()
+    {
+        using var fixture = new QueueFixture();
+        var now = DateTimeOffset.Parse("2026-11-02T12:00:00Z");
+        await fixture.Store.EnqueueAsync("sale-102", "Sale", "cGF5bG9hZA==", "c2ln", now);
+
+        Assert.Empty(await fixture.Store.GetDueAsync(now.AddHours(48)));
+        var saved = Assert.Single(await fixture.Store.GetAllAsync());
+        Assert.Equal(FiscalQueueStatus.Expired, saved.Status);
+    }
+
+    [Fact]
+    public async Task AcceptedDocumentCannotBeChangedToRejected()
+    {
+        using var fixture = new QueueFixture();
+        await fixture.Store.EnqueueAsync("sale-103", "Sale", "cGF5bG9hZA==", "c2ln");
+        var accepted = await fixture.Store.MarkAcceptedAsync("sale-103", "ATK-TX-123");
+
+        Assert.Equal(FiscalQueueStatus.Accepted, accepted.Status);
+        Assert.Equal("ATK-TX-123", accepted.AtkTransactionId);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            fixture.Store.MarkRejectedAsync("sale-103", "late rejection"));
+    }
+
+    [Fact]
+    public async Task QueueFileContainsEncryptedSnapshotNotFiscalPayload()
+    {
+        using var fixture = new QueueFixture();
+        const string secretPayload = "eyJzZWNyZXQtZmlzY2FsLXBheWxvYWQiOiJub3QtZm9yLWxvZ3MifQ==";
+        await fixture.Store.EnqueueAsync("sale-104", "Sale", secretPayload, "c2ln");
+
+        var file = await File.ReadAllBytesAsync(fixture.Path);
+        var raw = Encoding.UTF8.GetString(file);
+        Assert.DoesNotContain(secretPayload, raw, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WindowsDpapiProtectsAndUnprotectsQueueData()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var protector = new Fiskalo.PosAgent.Core.Security.WindowsDpapiFiscalQueueProtector();
+        var plaintext = Encoding.UTF8.GetBytes("private fiscal queue content");
+        var protectedBytes = protector.Protect(plaintext);
+        Assert.NotEqual(plaintext, protectedBytes);
+        Assert.Equal(plaintext, protector.Unprotect(protectedBytes));
+    }
+
+    [Fact]
+    public void WindowsDpapiKeyStoreReloadsSameP256PrivateKey()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "fiskalo-key-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "pos-key.dpapi");
+        try
+        {
+            var store = new Fiskalo.PosAgent.Core.Security.WindowsDpapiEcdsaKeyStore();
+            byte[] signature;
+            var data = Encoding.UTF8.GetBytes("ATK test signature");
+            using (var first = store.LoadOrCreate(path))
+                signature = first.SignData(data, HashAlgorithmName.SHA256);
+
+            using var reloaded = store.LoadOrCreate(path);
+            Assert.True(reloaded.VerifyData(data, signature, HashAlgorithmName.SHA256));
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private sealed class QueueFixture : IDisposable
+    {
+        public string Path { get; } = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "fiskalo-queue-tests-" + Guid.NewGuid().ToString("N"), "queue.bin");
+        public FiscalQueueStore Store { get; } = null!;
+
+        public QueueFixture()
+        {
+            Store = new FiscalQueueStore(Path, new TestProtector());
+        }
+
+        public void Dispose()
+        {
+            var directory = System.IO.Path.GetDirectoryName(Path);
+            if (directory is not null && Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private sealed class TestProtector : IFiscalQueueProtector
+    {
+        private readonly byte[] _key = RandomNumberGenerator.GetBytes(32);
+
+        public byte[] Protect(byte[] plaintext)
+        {
+            var nonce = RandomNumberGenerator.GetBytes(12);
+            var tag = new byte[16];
+            var ciphertext = new byte[plaintext.Length];
+            using var aes = new AesGcm(_key, 16);
+            aes.Encrypt(nonce, plaintext, ciphertext, tag);
+            return [.. nonce, .. tag, .. ciphertext];
+        }
+
+        public byte[] Unprotect(byte[] protectedData)
+        {
+            if (protectedData.Length < 28) throw new CryptographicException("Invalid protected queue data.");
+            var nonce = protectedData[..12];
+            var tag = protectedData[12..28];
+            var ciphertext = protectedData[28..];
+            var plaintext = new byte[ciphertext.Length];
+            using var aes = new AesGcm(_key, 16);
+            aes.Decrypt(nonce, ciphertext, tag, plaintext);
+            return plaintext;
+        }
+    }
+}
