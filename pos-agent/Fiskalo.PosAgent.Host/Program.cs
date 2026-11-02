@@ -31,6 +31,8 @@ var dataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFo
 var keyPath = Path.Combine(dataDirectory, "pos-signing-key.dpapi");
 var queuePath = Path.Combine(dataDirectory, "fiscal-queue.bin");
 var certificatePath = Path.Combine(dataDirectory, "atk-test-certificate.pem");
+var installationPath = Path.Combine(dataDirectory, "atk-test-installation.dpapi");
+var installationStore = new WindowsDpapiInstallationStore(installationPath);
 var keyStore = new WindowsDpapiEcdsaKeyStore();
 var queueStore = new FiscalQueueStore(queuePath, new WindowsDpapiFiscalQueueProtector());
 
@@ -154,6 +156,7 @@ app.MapGet(StatusPath, (HttpContext context) =>
         signingKeyInitialized = OperatingSystem.IsWindows() && File.Exists(keyPath),
         queueInitialized = OperatingSystem.IsWindows() && File.Exists(queuePath),
         testCertificateInstalled = OperatingSystem.IsWindows() && File.Exists(certificatePath),
+        testInstallationVerified = OperatingSystem.IsWindows() && File.Exists(installationPath),
         nextStep = "ATK-test-certificate-onboarding-required"
     });
 });
@@ -190,7 +193,10 @@ app.MapPost(AtkVerifyPath, async (AtkVerifyRequest request, HttpContext context,
     try {
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
         var result = await new AtkTestClient(http).VerifyPosAsync(request.Nui, request.FiscalizationNumber, request.PosId, request.BranchId, request.ApplicationId, cancellationToken);
-        return Results.Ok(new { businessName = result.BusinessName, verificationCode = result.VerificationCode, environment = "ATK TEST", productionEnabled = false });
+        installationStore.Save(new AtkTestInstallationProfile(
+            request.Nui, result.BusinessName, request.FiscalizationNumber, request.BranchId,
+            request.PosId, request.ApplicationId, result.VerificationCode, DateTimeOffset.UtcNow));
+        return Results.Ok(new { businessName = result.BusinessName, verificationCode = result.VerificationCode, environment = "ATK TEST", profileProtectedAtRest = true, productionEnabled = false });
     } catch (AtkApiException ex) {
         return Results.Problem("ATK test verification failed (HTTP " + (int)ex.StatusCode + "). Check the supplied test identifiers and ATK test-service availability.", statusCode: StatusCodes.Status502BadGateway);
     } catch (HttpRequestException) {
@@ -205,6 +211,12 @@ app.MapPost(AtkSignCsrPath, async (AtkSignCsrRequest request, HttpContext contex
     if (!OperatingSystem.IsWindows()) return Results.Problem("Local signing-key storage currently requires Windows DPAPI.", statusCode: StatusCodes.Status501NotImplemented);
     if (request.BusinessNui == 0 || request.BranchId == 0 || request.PosId == 0 || request.ApplicationId == 0 || string.IsNullOrWhiteSpace(request.BusinessName) || string.IsNullOrWhiteSpace(request.VerificationCode)) return Results.BadRequest(new { error = "Business identity, ATK verification code and POS identifiers are required." });
     try {
+        var verified = installationStore.Load();
+        if (verified is null || verified.Nui != request.BusinessNui || verified.BranchId != request.BranchId ||
+            verified.PosId != request.PosId || verified.ApplicationId != request.ApplicationId ||
+            !string.Equals(verified.BusinessName, request.BusinessName, StringComparison.Ordinal) ||
+            !string.Equals(verified.VerificationCode, request.VerificationCode, StringComparison.Ordinal))
+            return Results.Conflict(new { error = "atk_verification_profile_mismatch", message = "Run ATK test verification first and use the exact returned business identity and identifiers." });
         Directory.CreateDirectory(dataDirectory);
         using var key = keyStore.LoadOrCreate(keyPath);
         var csr = AtkPki.CreateCsrPem(key, request.BusinessName, request.BusinessNui, request.BranchId, request.PosId);
@@ -215,7 +227,8 @@ app.MapPost(AtkSignCsrPath, async (AtkSignCsrRequest request, HttpContext contex
         if (certificateKey is null || !SamePublicKey(key, certificateKey)) return Results.Problem("ATK returned a certificate whose public key does not match this POS private key. It was not saved.", statusCode: StatusCodes.Status502BadGateway);
         var pem = certificate.ExportCertificatePem();
         await File.WriteAllTextAsync(certificatePath, pem, cancellationToken);
-        return Results.Ok(new { certificateStatus = "ATK_TEST_CERTIFICATE_RECEIVED_AND_KEY_MATCHED", subject = certificate.Subject, thumbprint = certificate.Thumbprint, environment = "ATK TEST", privateKeyExported = false, productionEnabled = false });
+        installationStore.Save(verified with { CertificateThumbprint = certificate.Thumbprint, CertificateIssuedAtUtc = DateTimeOffset.UtcNow });
+        return Results.Ok(new { certificateStatus = "ATK_TEST_CERTIFICATE_RECEIVED_AND_KEY_MATCHED", subject = certificate.Subject, thumbprint = certificate.Thumbprint, environment = "ATK TEST", privateKeyExported = false, installationProfileProtectedAtRest = true, productionEnabled = false });
     } catch (AtkApiException ex) {
         return Results.Problem("ATK test certificate request failed (HTTP " + (int)ex.StatusCode + "). Check the verification code and test identifiers.", statusCode: StatusCodes.Status502BadGateway);
     } catch (HttpRequestException) {
@@ -265,7 +278,15 @@ app.MapPost(AtkCouponPath, async (AtkCouponRequest request, HttpContext context,
         if (DateTime.UtcNow < certificate.NotBefore.ToUniversalTime() || DateTime.UtcNow > certificate.NotAfter.ToUniversalTime()) return Results.Conflict(new { error = "test_certificate_not_current" });
         using var certificateKey = certificate.GetECDsaPublicKey();
         if (certificateKey is null || !SamePublicKey(key, certificateKey)) return Results.Conflict(new { error = "certificate_key_mismatch" });
+        var installation = installationStore.Load();
+        if (installation is null || string.IsNullOrWhiteSpace(installation.CertificateThumbprint) ||
+            !string.Equals(installation.CertificateThumbprint, certificate.Thumbprint, StringComparison.OrdinalIgnoreCase))
+            return Results.Conflict(new { error = "verified_atk_test_installation_required" });
         var coupon = PosCouponBuilder.Build(request.Coupon);
+        if (coupon.BusinessId != installation.Nui || coupon.BranchId != installation.BranchId ||
+            coupon.PosId != installation.PosId || coupon.ApplicationId != installation.ApplicationId ||
+            !string.Equals(coupon.VerificationNo, installation.VerificationCode, StringComparison.Ordinal))
+            return Results.BadRequest(new { error = "coupon_identity_does_not_match_verified_pos_installation" });
         var expectedIdempotencyKey = coupon.BusinessId + ":" + coupon.BranchId + ":" + coupon.PosId + ":" + coupon.CouponId;
         if (!string.Equals(request.IdempotencyKey, expectedIdempotencyKey, StringComparison.Ordinal)) return Results.BadRequest(new { error = "idempotencyKey_must_match_business_branch_pos_coupon_ids", expected = expectedIdempotencyKey });
         var signed = AtkCouponSigner.SignPosCoupon(coupon, key);
