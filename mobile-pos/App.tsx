@@ -304,7 +304,7 @@ export default function App() {
             <Text selectable style={{ color: "#52635e", fontSize: 9, maxHeight: 80 }}>{atkCsr}</Text>
             <Action label="Ndaje CSR-në" secondary onPress={() => void shareAndroidAtkCsr()} />
           </>}
-          <Text style={{ color: "#8a5a18", fontSize: 11 }}>Mos e dërgo çelësin privat askund. Ky modul krijon çelës lokal Android Keystore, por certifikata ATK dhe dërgimi i kuponëve ende nuk janë lidhur. Konfirmo me ATK pranueshmërinë e ruajtjes dhe pajisjes para përdorimit zyrtar.</Text>
+          <Text style={{ color: "#8a5a18", fontSize: 11 }}>Mos e dërgo çelësin privat askund. Ky modul mbështet onboarding TEST dhe kontrollon që certifikata përputhet me çelësin lokal. Dërgimi i kuponëve fiskalë nga Android ende nuk është implementuar. Konfirmo me ATK pranueshmërinë e pajisjes dhe modelit të ruajtjes para përdorimit zyrtar.</Text>
         </View>}
         <TextInput placeholder="Kërko produkt / SKU" value={search} onChangeText={setSearch} style={inputStyle} />
       </View>
