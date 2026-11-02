@@ -18,16 +18,20 @@ Implemented:
 - Supplier register, purchase drafts, atomic stock receiving, supplier payment ledger and outstanding balances
 - Date-filtered management reports and CSV exports
 - ATK preparation foundation: taxpayer fiscalization-number profile, test POS registry, fiscal document/event schema and provider production lock
+- Responsive browser POS for product search, cart, invoice issue and confirmed/manual payment ledger posting
+- Android-native POS client scaffold (Expo/React Native) with Supabase sign-in, business selection, cart, invoice issue and payment recording
+- Fiskalo invoice-to-ATK coupon mapping core with explicit ATK catalogue/payment inputs and Sale/Cancel/Return reference validation
 - .NET 8 POS protocol core based on ATK's official C# sample: Protobuf models, P-256 CSR helpers, ECDSA coupon signing, money conversion and test-only HTTP client
 - Row Level Security on all Fiskalo tables
 - Cloudflare Workers deployment configuration (OpenNext)
 
 Not yet part of this MVP:
 - Certified ATK EFS fiscalization and electronic submission
+- Android-native ATK signing/certificate support (current local signing agent is Windows-only)
 - Certified fiscal receipt/QR workflow and hardware integrations
 - Accountant multi-client workspace
 - Employee email invitations (team members must already have a Fiskalo account)
-- Executed ATK test onboarding and coupon submissions, installed local POS Agent service, OS-protected persistent key/certificate storage, offline queue, printer/POS hardware and cash drawer
+- Executed ATK test onboarding and coupon submissions, installed Windows service/auto-start, Android Keystore fiscal signing, full offline reconciliation UI, printer/POS hardware and cash drawer
 - Subscription billing and Fiskalo platform administration
 - Production deployment and live end-to-end testing with real business accounts
 
@@ -113,6 +117,29 @@ The current 2026 ATK requirements and certification gates are tracked in [`docs/
 - Official fiscalization must remain disabled until current ATK specifications, authorized test access, onboarding, Sale/Cancel/Return tests, and provider/solution certification have been completed.
 
 
-### ATK / POS Agent engineering status
+### POS clients and ATK agent status
 
-The .NET POS Agent now includes the ATK protocol core, a loopback-only local host with one-time browser pairing, encrypted durable queue abstractions, Windows DPAPI protection for queue data and P-256 signing keys, and automated tests. The local host is still a development scaffold: it does not yet integrate the queue/key store, perform certificate onboarding, print receipts or submit ATK transactions. Fiskalo remains uncertified and fiscalization is disabled.
+- **Web POS:** available in source at `/app/[organizationId]/pos`, linked from the business dashboard. It creates internal invoices and records payments only after cashier confirmation. Card acquiring/terminal processing is not integrated.
+- **Android POS:** source scaffold in `mobile-pos/`. It uses the same Supabase tenant/RLS model, stores the Supabase session using Android SecureStore, and supports standard internal invoice checkout. It has not yet been built into an APK or tested on a physical device.
+- **Windows POS Agent:** .NET 8 local agent, loopback-only host, one-time pairing, DPAPI-protected P-256 key, test certificate onboarding, encrypted fiscal queue and explicit ATK test coupon submission/reconciliation lockout. The Windows installer/launcher scripts are packaged by its CI workflow.
+- **Invoice-to-ATK mapping:** core mapper added. It requires explicit current ATK unit, tax-category and item-type codes and balanced payment allocations; it deliberately does not infer tax categories from VAT percentages.
+- **Cancel/Return:** mapper supports both document types only when the original ATK coupon ID is supplied. Full operator workflow and ATK end-to-end tests remain outstanding.
+
+The web and Android clients currently issue **internal Fiskalo invoices**, not official fiscal coupons. Android does not yet sign ATK coupons; the existing fiscal signing agent is Windows-only. ATK testing has not been executed with an authorized taxpayer/application registration, and Fiskalo is not certified. Keep production fiscalization disabled.
+
+
+## POS applications
+
+### Web POS
+Open the business dashboard and select **Hap POS**. The responsive browser checkout uses the existing invoice issue and payment ledger RPCs. A payment is posted only after the cashier confirms receipt; card processing is not performed by Fiskalo.
+
+### Android POS
+The Expo project is in `mobile-pos/`. Configure `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in `mobile-pos/.env`, then run:
+
+```bash
+cd mobile-pos
+npm install
+npx expo start
+```
+
+The Android app currently handles ordinary Fiskalo invoices. It is not a fiscal signing client. Android ATK support requires a separate Android Keystore implementation and ATK test validation.
