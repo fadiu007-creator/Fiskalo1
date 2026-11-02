@@ -240,7 +240,7 @@ export default function BusinessDashboard() {
         </div>
       </section>}
 
-      {tab === "customers" && <section style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
+      {tab === "customers" && <section className="module-grid" style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
         <form onSubmit={addCustomer} style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Shto klient</h2>
           <label className="field-label">Emri / biznesi<input required value={customerForm.name} onChange={(e) => setCustomerForm({ ...customerForm, name: e.target.value })} style={field} /></label>
           <label className="field-label">NUI / numri i biznesit<input value={customerForm.business_number} onChange={(e) => setCustomerForm({ ...customerForm, business_number: e.target.value })} style={field} /></label>
@@ -252,7 +252,7 @@ export default function BusinessDashboard() {
         <section style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Klientët ({customers.length})</h2><div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Emri</th><th>NUI</th><th>Email</th><th>Telefoni</th><th>Adresa</th></tr></thead><tbody>{customers.map((c) => <tr key={c.id}><td>{c.name}</td><td>{c.business_number || "—"}</td><td>{c.email || "—"}</td><td>{c.phone || "—"}</td><td>{c.address || "—"}</td></tr>)}{!customers.length && <tr><td colSpan={5}>Nuk ka klientë ende.</td></tr>}</tbody></table></div></section>
       </section>}
 
-      {tab === "invoices" && <section style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
+      {tab === "invoices" && <section className="module-grid" style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
         <form onSubmit={createInvoice} style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Lësho faturë</h2>
           <label className="field-label">Klienti<select value={invoiceForm.customer_id} onChange={(e) => setInvoiceForm({ ...invoiceForm, customer_id: e.target.value })} style={field}><option value="">Klient pa emër</option>{customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
           <label className="field-label">Mënyra e pagesës<select value={invoiceForm.payment_method} onChange={(e) => setInvoiceForm({ ...invoiceForm, payment_method: e.target.value })} style={field}><option value="cash">Para në dorë</option><option value="card">Kartelë</option><option value="bank_transfer">Transfer bankar</option><option value="credit">Me afat / e papaguar</option></select></label><p style={{ color: "var(--muted)", fontSize: 11, marginTop: -6 }}>Pagesat shënohen manualisht sipas konfirmimit të arkëtarit. Përpunimi i kartelave nuk është i integruar.</p><p style={{ color: "var(--muted)", fontSize: 11, marginTop: -6 }}>Pagesat shënohen manualisht sipas konfirmimit të arkëtarit. Përpunimi i kartelave nuk është i integruar.</p>
@@ -269,7 +269,7 @@ export default function BusinessDashboard() {
         <section style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Faturat ({invoices.length})</h2><InvoiceTable invoices={invoices} fmt={fmt} customers={customers} organizationId={organizationId} /></section>
       </section>}
 
-      {tab === "expenses" && <section style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
+      {tab === "expenses" && <section className="module-grid" style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
         <form onSubmit={addExpense} style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Regjistro shpenzim</h2>
           <label className="field-label">Përshkrimi<input required value={expenseForm.description} onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })} style={field} /></label>
           <label className="field-label">Furnitori<input value={expenseForm.supplier_name} onChange={(e) => setExpenseForm({ ...expenseForm, supplier_name: e.target.value })} style={field} /></label>
@@ -296,7 +296,7 @@ export default function BusinessDashboard() {
         <section style={panel}><h3 style={{ marginTop: 0 }}>Shënim për raportet tatimore</h3><p style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.6 }}>Këto janë raporte të brendshme menaxheriale. Nuk janë libra zyrtarë të shitjes/blerjes, deklarata tatimore apo raportim i pranuar nga ATK. Klasifikimi dhe trajtimi tatimor duhet të verifikohen para përdorimit për deklarim.</p></section>
       </section>}
 
-      {tab === "team" && <section style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
+      {tab === "team" && <section className="module-grid" style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
         <form onSubmit={addMember} style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Shto anëtar të ekipit</h2>
           <label className="field-label">Email i llogarisë<input required type="email" value={memberForm.email} onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })} style={field} /></label>
           <label className="field-label">Roli<select value={memberForm.role} onChange={(e) => setMemberForm({ ...memberForm, role: e.target.value })} style={field}><option value="administrator">Administrator</option><option value="accountant">Kontabilist</option><option value="manager">Menaxher</option><option value="cashier">Arkëtar</option></select></label>
