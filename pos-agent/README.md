@@ -39,3 +39,13 @@ The queue deliberately requires an injected `IFiscalQueueProtector`. A Windows `
 - `WindowsDpapiEcdsaKeyStore` creates or loads a P-256 ECDSA key, exports PKCS#8 only transiently, protects it with DPAPI before writing, uses atomic file replacement, and zeroes temporary key buffers.
 - The implementations reject non-Windows platforms instead of falling back to plaintext.
 - These primitives are in the core library but are not yet wired into the running host; certificate onboarding and lifecycle remain pending.
+
+## Automated tests
+
+The test project is `Fiskalo.PosAgent.Tests`. It covers queue idempotency, payload mismatch rejection, retry scheduling, 48-hour expiry, accepted-state immutability and encrypted-at-rest behavior. Windows-only tests exercise DPAPI queue protection and P-256 key persistence. CI builds and tests on both Ubuntu and Windows.
+
+Run locally:
+
+```bash
+dotnet test pos-agent/Fiskalo.PosAgent.Tests/Fiskalo.PosAgent.Tests.csproj --configuration Release
+```
