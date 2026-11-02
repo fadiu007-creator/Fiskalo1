@@ -3,6 +3,8 @@ namespace Fiskalo.PosAgent.Core.Queue;
 public enum FiscalQueueStatus
 {
     Queued,
+    Submitting,
+    NeedsReconciliation,
     Accepted,
     Rejected,
     Expired
