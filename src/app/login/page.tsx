@@ -47,6 +47,7 @@ export default function LoginPage() {
           {message && <p role="alert" style={{ color: "#a12b2b", fontSize: 13, margin: 0 }}>{message}</p>}
           <button disabled={busy} type="submit" style={buttonStyle}>{busy ? "Duke hyrë..." : "Hyr"}</button>
         </form>
+        <p style={{ marginTop: 14, fontSize: 13 }}><Link href="/forgot-password" style={{ color: "var(--brand)", fontWeight: 700 }}>Ke harruar fjalëkalimin?</Link></p>
         <p style={{ marginTop: 20, fontSize: 13, color: "var(--muted)" }}>Nuk ke llogari? <Link href="/register" style={{ color: "var(--brand)", fontWeight: 700 }}>Regjistro biznesin</Link></p>
       </section>
     </main>
