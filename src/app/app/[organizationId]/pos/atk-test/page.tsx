@@ -18,6 +18,20 @@ const field: React.CSSProperties = { width: "100%", border: "1px solid var(--lin
 const panel: React.CSSProperties = { background: "white", border: "1px solid var(--line)", borderRadius: 12, padding: 16 };
 const button: React.CSSProperties = { border: 0, borderRadius: 8, padding: "11px 15px", background: "var(--brand)", color: "white", fontWeight: 750, cursor: "pointer" };
 
+function apiErrorMessage(value: unknown, fallback: string): string {
+  if (typeof value === "string" && value.trim()) return value;
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    for (const key of ["detail", "message", "error", "description"]) {
+      const candidate = record[key];
+      if (typeof candidate === "string" && candidate.trim()) return candidate;
+      if (candidate && typeof candidate === "object") return apiErrorMessage(candidate, fallback);
+    }
+    try { return JSON.stringify(value); } catch { return fallback; }
+  }
+  return fallback;
+}
+
 export default function AtkTestPosPage() {
   const params = useParams<{ organizationId: string }>();
   const organizationId = params.organizationId;
@@ -135,7 +149,7 @@ export default function AtkTestPosPage() {
         body: JSON.stringify({ organizationId, nui, fiscalizationNumber, branchId: selectedPos.atk_branch_id, posId: selectedPos.pos_id, applicationId: Number(applicationId) }),
       });
       const verification = await verifyResponse.json().catch(() => ({}));
-      if (!verifyResponse.ok) throw new Error(verification.detail || verification.error || "Verifikimi i POS-it në ATK TEST dështoi.");
+      if (!verifyResponse.ok) throw new Error(apiErrorMessage(verification, "Verifikimi i POS-it në ATK TEST dështoi."));
 
       const { data: couponId, error: couponIdError } = await supabase.rpc("fiskalo_next_atk_coupon_id");
       if (couponIdError || !couponId) throw new Error("Nuk u caktua numri unik i kuponit ATK. Apliko migrimin 0024 dhe rifresko faqen.");
@@ -176,7 +190,7 @@ export default function AtkTestPosPage() {
         body: JSON.stringify({ organizationId, nui, invoiceId, posInstallationId: selectedPos.id, couponId: String(couponId), applicationId: Number(applicationId), totalCents, details, signature }),
       });
       const submission = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(submission.detail || submission.error || "Dërgimi i kuponit në ATK TEST dështoi. Kontrollo statusin e dokumentit para se të provosh sërish.");
+      if (!response.ok) throw new Error(apiErrorMessage(submission, "Dërgimi i kuponit në ATK TEST dështoi. Kontrollo statusin e dokumentit para se të provosh sërish."));
       setResult(submission);
       setNotice("ATK TEST e ka pranuar kuponin. Ky është rezultat testues, jo fiskalizim në prodhim.");
       await load();
