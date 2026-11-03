@@ -67,7 +67,7 @@ export default function PosProductsPage() {
       stock_quantity: stock, track_stock: form.item_type === "product" && form.track_stock,
       atk_unit_code: form.atk_unit_code.trim() || (form.unit.trim().toLowerCase() === "copë" ? "cope" : null),
       atk_tax_code: taxCode || (vat === 8 ? "D" : vat === 18 ? "E" : null),
-      atk_item_category_code: form.atk_item_category_code.trim() || (form.item_type === "product" ? "TT" : null) };
+      atk_item_category_code: form.atk_item_category_code.trim() || null };
     const result = editingId
       ? await supabase.from("fiskalo_products").update(values).eq("organization_id", organizationId).eq("id", editingId)
       : await supabase.from("fiskalo_products").insert(values);
@@ -110,14 +110,14 @@ export default function PosProductsPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10, marginTop: 8 }}>
           <label style={{ fontSize: 12 }}>Kodi i njësisë<input value={form.atk_unit_code} onChange={e=>setForm(v=>({...v,atk_unit_code:e.target.value}))} placeholder="Sipas katalogut ATK" style={field}/></label>
           <label style={{ fontSize: 12 }}>Kodi i TVSH-së<input maxLength={1} value={form.atk_tax_code} onChange={e=>setForm(v=>({...v,atk_tax_code:e.target.value.toUpperCase()}))} placeholder="Shkronja ATK" style={field}/></label>
-          <label style={{ fontSize: 12 }}>Kategoria e artikullit<input value={form.atk_item_category_code} onChange={e=>setForm(v=>({...v,atk_item_category_code:e.target.value}))} placeholder="Kodi ATK" style={field}/></label>
+          <label style={{ fontSize: 12 }}>Kategoria e artikullit ATK<input value={form.atk_item_category_code} onChange={e=>setForm(v=>({...v,atk_item_category_code:e.target.value}))} placeholder="Plotëso kodin zyrtar ATK" style={field}/></label>
         </div>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button disabled={busy} type="submit" style={primary}>{busy ? "Duke ruajtur..." : editingId ? "Ruaj ndryshimet" : "Shto produktin"}</button>{editingId && <button type="button" onClick={reset} style={{ ...primary, background: "white", color: "var(--ink)", border: "1px solid var(--line)" }}>Anulo</button>}</div>
     </form>
     <input aria-label="Kërko produkt" placeholder="Kërko sipas emrit ose SKU..." value={search} onChange={e=>setSearch(e.target.value)} style={{ ...field, marginBottom: 12 }}/>
     <div style={{ display: "grid", gap: 8 }}>{visible.map(product=><div key={product.id} style={{ background: "white", border: "1px solid var(--line)", borderRadius: 10, padding: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-      <div><strong>{product.name}</strong><div style={{ color: "var(--muted)", fontSize: 12 }}>{product.pos_category || "Tjera"} · {product.sku || "Pa SKU"} · {product.item_type === "service" ? "Shërbim" : "Produkt"} · TVSH {product.vat_rate}% · {Number(product.unit_price).toFixed(2)} € · {product.atk_unit_code && product.atk_tax_code && product.atk_item_category_code ? "Kodet ATK gati" : "Mungojnë kodet ATK"}</div></div>
+      <div><strong>{product.name}</strong><div style={{ color: "var(--muted)", fontSize: 12 }}>{product.pos_category || "Tjera"} · {product.sku || "Pa SKU"} · {product.item_type === "service" ? "Shërbim" : "Produkt"} · TVSH {product.vat_rate}% · {Number(product.unit_price).toFixed(2)} € · {product.atk_unit_code && product.atk_tax_code && product.atk_item_category_code ? "Kodet ATK të plotësuara" : "Mungojnë kodet ATK"}</div></div>
       <div style={{ display: "flex", gap: 7 }}><button type="button" onClick={()=>edit(product)} style={{ ...primary, background: "white", color: "var(--ink)", border: "1px solid var(--line)" }}>Ndrysho</button><button type="button" disabled={busy} onClick={()=>void toggleActive(product)} style={{ ...primary, background: product.is_active ? "#8a3b35" : "var(--brand)" }}>{product.is_active ? "Çaktivizo" : "Aktivizo"}</button></div>
     </div>)}
     {!visible.length && <p style={{ color: "var(--muted)" }}>Nuk ka artikuj. Shto produktin e parë më lart.</p>}</div>
