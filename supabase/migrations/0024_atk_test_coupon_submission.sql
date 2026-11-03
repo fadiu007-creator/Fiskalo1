@@ -6,7 +6,12 @@ create unique index if not exists fiskalo_atk_one_sale_per_invoice
 
 create policy fiskalo_atk_docs_insert_test on public.fiskalo_atk_fiscal_documents
   for insert to authenticated with check (
-    environment = 'test'
+    public.fiskalo_has_role(organization_id, array['owner','administrator']::public.fiskalo_organization_role[])
+    and exists (
+      select 1 from public.fiskalo_atk_pos_installations p
+      where p.id = pos_installation_id and p.organization_id = fiskalo_atk_fiscal_documents.organization_id
+        and p.environment = 'test' and p.status = 'active' and p.certificate_serial is not null
+    )
   );
 
 -- The API still performs owner/admin membership and POS-installation checks before writes.
@@ -30,11 +35,19 @@ grant insert on public.fiskalo_atk_fiscal_events to authenticated;
 create policy fiskalo_atk_docs_update_test on public.fiskalo_atk_fiscal_documents
   for update to authenticated
   using (
-    environment = 'test'
-    and public.fiskalo_has_role(organization_id, array['owner','administrator']::public.fiskalo_organization_role[])
+    public.fiskalo_has_role(organization_id, array['owner','administrator']::public.fiskalo_organization_role[])
+    and exists (
+      select 1 from public.fiskalo_atk_pos_installations p
+      where p.id = pos_installation_id and p.organization_id = fiskalo_atk_fiscal_documents.organization_id
+        and p.environment = 'test'
+    )
   )
   with check (
-    environment = 'test'
-    and public.fiskalo_has_role(organization_id, array['owner','administrator']::public.fiskalo_organization_role[])
+    public.fiskalo_has_role(organization_id, array['owner','administrator']::public.fiskalo_organization_role[])
+    and exists (
+      select 1 from public.fiskalo_atk_pos_installations p
+      where p.id = pos_installation_id and p.organization_id = fiskalo_atk_fiscal_documents.organization_id
+        and p.environment = 'test'
+    )
   );
 grant update on public.fiskalo_atk_fiscal_documents to authenticated;
