@@ -4,10 +4,10 @@ export const runtime = "nodejs";
 
 function readVarint(bytes: Uint8Array, start: number): { value: bigint; next: number } {
   let value = BigInt(0); let shift = BigInt(0); let cursor = start;
-  while (cursor < bytes.length && shift < 7BigInt(0)) {
+  while (cursor < bytes.length && shift < BigInt(70)) {
     const byte = bytes[cursor++]; value |= BigInt(byte & 0x7f) << shift;
     if ((byte & 0x80) === 0) return { value, next: cursor };
-    shift += 7n;
+    shift += BigInt(7);
   }
   throw new Error("Malformed ATK Protobuf varint.");
 }
@@ -19,7 +19,7 @@ function readCouponHeader(details: string): Map<number, bigint> {
   let cursor = 0;
   while (cursor < bytes.length) {
     const tag = readVarint(bytes, cursor); cursor = tag.next;
-    const field = Number(tag.value >> 3n); const wire = Number(tag.value & 7n);
+    const field = Number(tag.value >> BigInt(3)); const wire = Number(tag.value & BigInt(7));
     if (field <= 0) throw new Error("Invalid ATK Protobuf field.");
     if (wire === 0) {
       const parsed = readVarint(bytes, cursor); cursor = parsed.next;
