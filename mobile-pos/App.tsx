@@ -93,10 +93,9 @@ export default function App() {
       .select("id,name").eq("organization_id", org.organization_id).order("name");
     let providerApplicationId = "";
     if (["owner", "administrator"].includes(org.role)) {
-      const { data: providerSettings, error: providerSettingsError } = await supabase.from("fiskalo_atk_provider_settings")
-        .select("application_id").eq("singleton", true).maybeSingle();
-      if (providerSettingsError) { setBusy(false); setError("Konfigurimi ATK i ofruesit nuk u lexua: " + providerSettingsError.message); return; }
-      providerApplicationId = providerSettings?.application_id ? String(providerSettings.application_id) : "";
+      const { data: applicationId, error: applicationIdError } = await supabase.rpc("fiskalo_get_business_application_id", { target_org: org.organization_id });
+      if (applicationIdError) { setBusy(false); setError("Application ID i ofruesit nuk u lexua: " + applicationIdError.message); return; }
+      providerApplicationId = applicationId ? String(applicationId) : "";
     }
     setBusy(false);
     if (pError || cError) { setError(pError?.message ?? cError?.message ?? "Nuk u ngarkuan të dhënat."); return; }
