@@ -33,7 +33,8 @@ export default function WebPosPage() {
   const [customerId, setCustomerId] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [confirmedPayment, setConfirmedPayment] = useState(false);
-  const [atkSetupNotice, setAtkSetupNotice] = useState("Duke kontrolluar konfigurimin ATK TEST…");
+  const [atkSetupNotice, setAtkSetupNotice] = useState("Duke kontrolluar qasjen në arkë…");
+  const [isManagement, setIsManagement] = useState(false);
   const atkAutoInitRef = useRef(false);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("Të gjitha");
@@ -74,11 +75,35 @@ export default function WebPosPage() {
     if (atkAutoInitRef.current) return;
     atkAutoInitRef.current = true;
     let cancelled = false;
-    void ensureATKTestPosReady(supabase, organizationId)
-      .then((result) => { if (!cancelled) setAtkSetupNotice(result.message); })
-      .catch((error) => {
+    void (async () => {
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth.user) {
+        if (!cancelled) setAtkSetupNotice("Sesioni ka skaduar. Hyr përsëri.");
+        return;
+      }
+      const { data: membership, error: membershipError } = await supabase
+        .from("fiskalo_organization_users")
+        .select("role")
+        .eq("organization_id", organizationId)
+        .eq("user_id", auth.user.id)
+        .maybeSingle();
+      if (membershipError || !membership) {
+        if (!cancelled) setAtkSetupNotice("Nuk u verifikua qasja në këtë biznes.");
+        return;
+      }
+      const management = ["owner", "administrator"].includes(String(membership.role));
+      if (!cancelled) setIsManagement(management);
+      if (!management) {
+        if (!cancelled) setAtkSetupNotice("Arka është gati për shitje. Konfigurimi fiskal menaxhohet nga pronari ose administratori.");
+        return;
+      }
+      try {
+        const result = await ensureATKTestPosReady(supabase, organizationId);
+        if (!cancelled) setAtkSetupNotice(result.message);
+      } catch (error) {
         if (!cancelled) setAtkSetupNotice(error instanceof Error ? error.message : "Konfigurimi automatik ATK TEST dështoi.");
-      });
+      }
+    })();
     return () => { cancelled = true; };
   }, [organizationId, supabase]);
 
@@ -235,7 +260,7 @@ export default function WebPosPage() {
   return <main className="fiskalo-pos" style={{ maxWidth: 1440, margin: "0 auto", padding: "22px clamp(12px,3vw,28px) 50px" }}>
     <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
       <div><Link href={`/app/${organizationId}`} style={{ color: "var(--brand)", fontWeight: 750 }}>← Paneli i biznesit</Link><h1 style={{ margin: "8px 0 0", fontSize: 28 }}>Arka</h1><div style={{ color: "var(--muted)", fontSize: 13 }}>Zgjedh produktet, shto në porosi dhe prano pagesën. Totali llogaritet vetë.</div></div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Link href={`/app/${organizationId}/pos/products`} style={{ ...secondary, textDecoration: "none" }}>Produktet</Link><Link href={`/app/${organizationId}/pos/setup`} style={{ ...secondary, textDecoration: "none" }}><Settings2 size={15} /> Konfiguro ATK</Link><button style={secondary} onClick={() => void load()}><RefreshCw size={15} /> Rifresko</button></div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Link href={`/app/${organizationId}/pos/products`} style={{ ...secondary, textDecoration: "none" }}>Produktet</Link>{isManagement && <Link href={`/app/${organizationId}/pos/setup`} style={{ ...secondary, textDecoration: "none" }}><Settings2 size={15} /> Konfiguro ATK</Link>}<button style={secondary} onClick={() => void load()}><RefreshCw size={15} /> Rifresko</button></div>
     </header>
     <div role="status" style={{ marginBottom: 12, border: "1px solid var(--line)", borderRadius: 10, padding: "10px 12px", color: "var(--muted)", fontSize: 13 }}>{atkSetupNotice}</div>
     <nav aria-label="POS dhe faturat" style={{ display: "flex", gap: 8, marginBottom: 14, borderBottom: "1px solid var(--line)", paddingBottom: 10 }}><button aria-pressed={activeView === "pos"} onClick={() => setActiveView("pos")} style={{ ...(activeView === "pos" ? button : secondary) }}><ShoppingCart size={15} /> Shitje</button><button aria-pressed={activeView === "invoices"} onClick={() => setActiveView("invoices")} style={{ ...(activeView === "invoices" ? button : secondary) }}><FileText size={15} /> Faturat <span className="status-pill">{invoices.length}</span></button></nav>
