@@ -2,7 +2,38 @@ import { authorizeAtkOrganization, getAtkRequestContext, positiveInteger } from 
 
 export const runtime = "nodejs";
 
-function readVarint(bytes: Uint8Array, start: number): { value: bigint; next: number } {\n  let value = 0n; let shift = 0n; let cursor = start;\n  while (cursor < bytes.length && shift < 70n) {\n    const byte = bytes[cursor++]; value |= BigInt(byte & 0x7f) << shift;\n    if ((byte & 0x80) === 0) return { value, next: cursor };\n    shift += 7n;\n  }\n  throw new Error("Malformed ATK Protobuf varint.");\n}\n\nfunction readCouponHeader(details: string): Map<number, bigint> {\n  const binary = atob(details);\n  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));\n  const fields = new Map<number, bigint>();\n  let cursor = 0;\n  while (cursor < bytes.length) {\n    const tag = readVarint(bytes, cursor); cursor = tag.next;\n    const field = Number(tag.value >> 3n); const wire = Number(tag.value & 7n);\n    if (field <= 0) throw new Error("Invalid ATK Protobuf field.");\n    if (wire === 0) {\n      const parsed = readVarint(bytes, cursor); cursor = parsed.next;\n      if ([1, 2, 3, 6, 7, 9, 13].includes(field)) fields.set(field, parsed.value);\n    } else if (wire === 1) cursor += 8;\n    else if (wire === 2) { const length = readVarint(bytes, cursor); cursor = length.next; cursor += Number(length.value); }\n    else if (wire === 5) cursor += 4;\n    else throw new Error("Unsupported ATK Protobuf wire type.");\n    if (cursor > bytes.length) throw new Error("Truncated ATK Protobuf payload.");\n  }\n  return fields;\n}\n\nfunction isBase64(value: string): boolean {
+function readVarint(bytes: Uint8Array, start: number): { value: bigint; next: number } {
+  let value = 0n; let shift = 0n; let cursor = start;
+  while (cursor < bytes.length && shift < 70n) {
+    const byte = bytes[cursor++]; value |= BigInt(byte & 0x7f) << shift;
+    if ((byte & 0x80) === 0) return { value, next: cursor };
+    shift += 7n;
+  }
+  throw new Error("Malformed ATK Protobuf varint.");
+}
+
+function readCouponHeader(details: string): Map<number, bigint> {
+  const binary = atob(details);
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  const fields = new Map<number, bigint>();
+  let cursor = 0;
+  while (cursor < bytes.length) {
+    const tag = readVarint(bytes, cursor); cursor = tag.next;
+    const field = Number(tag.value >> 3n); const wire = Number(tag.value & 7n);
+    if (field <= 0) throw new Error("Invalid ATK Protobuf field.");
+    if (wire === 0) {
+      const parsed = readVarint(bytes, cursor); cursor = parsed.next;
+      if ([1, 2, 3, 6, 7, 9, 13].includes(field)) fields.set(field, parsed.value);
+    } else if (wire === 1) cursor += 8;
+    else if (wire === 2) { const length = readVarint(bytes, cursor); cursor = length.next; cursor += Number(length.value); }
+    else if (wire === 5) cursor += 4;
+    else throw new Error("Unsupported ATK Protobuf wire type.");
+    if (cursor > bytes.length) throw new Error("Truncated ATK Protobuf payload.");
+  }
+  return fields;
+}
+
+function isBase64(value: string): boolean {
   if (!value || value.length > 2_000_000 || value.length % 4 !== 0) return false;
   return /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value);
 }
@@ -22,7 +53,8 @@ export async function POST(request: Request) {
   const details = typeof body.details === "string" ? body.details : "";
   const signature = typeof body.signature === "string" ? body.signature : "";
   const couponId = positiveInteger(body.couponId);
-  const totalCents = positiveInteger(body.totalCents);\n  const applicationId = positiveInteger(body.applicationId);
+  const totalCents = positiveInteger(body.totalCents);
+  const applicationId = positiveInteger(body.applicationId);
   if (!organizationId || !invoiceId || !posInstallationId || !/^\d{9}$/.test(nui) ||
       !couponId || totalCents === null || !applicationId || !isBase64(details) || !isBase64(signature)) {
     return Response.json({ error: "invalid_coupon_request", detail: "Organization, invoice, TEST POS, NUI, coupon ID, total and signed Protobuf details are required." }, { status: 400 });
@@ -41,7 +73,14 @@ export async function POST(request: Request) {
   if (posError || !pos || pos.environment !== "test") {
     return Response.json({ error: "test_pos_not_ready", detail: "The selected POS installation is not configured for the ATK TEST environment." }, { status: 409 });
   }
-  let header: Map<number, bigint>;\n  try { header = readCouponHeader(details); }\n  catch { return Response.json({ error: "invalid_protobuf", detail: "The signed details are not a valid ATK Protobuf coupon." }, { status: 400 }); }\n  const expectedHeader = new Map<number, bigint>([[1, BigInt(nui)], [2, BigInt(couponId)], [3, BigInt(pos.atk_branch_id)], [6, BigInt(pos.pos_id)], [7, BigInt(applicationId)], [9, 1n], [13, BigInt(totalCents)]]);\n  for (const [field, expected] of expectedHeader) {\n    if (header.get(field) !== expected) return Response.json({ error: "coupon_header_mismatch", detail: "The signed coupon identifiers or totals do not match the selected Fiskalo business, TEST POS and invoice." }, { status: 409 });\n  }\n  if (Math.round(Number(invoice.total) * 100) !== totalCents) {
+  let header: Map<number, bigint>;
+  try { header = readCouponHeader(details); }
+  catch { return Response.json({ error: "invalid_protobuf", detail: "The signed details are not a valid ATK Protobuf coupon." }, { status: 400 }); }
+  const expectedHeader = new Map<number, bigint>([[1, BigInt(nui)], [2, BigInt(couponId)], [3, BigInt(pos.atk_branch_id)], [6, BigInt(pos.pos_id)], [7, BigInt(applicationId)], [9, 1n], [13, BigInt(totalCents)]]);
+  for (const [field, expected] of expectedHeader) {
+    if (header.get(field) !== expected) return Response.json({ error: "coupon_header_mismatch", detail: "The signed coupon identifiers or totals do not match the selected Fiskalo business, TEST POS and invoice." }, { status: 409 });
+  }
+  if (Math.round(Number(invoice.total) * 100) !== totalCents) {
     return Response.json({ error: "invoice_total_mismatch", detail: "The signed coupon total does not match the issued Fiskalo invoice." }, { status: 409 });
   }
 
