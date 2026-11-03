@@ -8,7 +8,7 @@ import { submitPaidInvoiceToATK } from "@/lib/atk/submit-paid-invoice";
 import { ensureATKTestPosReady } from "@/lib/atk/ensure-test-pos-ready";
 import { ArrowRight, FileText, Plus, RefreshCw, Search, Settings2, ShoppingCart } from "lucide-react";
 
-type Product = { id: string; name: string; sku: string | null; pos_category: string; image_url: string | null; unit_price: number; vat_rate: number; stock_quantity: number; track_stock: boolean; item_type: string; is_active: boolean };
+type Product = { id: string; name: string; sku: string | null; pos_category: string; image_url: string | null; unit_price: number; vat_rate: number; stock_quantity: number; track_stock: boolean; item_type: string; is_active: boolean; atk_unit_code: string | null; atk_tax_code: string | null; atk_item_category_code: string | null };
 type Customer = { id: string; name: string; phone: string | null };
 type InvoiceRow = { id: string; invoice_number: string | null; issue_date: string; status: string; payment_status: string; payment_method: string; total: number; customer_id: string | null; atk_test_status?: string | null };
 type CartLine = { productId: string; quantity: string };
@@ -52,7 +52,7 @@ export default function WebPosPage() {
     setLoading(true);
     const { data: currentAuth } = await supabase.auth.getUser();
     const [productResult, customerResult, invoiceResult, membershipResult, shiftResult] = await Promise.all([
-      supabase.from("fiskalo_products").select("id,name,sku,pos_category,image_url,unit_price,vat_rate,stock_quantity,track_stock,item_type,is_active").eq("organization_id", organizationId).eq("is_active", true).order("name"),
+      supabase.from("fiskalo_products").select("id,name,sku,pos_category,image_url,unit_price,vat_rate,stock_quantity,track_stock,item_type,is_active,atk_unit_code,atk_tax_code,atk_item_category_code").eq("organization_id", organizationId).eq("is_active", true).order("name"),
       supabase.from("fiskalo_customers").select("id,name,phone").eq("organization_id", organizationId).order("name"),
       supabase.from("fiskalo_invoices").select("id,invoice_number,issue_date,status,payment_status,payment_method,total,customer_id").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
       supabase.from("fiskalo_organization_users").select("role").eq("organization_id", organizationId).eq("user_id", currentAuth.user?.id ?? "").maybeSingle(),
@@ -168,6 +168,19 @@ export default function WebPosPage() {
     setError(""); setNotice(""); setIssuedInvoiceId(""); setIssuedNumber("");
     const valid = lines.filter((line) => Number.isFinite(line.quantity) && line.quantity > 0);
     if (!valid.length || valid.length !== lines.length) { setError("Shto artikuj dhe kontrollo sasitë."); return; }
+    if (paymentMethod !== "credit") {
+      const unmapped = valid.filter(({ product }) =>
+        !product!.atk_unit_code?.trim() ||
+        !/^[A-Z]$/.test(product!.atk_tax_code?.trim() ?? "") ||
+        !product!.atk_item_category_code?.trim()
+      );
+      if (unmapped.length) {
+        setError("Fatura nuk u krijua. Për dërgim automatik në ATK, plotëso kodet fiskale zyrtare për: " +
+          unmapped.map(({ product }) => product!.name).join(", ") +
+          ". Hape Produktet dhe shërbimet dhe plotëso njësinë, kodin e TVSH-së dhe kategorinë ATK.");
+        return;
+      }
+    }
     if (paymentMethod !== "credit" && !confirmedPayment) { setError("Konfirmo që pagesa është pranuar para se ta regjistrosh si të paguar."); return; }
     if (paymentMethod === "cash" && !activeShiftId) { setError("Hap fillimisht ndërrimin e arkës. Pagesat me para në dorë duhet të lidhen me një arkë aktive."); return; }
     for (const line of valid) {
