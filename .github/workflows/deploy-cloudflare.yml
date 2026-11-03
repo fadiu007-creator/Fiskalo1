@@ -2,6 +2,9 @@ name: Deploy Fiskalo to Cloudflare Workers
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/web-pos-checkout
 
 jobs:
   deploy:
