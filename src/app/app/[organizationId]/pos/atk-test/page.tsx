@@ -27,7 +27,8 @@ export default function AtkTestPosPage() {
   const [applicationId, setApplicationId] = useState("929645146946");
   const [positions, setPositions] = useState<Pos[]>([]);
   const [posId, setPosId] = useState("");
-  const [invoices, setInvoices] = useState<Invoice[]>([]);\n  const [documents, setDocuments] = useState<FiscalDoc[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [documents, setDocuments] = useState<FiscalDoc[]>([]);
   const [invoiceId, setInvoiceId] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
   const [mappings, setMappings] = useState<Record<string, Mapping>>({});
@@ -54,7 +55,8 @@ export default function AtkTestPosPage() {
     else { setNui(String(orgResult.data.nui)); setMunicipality(orgResult.data.municipality || ""); }
     setFiscalizationNumber(profileResult.data?.fiscalization_number || "");
     setPositions((posResult.data || []) as Pos[]);
-    setInvoices((invoiceResult.data || []) as Invoice[]);\n    setDocuments((documentResult.data || []) as FiscalDoc[]);
+    setInvoices((invoiceResult.data || []) as Invoice[]);
+    setDocuments((documentResult.data || []) as FiscalDoc[]);
     if (posResult.data?.length) setPosId((current) => current || posResult.data[0].id);
     setLoading(false);
   }, [organizationId, supabase]);
@@ -165,7 +167,8 @@ export default function AtkTestPosPage() {
       const submission = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(submission.detail || submission.error || "Dërgimi i kuponit në ATK TEST dështoi. Kontrollo statusin e dokumentit para se të provosh sërish.");
       setResult(submission);
-      setNotice("ATK TEST e ka pranuar kuponin. Ky është rezultat testues, jo fiskalizim në prodhim.");\n      await load();
+      setNotice("ATK TEST e ka pranuar kuponin. Ky është rezultat testues, jo fiskalizim në prodhim.");
+      await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Dërgimi i kuponit testues dështoi.");
     } finally { setBusy(false); }
