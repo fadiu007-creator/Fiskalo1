@@ -531,7 +531,7 @@ export default function BusinessDashboard() {
     <main style={{ maxWidth: 1180, margin: "0 auto", padding: "28px 20px 60px" }}>
       <header className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
         <div><Link href="/app" style={{ color: "var(--brand)", fontWeight: 800, fontSize: 22 }}>fiskalo</Link><div style={{ color: "var(--muted)", fontSize: 12 }}>Paneli i biznesit</div></div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}><Link href={`/app/${organizationId}/pos`} style={primary}>Hap POS</Link><Link href="/app" style={secondary}>Bizneset</Link><button onClick={signOut} style={secondary}>Dil nga llogaria</button></div>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}><Link href={`/app/${organizationId}/pos`} style={primary}>Hap POS</Link><button type="button" onClick={() => { setTab("atk"); setNotice(""); setError(""); }} style={{ ...secondary, borderColor: "var(--brand)", color: "var(--brand)", fontWeight: 800 }}>ATK / POS</button><Link href="/app" style={secondary}>Bizneset</Link><button onClick={signOut} style={secondary}>Dil nga llogaria</button></div>
       </header>
       <section style={{ ...panel, marginBottom: 18, display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div><h1 style={{ margin: "0 0 5px", fontSize: 27 }}>{org.legal_name}</h1><span style={{ color: "var(--muted)", fontSize: 13 }}>{org.municipality} · NUI: {org.nui}</span></div>
