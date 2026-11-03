@@ -65,11 +65,11 @@ function concat(parts: Uint8Array[]): Uint8Array {
 }
 
 function varint(value: bigint): Uint8Array {
-  if (value < 0n) throw new Error("ATK Protobuf integer fields must not be negative.");
+  if (value < BigInt(0)) throw new Error("ATK Protobuf integer fields must not be negative.");
   const bytes: number[] = [];
-  while (value > 127n) {
-    bytes.push(Number(value & 127n) | 128);
-    value >>= 7n;
+  while (value > BigInt(127)) {
+    bytes.push(Number(value & BigInt(127)) | 128);
+    value >>= BigInt(7);
   }
   bytes.push(Number(value));
   return new Uint8Array(bytes);
@@ -81,10 +81,10 @@ function key(field: number, wire: 0 | 2 | 5): Uint8Array {
 
 function uintField(field: number, value: string | number | bigint): Uint8Array {
   const parsed = BigInt(value);
-  if (parsed < 0n || parsed > 18446744073709551615n) {
+  if (parsed < BigInt(0) || parsed > BigInt("18446744073709551615")) {
     throw new Error("ATK identifier is outside the uint64 range.");
   }
-  return parsed === 0n ? new Uint8Array() : concat([key(field, 0), varint(parsed)]);
+  return parsed === BigInt(0) ? new Uint8Array() : concat([key(field, 0), varint(parsed)]);
 }
 
 function intField(field: number, value: number): Uint8Array {
@@ -156,15 +156,15 @@ function encodeTaxGroup(group: AtkTaxGroupInput): Uint8Array {
 }
 
 export function encodeAtkPosCoupon(input: AtkPosCouponInput): Uint8Array {
-  if (![input.businessId, input.couponId, input.branchId, input.posId, input.applicationId].every(v => BigInt(v) > 0n)) {
+  if (![input.businessId, input.couponId, input.branchId, input.posId, input.applicationId].every(v => BigInt(v) > BigInt(0))) {
     throw new Error("ATK business, coupon, branch, POS and application IDs are required.");
   }
   if (!input.location.trim() || !input.operatorId.trim()) throw new Error("ATK location and operator ID are required.");
   if (!input.verificationNo || input.verificationNo.length > 16) throw new Error("ATK verification number must contain 1 to 16 characters.");
   if (![1, 2, 3].includes(input.type)) throw new Error("ATK coupon type must be Sale, Cancel or Return.");
   if (!Number.isSafeInteger(input.unixTime) || input.unixTime <= 0) throw new Error("ATK coupon timestamp is invalid.");
-  if ((input.type === 1 && input.referenceNo != null && BigInt(input.referenceNo) !== 0n) ||
-      (input.type !== 1 && (input.referenceNo == null || BigInt(input.referenceNo) <= 0n))) {
+  if ((input.type === 1 && input.referenceNo != null && BigInt(input.referenceNo) !== BigInt(0)) ||
+      (input.type !== 1 && (input.referenceNo == null || BigInt(input.referenceNo) <= BigInt(0)))) {
     throw new Error("ATK Cancel and Return coupons require the original coupon ID; Sale must not reference one.");
   }
   if (!input.items.length || !input.payments.length || !input.taxGroups.length) {
