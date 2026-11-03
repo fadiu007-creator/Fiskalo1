@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
-  Activity, Building2, CheckCircle2, CircleAlert, Cpu,
+  Activity, ArrowUpRight, Building2, CheckCircle2, CircleAlert, Cpu,
   LayoutDashboard, Search, Settings2, ShieldCheck, Store,
 } from "lucide-react";
 
@@ -53,6 +54,7 @@ export default function ProviderDashboard({
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [showSettings, setShowSettings] = useState(false);
+  const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const filteredBusinesses = businesses.filter((business) =>
     [business.trade_name, business.legal_name, business.municipality]
@@ -61,6 +63,12 @@ export default function ProviderDashboard({
   const activePos = posDevices.filter((pos) => pos.status === "active").length;
   const testPos = posDevices.filter((pos) => pos.environment === "test").length;
   const productionPos = posDevices.filter((pos) => pos.environment === "production").length;
+
+  async function signOut() {
+    await supabase.auth.signOut();
+    router.replace("/login");
+    router.refresh();
+  }
 
   async function saveSettings(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -91,12 +99,13 @@ export default function ProviderDashboard({
         <button className="provider-nav-item" onClick={() => setShowSettings((v) => !v)}><Settings2 size={17}/> Konfigurimi ATK</button>
         <div className="provider-sidebar-bottom">
           <div className="provider-account"><span className="provider-avatar">{userEmail.slice(0,1).toUpperCase() || "F"}</span><div><strong>{role === "provider_admin" ? "Administrator" : role === "provider_support" ? "Mbështetje" : "Përputhshmëri"}</strong><small>{userEmail}</small></div></div>
+          <button type="button" className="provider-signout" onClick={signOut}>Dil nga llogaria</button>
 
         </div>
       </aside>
 
       <main className="provider-main" id="overview">
-        <header className="provider-topbar"><div><span className="provider-eyebrow">MENAXHIM I PLATFORMËS</span><h1>Qendra e ofruesit</h1></div><div className="provider-top-actions"><span className="provider-live"><i/> Hapësira e ofruesit</span><span className="provider-user-chip">{userEmail}</span></div></header>
+        <header className="provider-topbar"><div><span className="provider-eyebrow">MENAXHIM I PLATFORMËS</span><h1>Qendra e ofruesit</h1></div><div className="provider-top-actions"><Link href="/app" className="provider-workspace-link">Hap bizneset <ArrowUpRight size={14}/></Link><span className="provider-live"><i/> Hapësira e ofruesit</span><span className="provider-user-chip">{userEmail}</span></div></header>
         <section className="provider-welcome"><div><span className="provider-eyebrow">PANELI I OFRUESIT</span><h2>Kontrollo Fiskalo nga një vend.</h2><p>Menaxho bizneset kliente, instalimet POS dhe konfigurimin e softuerit fiskal.</p></div><div className="provider-welcome-mark"><ShieldCheck size={42}/><span>Qasje e ndarë</span></div></section>
 
         {loadError && <div className="provider-alert bad"><CircleAlert size={17}/> Nuk u ngarkuan të gjitha të dhënat: {loadError}</div>}
