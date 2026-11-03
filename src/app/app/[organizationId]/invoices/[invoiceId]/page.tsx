@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { submitPaidInvoiceToATK } from "@/lib/atk/submit-paid-invoice";
 
 type Invoice = { id: string; invoice_number: string | null; status: string; issue_date: string; due_date: string | null; subtotal: number; vat_total: number; total: number; payment_method: string; payment_status: string; fiscalization_status: string; notes: string | null; customer_id: string | null };
 type Org = { legal_name: string; trade_name: string | null; nui: string; fiscal_number: string | null; address: string | null; municipality: string; phone: string | null; email: string | null };
@@ -136,7 +137,18 @@ export default function InvoiceDetailPage() {
     if (freshInvoice.data) setInvoice(freshInvoice.data as Invoice);
     if (freshPayments.data) setPayments(freshPayments.data as Payment[]);
     setPaymentForm({ amount: "", method: "cash", reference: "" });
-    setPaymentMessage("Pagesa u regjistrua.");
+    if (freshInvoice.data?.payment_status === "paid") {
+      try {
+        const fiscal = await submitPaidInvoiceToATK(supabase, params.organizationId, params.invoiceId);
+        setPaymentMessage("Pagesa u regjistrua. " + fiscal.message);
+      } catch (fiscalError) {
+        setPaymentMessage("Pagesa u regjistrua, por dërgimi automatik në ATK nuk u përfundua: " +
+          (fiscalError instanceof Error ? fiscalError.message : "Gabim i panjohur.") +
+          " Kontrollo statusin para çdo prove tjetër.");
+      }
+    } else {
+      setPaymentMessage("Pagesa u regjistrua. Fatura do të dërgohet në ATK kur të paguhet plotësisht.");
+    }
     setPaymentBusy(false);
   }
 
