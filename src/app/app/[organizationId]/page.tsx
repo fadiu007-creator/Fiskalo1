@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ArrowUpRight, ClipboardList, FileText, Package, Settings2, ShoppingCart, Wallet } from "lucide-react";
+import { ArrowUpRight, FileText, Package, Settings2, ShoppingCart, Wallet } from "lucide-react";
 
 const modules = [
   { title: "Arka / POS", description: "Regjistro shitje, skano barkode dhe prano pagesa.", href: "/pos", icon: ShoppingCart, primary: true },
@@ -61,7 +61,7 @@ export default async function BusinessDashboard({ params }: { params: Promise<{ 
       <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))", gap: 13 }}>
         {modules.map((item) => {
           const Icon = item.icon;
-          return <Link key={item.title} href={`/app/${organizationId}${item.href}`} style={{ background: "white", border: "1px solid var(--line)", borderRadius: 16, padding: 19, minHeight: 148, display: "flex", flexDirection: "column", justifyContent: "space-between", boxShadow: "0 5px 22px rgba(24,44,34,.035" }}>
+          return <Link key={item.title} href={`/app/${organizationId}${item.href}`} style={{ background: "white", border: "1px solid var(--line)", borderRadius: 16, padding: 19, minHeight: 148, display: "flex", flexDirection: "column", justifyContent: "space-between", boxShadow: "0 5px 22px rgba(24,44,34,.035)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ width: 42, height: 42, display: "grid", placeItems: "center", borderRadius: 12, background: item.primary ? "#e8f5ee" : "#f2f6f3", color: "var(--brand)" }}><Icon size={21}/></span>
               <ArrowUpRight size={17} color="var(--muted)"/>
