@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     const verificationCode = typeof result.verification_code === "string" ? result.verification_code : "";
     if (!businessName || !verificationCode) return Response.json({ error: "atk_unexpected_response" }, { status: 502 });
     const { error: saveError } = await supabase.from("fiskalo_atk_pos_verifications").upsert({
-      organization_id: organizationId, pos_installation_id: posInstallationId, business_name: businessName, nui,
+      organization_id: organizationId, pos_installation_id: posInstallationId, nui,
       atk_branch_id: branchId, pos_id: posId, application_id: applicationId,
       verification_code: verificationCode, business_name: businessName, verified_at: new Date().toISOString(), created_by: user.id,
     }, { onConflict: "pos_installation_id" });
