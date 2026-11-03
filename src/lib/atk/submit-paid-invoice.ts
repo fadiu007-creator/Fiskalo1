@@ -1,6 +1,7 @@
 "use client";
 
 import { encodeAtkBase64, encodeAtkPosCoupon } from "@/lib/atk/protobuf";
+import { ensureATKTestPosReady } from "@/lib/atk/ensure-test-pos-ready";
 import { hasBrowserPosCertificate, signAtkBase64Payload } from "@/lib/atk/browser-key-vault";
 import type { createClient } from "@/lib/supabase/client";
 
@@ -50,6 +51,9 @@ export async function submitPaidInvoiceToATK(
     return { status: existing.status, transactionId: existing.atk_transaction_id ? String(existing.atk_transaction_id) : undefined,
       message: existing.status === "accepted" ? "Fatura është pranuar tashmë nga ATK." : "Kjo faturë tashmë ka një dërgesë ATK (" + existing.status + "). Nuk u krijua kupon i dytë." };
   }
+
+  const posReady = await ensureATKTestPosReady(supabase, organizationId);
+  if (!posReady.ready) throw new Error(posReady.message);
 
   const [{ data: org, error: orgError }, { data: positions, error: posError }, { data: lines, error: linesError }, { data: paymentRows, error: paymentsError }] = await Promise.all([
     supabase.from("fiskalo_organizations").select("nui,municipality").eq("id", organizationId).single(),
