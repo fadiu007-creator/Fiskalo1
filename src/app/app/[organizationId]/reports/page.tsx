@@ -5,7 +5,6 @@ import { ArrowLeft, Download, FileBarChart2 } from "lucide-react";
 
 type Props = { params: Promise<{ organizationId: string }> };
 const money = (value: number) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR" }).format(value);
-const number = (value: number) => new Intl.NumberFormat("sq-XK", { maximumFractionDigits: 2 }).format(value);
 const day = (value: string) => new Date(value + "T12:00:00").toLocaleDateString("sq-XK");
 
 export default async function ReportsPage({ params }: Props) {
