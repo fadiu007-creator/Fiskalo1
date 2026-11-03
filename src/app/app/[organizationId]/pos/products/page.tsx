@@ -53,6 +53,15 @@ export default function PosProductsPage() {
         !Number.isFinite(stock) || stock < 0) {
       setBusy(false); setError("Kontrollo emrin, çmimin, TVSH-në (0, 8 ose 18) dhe stokun."); return;
     }
+    const taxCode = form.atk_tax_code.trim().toUpperCase();
+    const expectedTaxCode = vat === 8 ? "D" : vat === 18 ? "E" : vat === 0 ? null : "INVALID";
+    if (taxCode && (expectedTaxCode === "INVALID" ||
+        (expectedTaxCode && taxCode !== expectedTaxCode) ||
+        (vat === 0 && !["A", "C"].includes(taxCode)))) {
+      setBusy(false);
+      setError("Kodi ATK i TVSH-së nuk përputhet me normën: A/C për 0%, D për 8%, E për 18%.");
+      return;
+    }
     const values = { organization_id: organizationId, name: form.name.trim(), sku: form.sku.trim() || null,
       item_type: form.item_type, unit: form.unit.trim() || "copë", pos_category: form.pos_category, image_url: form.image_url.trim() || null, unit_price: price, vat_rate: vat,
       stock_quantity: stock, track_stock: form.item_type === "product" && form.track_stock,
