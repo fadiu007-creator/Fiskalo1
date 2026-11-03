@@ -110,12 +110,12 @@ export default function ProviderDashboard({
 
         <section className="provider-panel" id="businesses">
           <div className="provider-panel-heading"><div><span className="provider-eyebrow">KLIENTËT</span><h3>Bizneset në Fiskalo</h3><p>Çdo biznes ka organizatën, degët dhe POS-et e veta.</p></div><label className="provider-search"><Search size={16}/><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Kërko biznes ose qytet…"/></label></div>
-          <div className="provider-table-wrap"><table className="provider-table"><thead><tr><th>Biznesi</th><th>Komuna</th><th>Fiskalizimi</th><th>POS</th><th></th></tr></thead><tbody>
+          <div className="provider-table-wrap"><table className="provider-table"><thead><tr><th>Biznesi</th><th>Komuna</th><th>Fiskalizimi</th><th>POS</th></tr></thead><tbody>
             {filteredBusinesses.map((business) => {
               const devices = posDevices.filter((pos) => pos.organization_id === business.id);
-              return <tr key={business.id}><td><strong>{business.trade_name || business.legal_name}</strong><small>{business.legal_name}</small></td><td>{business.municipality}</td><td><span className={"provider-status " + statusTone(business.fiscalization_status)}>{statusLabel[business.fiscalization_status] ?? business.fiscalization_status}</span></td><td>{devices.length} pajisje <small>{devices.filter((device) => device.status === "active").length} aktive</small></td><td><Link className="provider-open-link" href={"/app/" + business.id}>Hap panelin <ArrowUpRight size={14}/></Link></td></tr>;
+              return <tr key={business.id}><td><strong>{business.trade_name || business.legal_name}</strong><small>{business.legal_name}</small></td><td>{business.municipality}</td><td><span className={"provider-status " + statusTone(business.fiscalization_status)}>{statusLabel[business.fiscalization_status] ?? business.fiscalization_status}</span></td><td>{devices.length} pajisje <small>{devices.filter((device) => device.status === "active").length} aktive</small></td><td><span className="provider-open-link">{devices.length} pajisje POS</span></td></tr>;
             })}
-            {!filteredBusinesses.length && <tr><td colSpan={5} className="provider-empty">Nuk u gjet asnjë biznes me këtë kërkim.</td></tr>}
+            {!filteredBusinesses.length && <tr><td colSpan={4} className="provider-empty">Nuk u gjet asnjë biznes me këtë kërkim.</td></tr>}
           </tbody></table></div>
         </section>
 
