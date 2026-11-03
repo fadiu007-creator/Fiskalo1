@@ -211,7 +211,7 @@ export default function App() {
       const apiBase = process.env.EXPO_PUBLIC_FISKALO_API_URL?.trim();
       if (!apiBase) throw new Error("Konfiguro EXPO_PUBLIC_FISKALO_API_URL me adresën reale të Fiskalo Cloudflare Worker.");
       const posInstallationId = await getAndroidTestPosInstallationId();
-      const response = await fetch(apiBase.replace(/\\/$/, "") + "/api/atk/test/verify", {
+      const response = await fetch(apiBase.replace(/\/$/, "") + "/api/atk/test/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
         body: JSON.stringify({
@@ -247,7 +247,7 @@ export default function App() {
       const apiBase = process.env.EXPO_PUBLIC_FISKALO_API_URL?.trim();
       if (!apiBase) throw new Error("Konfiguro EXPO_PUBLIC_FISKALO_API_URL me adresën reale të Fiskalo Cloudflare Worker.");
       const posInstallationId = await getAndroidTestPosInstallationId();
-      const response = await fetch(apiBase.replace(/\\/$/, "") + "/api/atk/test/sign-csr", {
+      const response = await fetch(apiBase.replace(/\/$/, "") + "/api/atk/test/sign-csr", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
         body: JSON.stringify({
