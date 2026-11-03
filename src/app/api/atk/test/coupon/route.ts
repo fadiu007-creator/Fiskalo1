@@ -95,8 +95,8 @@ export async function POST(request: Request) {
     supabase.from("fiskalo_invoices").select("id,organization_id,status,total,invoice_number,payment_status,payment_method").eq("id", invoiceId).eq("organization_id", organizationId).single(),
     supabase.from("fiskalo_atk_pos_installations").select("id,organization_id,atk_branch_id,pos_id,environment").eq("id", posInstallationId).eq("organization_id", organizationId).single(),
   ]);
-  if (invoiceError || !invoice || invoice.status !== "issued" || invoice.payment_status !== "paid" || invoice.payment_method !== "cash") {
-    return Response.json({ error: "invoice_not_eligible", detail: "Only an issued Fiskalo invoice can be submitted as an ATK TEST sale." }, { status: 409 });
+  if (invoiceError || !invoice || invoice.status !== "issued" || invoice.payment_status !== "paid") {
+    return Response.json({ error: "invoice_not_eligible", detail: "Only a fully paid and issued Fiskalo invoice can be submitted as an ATK TEST sale." }, { status: 409 });
   }
   if (posError || !pos || pos.environment !== "test") {
     return Response.json({ error: "test_pos_not_ready", detail: "The selected POS installation is not configured for the ATK TEST environment." }, { status: 409 });
