@@ -18,6 +18,7 @@ export default async function BusinessHome() {
 
   if (error) throw new Error("Nuk u ngarkuan bizneset. Provo përsëri.");
   if (!memberships?.length) redirect("/onboarding");
+  if (memberships.length === 1) redirect(`/app/${memberships[0].organization_id}`);
 
   return (
     <main style={{ maxWidth: 980, margin: "0 auto", padding: "40px 24px" }}>
