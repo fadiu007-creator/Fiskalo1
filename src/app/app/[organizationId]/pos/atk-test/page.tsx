@@ -78,7 +78,7 @@ export default function AtkTestPosPage() {
       const productResult = productIds.length
         ? await supabase.from("fiskalo_products").select("id,atk_unit_code,atk_tax_code,atk_item_category_code").eq("organization_id", organizationId).in("id", productIds)
         : { data: [], error: null };
-      const saved = new Map<string, { id: string; atk_unit_code: string | null; atk_tax_code: string | null; atk_item_category_code: string | null }>((productResult.data || []) as Array<{ id: string; atk_unit_code: string | null; atk_tax_code: string | null; atk_item_category_code: string | null }>);
+      const saved = new Map<string, { id: string; atk_unit_code: string | null; atk_tax_code: string | null; atk_item_category_code: string | null }>(((productResult.data || []) as Array<{ id: string; atk_unit_code: string | null; atk_tax_code: string | null; atk_item_category_code: string | null }>).map((product) => [product.id, product]));
       setMappings(Object.fromEntries(rows.map((line) => {
         const product = line.product_id ? saved.get(line.product_id) : null;
         return [line.id, { unit: product?.atk_unit_code || "", tax: product?.atk_tax_code || "", itemType: product?.atk_item_category_code || "" }];
