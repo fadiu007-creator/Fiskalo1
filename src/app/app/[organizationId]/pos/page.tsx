@@ -41,6 +41,7 @@ export default function WebPosPage() {
   const searchRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string>("");
+  const [activeShiftId, setActiveShiftId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -50,14 +51,19 @@ export default function WebPosPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const { data: currentAuth } = await supabase.auth.getUser();
-    const [productResult, customerResult, invoiceResult, membershipResult] = await Promise.all([
+    const [productResult, customerResult, invoiceResult, membershipResult, shiftResult] = await Promise.all([
       supabase.from("fiskalo_products").select("id,name,sku,pos_category,image_url,unit_price,vat_rate,stock_quantity,track_stock,item_type,is_active").eq("organization_id", organizationId).eq("is_active", true).order("name"),
       supabase.from("fiskalo_customers").select("id,name,phone").eq("organization_id", organizationId).order("name"),
       supabase.from("fiskalo_invoices").select("id,invoice_number,issue_date,status,payment_status,payment_method,total,customer_id").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
       supabase.from("fiskalo_organization_users").select("role").eq("organization_id", organizationId).eq("user_id", currentAuth.user?.id ?? "").maybeSingle(),
+      currentAuth.user
+        ? supabase.from("fiskalo_cashier_shifts").select("id").eq("organization_id", organizationId).eq("opened_by", currentAuth.user.id).eq("status", "open").maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
     ]);
     if (productResult.error || customerResult.error || invoiceResult.error) setError("Nuk u ngarkuan të gjitha të dhënat. Rifresko faqen ose kontrollo qasjen në biznes.");
     setUserRole(membershipResult.data?.role ?? "");
+    setActiveShiftId(shiftResult.data?.id ?? null);
+    if (shiftResult.error) setError("Nuk u verifikua ndërrimi i arkës. Rifresko faqen para shitjes.");
     setProducts((productResult.data ?? []) as Product[]);
     setCustomers((customerResult.data ?? []) as Customer[]);
     const invoiceRows = (invoiceResult.data ?? []) as InvoiceRow[];
@@ -163,6 +169,7 @@ export default function WebPosPage() {
     const valid = lines.filter((line) => Number.isFinite(line.quantity) && line.quantity > 0);
     if (!valid.length || valid.length !== lines.length) { setError("Shto artikuj dhe kontrollo sasitë."); return; }
     if (paymentMethod !== "credit" && !confirmedPayment) { setError("Konfirmo që pagesa është pranuar para se ta regjistrosh si të paguar."); return; }
+    if (paymentMethod === "cash" && !activeShiftId) { setError("Hap fillimisht ndërrimin e arkës. Pagesat me para në dorë duhet të lidhen me një arkë aktive."); return; }
     for (const line of valid) {
       if (line.product!.track_stock && line.quantity > Number(line.product!.stock_quantity)) {
         setError("Stoku i pamjaftueshëm për: " + line.product!.name + ". Ndrysho sasinë ose rifresko produktet.");
@@ -268,6 +275,7 @@ export default function WebPosPage() {
         {userRole !== "cashier" && <Link href={`/app/${organizationId}`} style={{ ...secondary, textDecoration: "none" }}>Paneli i biznesit</Link>}<button style={secondary} onClick={() => void load()}><RefreshCw size={15} /> Rifresko</button></div>
     </header>
     <div role="status" style={{ marginBottom: 12, border: "1px solid var(--line)", borderRadius: 10, padding: "10px 12px", color: "var(--muted)", fontSize: 13 }}>{["owner", "administrator"].includes(userRole) ? atkSetupNotice : "Arka është gati për përdorim. Konfigurimi dhe certifikata ATK TEST menaxhohen nga pronari ose administratori."}</div>
+    {!activeShiftId && <div role="status" style={{ marginBottom: 12, border: "1px solid #e8c98d", background: "#fff9ed", borderRadius: 10, padding: 13, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}><div><strong>Hape ndërrimin para pagesave me para në dorë</strong><div style={{ fontSize: 12, marginTop: 3 }}>Kjo lidh çdo pagesë me arkën e arkëtarit dhe mundëson barazimin e saktë në fund të ndërrimit.</div></div><Link href={`/app/${organizationId}/pos/shifts`} style={{ ...button, textDecoration: "none" }}>Hap arkën</Link></div>}
     <nav aria-label="POS dhe faturat" style={{ display: "flex", gap: 8, marginBottom: 14, borderBottom: "1px solid var(--line)", paddingBottom: 10 }}><button aria-pressed={activeView === "pos"} onClick={() => setActiveView("pos")} style={{ ...(activeView === "pos" ? button : secondary) }}><ShoppingCart size={15} /> Shitje</button><button aria-pressed={activeView === "invoices"} onClick={() => setActiveView("invoices")} style={{ ...(activeView === "invoices" ? button : secondary) }}><FileText size={15} /> Faturat <span className="status-pill">{invoices.length}</span></button></nav>
     {error && <div role="alert" style={{ background: "#fff0ef", color: "#982d25", padding: 12, borderRadius: 9, marginBottom: 12 }}>{error}</div>}
     {notice && <div role="status" style={{ background: "#edf7f1", color: "#155c3c", padding: 12, borderRadius: 9, marginBottom: 12 }}>{notice}</div>}
