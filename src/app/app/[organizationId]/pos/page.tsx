@@ -251,7 +251,7 @@ export default function WebPosPage() {
         </div>
       </aside>
     </div>
-    <p style={{ color: "var(--muted)", fontSize: 11, lineHeight: 1.5, marginTop: 14 }}>Ky POS krijon fatura të brendshme në Fiskalo. Nuk është ende POS fiskal i certifikuar nga ATK dhe nuk dërgon kupon fiskal. Barkodet skanohen përmes lexuesit që shkruan SKU-në në fushën e kërkimit. Pagesat me kartelë nuk procesohen nga aplikacioni.</p>
+    <p style={{ color: "var(--muted)", fontSize: 11, lineHeight: 1.5, marginTop: 14 }}>Ky POS regjistron shitjen në Fiskalo. Për testim, përdor “Dërgo kupon në ATK TEST” pasi fatura të jetë lëshuar dhe paguar me para në dorë. Testimi nuk e bën Fiskalo të certifikuar dhe nuk aktivizon prodhimin. Barkodet skanohen përmes lexuesit që shkruan SKU-në në fushën e kërkimit. Pagesat me kartelë nuk procesohen nga aplikacioni.</p>
     <style jsx>{`.pos-layout { grid-template-columns: minmax(0,1.55fr) minmax(310px,0.85fr); } @media (max-width: 760px) { .pos-layout { grid-template-columns: minmax(0,1fr) !important; } .pos-layout aside { position: static !important; } }`}</style>
   </main>;
 }
