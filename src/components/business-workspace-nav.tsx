@@ -7,7 +7,7 @@ import { ArrowLeftRight, Boxes, Building2, FileText, LayoutDashboard, Settings2,
 const items = [
   { path: "", label: "Përmbledhja", icon: LayoutDashboard, roles: ["owner","administrator","manager","accountant","cashier"] },
   { path: "/pos", label: "Arka / POS", icon: ShoppingCart, roles: ["owner","administrator","manager","accountant","cashier"] },
-  { path: "/invoices", label: "Faturat", icon: FileText, roles: ["owner","administrator","manager","accountant"] },
+  { path: "/invoices", label: "Faturat", icon: FileText, roles: ["owner","administrator","manager","accountant","cashier"] },
   { path: "/pos/products", label: "Produktet", icon: Boxes, roles: ["owner","administrator","manager"] },
   { path: "/pos/shifts", label: "Ndërrimet", icon: Wallet, roles: ["owner","administrator","manager","cashier"] },
   { path: "/team", label: "Ekipi", icon: Users, roles: ["owner","administrator"] },
