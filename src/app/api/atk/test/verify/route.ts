@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     const { error: saveError } = await supabase.from("fiskalo_atk_pos_verifications").upsert({
       organization_id: organizationId, pos_installation_id: posInstallationId, business_name: businessName, nui,
       atk_branch_id: branchId, pos_id: posId, application_id: applicationId,
-      verification_code: verificationCode, verified_at: new Date().toISOString(), created_by: user.id,
+      verification_code: verificationCode, business_name: businessName, verified_at: new Date().toISOString(), created_by: user.id,
     }, { onConflict: "pos_installation_id" });
     if (saveError) return Response.json({ error: "verification_save_failed", detail: "ATK verified the POS, but Fiskalo could not save the verification to the business account: " + saveError.message }, { status: 500 });
     return Response.json({ businessName, verificationCode, environment: "TEST" }, { headers: { "Cache-Control": "no-store" } });
