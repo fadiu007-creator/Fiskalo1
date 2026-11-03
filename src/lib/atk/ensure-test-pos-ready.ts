@@ -1,0 +1,127 @@
+"use client";
+
+import type { createClient } from "@/lib/supabase/client";
+import {
+  createBrowserPosCsr, getBrowserPosCsr, hasBrowserPosCertificate,
+  hasBrowserPosKey, installBrowserPosCertificate,
+} from "@/lib/atk/browser-key-vault";
+
+type Client = ReturnType<typeof createClient>;
+
+function responseMessage(data: unknown, fallback: string): string {
+  if (data && typeof data === "object") {
+    const row = data as Record<string, unknown>;
+    for (const key of ["detail", "message", "error"]) {
+      if (typeof row[key] === "string" && String(row[key]).trim()) return String(row[key]);
+    }
+  }
+  return fallback;
+}
+
+/**
+ * Restores the saved ATK TEST onboarding on POS login. If this browser has not
+ * completed onboarding, it verifies the POS once, creates a local P-256 key/CSR,
+ * requests the TEST certificate and installs it in this browser's IndexedDB.
+ * The private key never gets uploaded to Fiskalo.
+ */
+export async function ensureATKTestPosReady(
+  supabase: Client,
+  organizationId: string,
+): Promise<{ ready: boolean; message: string }> {
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) throw new Error("Sesioni ka skaduar. Hyr përsëri.");
+
+  const [{ data: org, error: orgError }, { data: profile, error: profileError }, { data: positions, error: posError }] = await Promise.all([
+    supabase.from("fiskalo_organizations").select("nui,legal_name,municipality").eq("id", organizationId).single(),
+    supabase.from("fiskalo_atk_taxpayer_profiles").select("fiscalization_number").eq("organization_id", organizationId).maybeSingle(),
+    supabase.from("fiskalo_atk_pos_installations")
+      .select("id,atk_branch_id,pos_id,label,location,environment,status")
+      .eq("organization_id", organizationId).eq("environment", "test")
+      .order("created_at", { ascending: false }),
+  ]);
+  if (orgError || !org) throw new Error("Nuk u lexuan të dhënat e biznesit.");
+  if (profileError || !profile?.fiscalization_number) {
+    return { ready: false, message: "Ruaje numrin e fiskalizimit TEST një herë te konfigurimi i ATK-së." };
+  }
+  if (posError || !positions?.length) {
+    return { ready: false, message: "Krijo POS-in TEST një herë te konfigurimi i ATK-së." };
+  }
+  if (!/^\d{9}$/.test(String(org.nui))) throw new Error("NUI i biznesit duhet të ketë 9 shifra.");
+
+  const pos = positions.find((item) => item.status === "active") ?? positions[0];
+  const keyId = organizationId + ":" + pos.id;
+  const { data: saved, error: savedError } = await supabase.from("fiskalo_atk_pos_verifications")
+    .select("business_name,verification_code,nui,atk_branch_id,pos_id,application_id")
+    .eq("organization_id", organizationId).eq("pos_installation_id", pos.id).maybeSingle();
+  if (savedError) throw new Error("Verifikimi i ruajtur i POS-it nuk u lexua: " + savedError.message);
+
+  let businessName = "";
+  let verificationCode = "";
+  let applicationId = Number(window.localStorage.getItem("fiskalo-atk-application-id:" + organizationId) || "929645146946");
+  if (saved && saved.nui === String(org.nui) &&
+      Number(saved.atk_branch_id) === Number(pos.atk_branch_id) &&
+      Number(saved.pos_id) === Number(pos.pos_id) &&
+      saved.verification_code && Number.isSafeInteger(Number(saved.application_id)) &&
+      Number(saved.application_id) > 0) {
+    businessName = saved.business_name || String(org.legal_name || "");
+    verificationCode = saved.verification_code;
+    applicationId = Number(saved.application_id);
+  } else {
+    if (!Number.isSafeInteger(applicationId) || applicationId <= 0) {
+      throw new Error("Application ID mungon. Ruaje ID-në e aplikimit në konfigurimin ATK.");
+    }
+    const verifyResponse = await fetch("/api/atk/test/verify", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organizationId, posInstallationId: pos.id, nui: String(org.nui),
+        fiscalizationNumber: profile.fiscalization_number,
+        branchId: pos.atk_branch_id, posId: pos.pos_id, applicationId,
+      }),
+    });
+    const verifyData = await verifyResponse.json().catch(() => ({}));
+    if (!verifyResponse.ok) {
+      throw new Error("Verifikimi automatik i POS-it në ATK TEST dështoi: " +
+        responseMessage(verifyData, "Kontrollo NUI, numrin e fiskalizimit, degën, POS ID dhe Application ID."));
+    }
+    businessName = String(verifyData.businessName || "");
+    verificationCode = String(verifyData.verificationCode || "");
+    if (!businessName || !verificationCode) throw new Error("ATK nuk ktheu business_name dhe verification_code.");
+    window.localStorage.setItem("fiskalo-atk-application-id:" + organizationId, String(applicationId));
+  }
+
+  if (await hasBrowserPosCertificate(keyId)) {
+    if (pos.status !== "active") {
+      const { error } = await supabase.from("fiskalo_atk_pos_installations")
+        .update({ status: "active" }).eq("id", pos.id).eq("organization_id", organizationId);
+      if (error) throw new Error("Certifikata është instaluar, por statusi i POS-it nuk u ruajt: " + error.message);
+    }
+    return { ready: true, message: "POS-i ATK TEST është gati. Verifikimi u rikthye nga llogaria e biznesit." };
+  }
+
+  let csr = await getBrowserPosCsr(keyId);
+  if (!csr) {
+    csr = await createBrowserPosCsr(keyId, {
+      businessName, nui: String(org.nui),
+      branchId: String(pos.atk_branch_id), posId: String(pos.pos_id),
+    });
+  }
+  const certificateResponse = await fetch("/api/atk/test/sign-csr", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      organizationId, nui: String(org.nui), businessName, verificationCode,
+      branchId: pos.atk_branch_id, posId: pos.pos_id, applicationId, csrPem: csr.csrPem,
+    }),
+  });
+  const certificateData = await certificateResponse.json().catch(() => ({}));
+  if (!certificateResponse.ok) {
+    throw new Error("ATK verifikoi POS-in, por certifikata TEST nuk u lëshua: " +
+      responseMessage(certificateData, "Kontrollo përgjigjen e ATK-së."));
+  }
+  const signedCertificate = String(certificateData.signedCertificate || "");
+  if (!signedCertificate) throw new Error("ATK nuk ktheu certifikatën e nënshkruar.");
+  await installBrowserPosCertificate(keyId, signedCertificate);
+  const { error: updateError } = await supabase.from("fiskalo_atk_pos_installations")
+    .update({ status: "active" }).eq("id", pos.id).eq("organization_id", organizationId);
+  if (updateError) throw new Error("Certifikata u instalua në këtë pajisje, por statusi i POS-it nuk u ruajt: " + updateError.message);
+  return { ready: true, message: "POS-i u verifikua dhe certifikata ATK TEST u instalua automatikisht në këtë pajisje." };
+}
