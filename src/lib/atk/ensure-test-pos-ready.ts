@@ -31,14 +31,14 @@ async function runEnsureATKTestPosReady(
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) throw new Error("Sesioni ka skaduar. Hyr përsëri.");
 
-  const [{ data: org, error: orgError }, { data: profile, error: profileError }, { data: positions, error: posError }, { data: providerSettings, error: providerSettingsError }] = await Promise.all([
+  const [{ data: org, error: orgError }, { data: profile, error: profileError }, { data: positions, error: posError }, { data: providerApplicationId, error: providerApplicationIdError }] = await Promise.all([
     supabase.from("fiskalo_organizations").select("nui,legal_name,municipality").eq("id", organizationId).single(),
     supabase.from("fiskalo_atk_taxpayer_profiles").select("fiscalization_number").eq("organization_id", organizationId).maybeSingle(),
     supabase.from("fiskalo_atk_pos_installations")
       .select("id,atk_branch_id,pos_id,label,location,environment,status")
       .eq("organization_id", organizationId).eq("environment", "test")
       .order("created_at", { ascending: false }),
-    supabase.from("fiskalo_atk_provider_settings").select("application_id").eq("singleton", true).maybeSingle(),
+    supabase.rpc("fiskalo_get_business_application_id", { target_org: organizationId }),
   ]);
   if (orgError || !org) throw new Error("Nuk u lexuan të dhënat e biznesit.");
   if (profileError || !profile?.fiscalization_number) {
@@ -52,7 +52,7 @@ async function runEnsureATKTestPosReady(
   const applicationStorageKey = "fiskalo-atk-application-id:" + organizationId;
   const savedApplicationId = window.localStorage.getItem(applicationStorageKey);
   // 929645146946 was an old placeholder, not the application ID supplied for this ATK TEST account.
-  const configuredApplicationId = Number(providerSettings?.application_id ?? 0);
+  const configuredApplicationId = Number(providerApplicationId ?? 0);
   let applicationId = configuredApplicationId > 0 ? configuredApplicationId : Number(savedApplicationId && savedApplicationId !== "929645146946" ? savedApplicationId : "457818860373");
   const orderedPositions = [...positions]
     .filter((candidate) => candidate.status !== "suspended" && candidate.status !== "revoked")
@@ -66,7 +66,7 @@ async function runEnsureATKTestPosReady(
   const verificationByPos = new Map((savedVerifications ?? []).map((row) => [row.pos_installation_id, row]));
   // Cashiers/managers cannot read provider-wide settings. Reuse the exact
   // Application ID saved with this POS verification instead of failing POS login.
-  if (providerSettingsError || configuredApplicationId <= 0) {
+  if (providerApplicationIdError || configuredApplicationId <= 0) {
     const savedForBusiness = orderedPositions
       .map((candidate) => verificationByPos.get(candidate.id))
       .find((row) => row && row.nui === String(org.nui) &&
