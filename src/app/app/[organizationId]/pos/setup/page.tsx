@@ -26,7 +26,7 @@ export default function WebPosSetupPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [positions, setPositions] = useState<Pos[]>([]);
   const [selectedId, setSelectedId] = useState("");
-  const [applicationId, setApplicationId] = useState("929645146946");
+  const [applicationId, setApplicationId] = useState("457818860373");
   const [fiscalizationNumber, setFiscalizationNumber] = useState("");
   const [form, setForm] = useState({ label: "Web POS – Arka kryesore", branch: "761", pos: "1", location: "" });
   const [verification, setVerification] = useState<Verification | null>(null);
@@ -57,8 +57,15 @@ export default function WebPosSetupPage() {
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
-    const saved = window.localStorage.getItem("fiskalo-atk-application-id:" + organizationId);
-    if (saved) setApplicationId(saved);
+    const storageKey = "fiskalo-atk-application-id:" + organizationId;
+    const saved = window.localStorage.getItem(storageKey);
+    // Replace the obsolete placeholder with the real ATK TEST application ID supplied for this account.
+    if (!saved || saved === "929645146946") {
+      window.localStorage.setItem(storageKey, "457818860373");
+      setApplicationId("457818860373");
+    } else {
+      setApplicationId(saved);
+    }
   }, [organizationId]);
   useEffect(() => {
     const used = positions.filter((pos) => pos.atk_branch_id === Number(form.branch)).map((pos) => pos.pos_id);
