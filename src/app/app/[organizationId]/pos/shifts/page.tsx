@@ -40,9 +40,26 @@ export default function CashierShiftsPage() {
   const load = useCallback(async () => {
     const { data: auth } = await supabase.auth.getUser();
     if (!auth.user) { setError("Sesioni ka skaduar. Hyr përsëri."); return; }
+    const { data: membership, error: membershipError } = await supabase
+      .from("fiskalo_organization_users")
+      .select("role")
+      .eq("organization_id", organizationId)
+      .eq("user_id", auth.user.id)
+      .maybeSingle();
+    if (membershipError || !membership) {
+      setError("Nuk u verifikua anëtarësia në këtë biznes.");
+      return;
+    }
+    const historyQuery = supabase.from("fiskalo_cashier_shifts").select("*")
+      .eq("organization_id", organizationId)
+      .order("opened_at", { ascending: false })
+      .limit(10);
+    const scopedHistoryQuery = ["owner", "administrator", "manager"].includes(membership.role)
+      ? historyQuery
+      : historyQuery.eq("opened_by", auth.user.id);
     const [active, history] = await Promise.all([
       supabase.from("fiskalo_cashier_shifts").select("*").eq("organization_id", organizationId).eq("opened_by", auth.user.id).eq("status", "open").maybeSingle(),
-      supabase.from("fiskalo_cashier_shifts").select("*").eq("organization_id", organizationId).order("opened_at", { ascending: false }).limit(10),
+      scopedHistoryQuery,
     ]);
     if (active.error || history.error) {
       setError("Nuk mund të lexohen ndërrimet. Kontrollo nëse migrimi i arkës është aplikuar në Supabase.");
