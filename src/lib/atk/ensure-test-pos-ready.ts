@@ -124,8 +124,7 @@ async function runEnsureATKTestPosReady(
 
   if (await hasBrowserPosCertificate(keyId)) {
     if (pos.status !== "active") {
-      const { error } = await supabase.from("fiskalo_atk_pos_installations")
-        .update({ status: "active" }).eq("id", pos.id).eq("organization_id", organizationId);
+      const { error } = await supabase.rpc("fiskalo_activate_verified_test_pos", { target_pos: pos.id });
       if (error) throw new Error("Certifikata është instaluar, por statusi i POS-it nuk u ruajt: " + error.message);
     }
     return { ready: true, message: "POS-i ATK TEST është gati. Verifikimi u rikthye nga llogaria e biznesit." };
@@ -153,8 +152,7 @@ async function runEnsureATKTestPosReady(
   const signedCertificate = String(certificateData.signedCertificate || "");
   if (!signedCertificate) throw new Error("ATK nuk ktheu certifikatën e nënshkruar.");
   await installBrowserPosCertificate(keyId, signedCertificate);
-  const { error: updateError } = await supabase.from("fiskalo_atk_pos_installations")
-    .update({ status: "active" }).eq("id", pos.id).eq("organization_id", organizationId);
+  const { error: updateError } = await supabase.rpc("fiskalo_activate_verified_test_pos", { target_pos: pos.id });
   if (updateError) throw new Error("Certifikata u instalua në këtë pajisje, por statusi i POS-it nuk u ruajt: " + updateError.message);
   return { ready: true, message: "POS-i u verifikua dhe certifikata ATK TEST u instalua automatikisht në këtë pajisje." };
 }
