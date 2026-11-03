@@ -155,6 +155,8 @@ export function validateAtkCouponPayload(details: string, context: CouponValidat
     for (const [number, expected] of header) {
       if (asUint(fields, number) !== expected) throw new Error("Coupon identifiers or total do not match the selected business, POS and invoice.");
     }
+    const verificationNo = asString(fields, 8);
+    if (!verificationNo || verificationNo.length > 16) throw new Error("Coupon verification number is invalid.");
     if (asString(fields, 5) !== context.operatorId) throw new Error("Coupon operator does not match the signed-in cashier.");
     if (asString(fields, 4) !== context.location) throw new Error("Coupon location does not match the registered POS.");
     if (asUint(fields, 15, false) !== cents(context.vatTotal) ||
@@ -204,11 +206,11 @@ export function validateAtkCouponPayload(details: string, context: CouponValidat
       };
     });
     const canonical = (item: typeof expectedItems[number]) =>
-      [item.name, item.unitPrice.toString(), item.unit, item.quantity.toFixed(3), item.total.toString(), item.tax, item.itemType].join("|");
+      JSON.stringify([item.name, item.unitPrice.toString(), item.unit, item.quantity.toFixed(3), item.total.toString(), item.tax, item.itemType]);
     const expectedKeys = expectedItems.map(canonical).sort();
     const actualKeys = actualItems.map((item) => {
       if (!Number.isFinite(item.quantity) || item.quantity <= 0) throw new Error("Coupon quantity is invalid.");
-      return [item.name, item.unitPrice.toString(), item.unit, item.quantity.toFixed(3), item.total.toString(), item.tax, item.itemType].join("|");
+      return JSON.stringify([item.name, item.unitPrice.toString(), item.unit, item.quantity.toFixed(3), item.total.toString(), item.tax, item.itemType]);
     }).sort();
     if (expectedKeys.some((value, index) => value !== actualKeys[index])) {
       throw new Error("Signed coupon item details do not match the invoice lines and ATK product mappings.");
