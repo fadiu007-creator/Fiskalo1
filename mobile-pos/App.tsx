@@ -49,6 +49,8 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  const canManageATK = organizations.some((org) => org.organization_id === organizationId && ["owner", "administrator"].includes(org.role));
+
   const total = useMemo(() => cart.reduce((sum, row) => {
     const base = Number(row.product.unit_price) * row.quantity;
     return sum + base + base * Number(row.product.vat_rate) / 100;
@@ -89,11 +91,19 @@ export default function App() {
       .eq("organization_id", org.organization_id).eq("is_active", true).order("name");
     const { data: c, error: cError } = await supabase.from("fiskalo_customers")
       .select("id,name").eq("organization_id", org.organization_id).order("name");
+    let providerApplicationId = "";
+    if (["owner", "administrator"].includes(org.role)) {
+      const { data: providerSettings, error: providerSettingsError } = await supabase.from("fiskalo_atk_provider_settings")
+        .select("application_id").eq("singleton", true).maybeSingle();
+      if (providerSettingsError) { setBusy(false); setError("Konfigurimi ATK i ofruesit nuk u lexua: " + providerSettingsError.message); return; }
+      providerApplicationId = providerSettings?.application_id ? String(providerSettings.application_id) : "";
+    }
     setBusy(false);
     if (pError || cError) { setError(pError?.message ?? cError?.message ?? "Nuk u ngarkuan të dhënat."); return; }
     setOrganizationId(org.organization_id);
     setOrganizationName(org.fiskalo_organizations?.legal_name ?? "Biznesi");
     setOrganizationNui(org.fiskalo_organizations?.nui ?? "");
+    if (providerApplicationId) setAtkApplicationId(providerApplicationId);
     setAtkCsr(""); setAtkFingerprint(""); setAtkHardwareBacked(null);
     setProducts((p ?? []) as Product[]);
     setCustomers((c ?? []) as Customer[]);
@@ -455,17 +465,17 @@ export default function App() {
       <Action label="Dil" secondary onPress={() => void signOut()} />
     </ScrollView> : <View style={{ flex: 1 }}>
       <View style={{ paddingHorizontal: 12, paddingTop: 10 }}>
-        <TouchableOpacity onPress={() => setShowAtkSetup((value) => !value)} style={{ padding: 12, marginBottom: 8, backgroundColor: "white", borderWidth: 1, borderColor: line, borderRadius: 9 }}>
+        {canManageATK && <TouchableOpacity onPress={() => setShowAtkSetup((value) => !value)} style={{ padding: 12, marginBottom: 8, backgroundColor: "white", borderWidth: 1, borderColor: line, borderRadius: 9 }}>
           <Text style={{ color: ink, fontWeight: "800" }}>ATK / Siguria e POS-it · {showAtkSetup ? "Mbyll" : "Hap konfigurimin"}</Text>
           <Text style={{ color: "#687773", fontSize: 11, marginTop: 3 }}>Krijo çelësin dhe CSR në këtë pajisje Android. Vetëm për testim.</Text>
-        </TouchableOpacity>
-        {showAtkSetup && <View style={{ padding: 12, marginBottom: 9, backgroundColor: "white", borderWidth: 1, borderColor: line, borderRadius: 9, gap: 7 }}>
+        </TouchableOpacity>}
+        {canManageATK && showAtkSetup && <View style={{ padding: 12, marginBottom: 9, backgroundColor: "white", borderWidth: 1, borderColor: line, borderRadius: 9, gap: 7 }}>
           <Text style={{ color: ink, fontWeight: "800" }}>Identiteti i tatimpaguesit</Text>
           <Text style={{ color: "#687773", fontSize: 12 }}>Biznesi: {organizationName} · NUI: {organizationNui || "Nuk është regjistruar"}</Text>
           <TextInput placeholder="ID e njësisë / degës (e konfirmuar nga ATK)" keyboardType="number-pad" value={atkBranchId} onChangeText={setAtkBranchId} style={inputStyle} />
           <TextInput placeholder="Numri i POS-it (i konfirmuar)" keyboardType="number-pad" value={atkPosId} onChangeText={setAtkPosId} style={inputStyle} />
           <TextInput placeholder="Numri i fiskalizimit për TEST (nga emaili ATK)" value={atkFiscalizationNumber} onChangeText={setAtkFiscalizationNumber} style={inputStyle} />
-          <TextInput placeholder="Application ID (nga emaili ATK)" keyboardType="number-pad" value={atkApplicationId} onChangeText={setAtkApplicationId} style={inputStyle} />
+          <TextInput placeholder="Application ID (menaxhohet nga Fiskalo)" keyboardType="number-pad" value={atkApplicationId} editable={false} style={{ ...inputStyle, backgroundColor: "#f1f5f2" }} />
           <Action label={atkBusy ? "Duke krijuar CSR..." : "Gjenero çelës dhe CSR në Android"} disabled={atkBusy} onPress={() => void createAndroidAtkCsr()} />
           <Action label={atkBusy ? "Duke verifikuar..." : "Verifiko POS-in në ATK TEST"} secondary disabled={atkBusy} onPress={() => void verifyAndroidAtkPos()} />
           <Action label={atkBusy ? "Duke kërkuar certifikatën..." : "Kërko certifikatën TEST"} secondary disabled={atkBusy || !atkVerification} onPress={() => void requestAndroidAtkCertificate()} />
@@ -476,7 +486,7 @@ export default function App() {
             <Text selectable style={{ color: "#52635e", fontSize: 9, maxHeight: 80 }}>{atkCsr}</Text>
             <Action label="Ndaje CSR-në" secondary onPress={() => void shareAndroidAtkCsr()} />
           </>}
-          <Text style={{ color: "#8a5a18", fontSize: 11 }}>Mos e dërgo çelësin privat askund. Ky modul mbështet onboarding TEST dhe kontrollon që certifikata përputhet me çelësin lokal. Dërgimi i kuponëve fiskalë nga Android ende nuk është implementuar. Konfirmo me ATK pranueshmërinë e pajisjes dhe modelit të ruajtjes para përdorimit zyrtar.</Text>
+          <Text style={{ color: "#8a5a18", fontSize: 11 }}>Mos e dërgo çelësin privat askund. Android-i dërgon automatikisht kuponin TEST pas pagesës së plotë kur POS-i dhe certifikata janë gati. Ky version nuk përbën certifikim zyrtar për prodhim; konfirmo me ATK pranueshmërinë e pajisjes para përdorimit zyrtar.</Text>
         </View>}
         <TextInput placeholder="Kërko produkt / SKU" value={search} onChangeText={setSearch} style={inputStyle} />
       </View>
