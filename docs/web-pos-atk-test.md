@@ -18,11 +18,11 @@ This is a TEST-only workflow. It does not enable production fiscalization and do
 
 ## Prerequisites
 
-- A TEST taxpayer profile and TEST POS installation exist in Fiskalo.
-- The browser used for submission is the same browser/profile where the CSR key was generated and the signed TEST certificate was installed.
+- A TEST taxpayer profile and TEST POS installation exist in Fiskalo. The Web POS setup wizard is available at `/app/{organizationId}/pos/setup` and can create the local TEST installation.
+- The browser used for submission is the same browser/profile where the CSR key was generated and the signed TEST certificate was installed. The setup wizard performs verification, creates the local key/CSR, calls ATK's TEST sign-CSR endpoint, validates the certificate public key against the local key, and marks the TEST POS active.
 - The fiscalization number and Application ID are valid for the same NUI / POS test application.
 - The selected invoice is issued, paid in full and paid by cash. The first Web flow deliberately limits the test to a single Cash payment allocation.
-- ATK unit, tax and item category codes must come from the current ATK catalogue. Fiskalo does not infer them from the product unit, VAT percentage or product/service flag.
+- ATK unit, tax and item category codes must come from the current ATK catalogue. Fiskalo does not infer them from the product unit, VAT percentage or product/service flag. After entering the official values once, Fiskalo stores them on the linked product and pre-fills them for later test invoices.
 - Apply migration `0024_atk_test_coupon_submission.sql` before using the new route.
 
 ## Safety and retry behavior
