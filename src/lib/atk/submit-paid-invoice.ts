@@ -80,7 +80,7 @@ export async function submitPaidInvoiceToATK(
     throw new Error("Certifikata e POS-it nuk gjendet në këtë pajisje/shfletues. Hyr nga pajisja ku është instaluar certifikata ose instaloje një herë.");
   }
 
-  const productIds = Array.from(new Set(lines.map((line) => line.product_id).filter((id): id is string => Boolean(id)));
+  const productIds = Array.from(new Set(lines.map((line) => line.product_id).filter((id): id is string => Boolean(id))));
   const { data: products, error: productsError } = productIds.length
     ? await supabase.from("fiskalo_products").select("id,atk_unit_code,atk_tax_code,atk_item_category_code")
       .eq("organization_id", organizationId).in("id", productIds)
