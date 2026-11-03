@@ -34,10 +34,15 @@ export default function TeamManagement({ organizationId }: { organizationId: str
 
   async function addMember(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
-    const { error } = await supabase.rpc("fiskalo_add_existing_member",{target_org:organizationId,target_email:email.trim(),target_role:role});
+    const { data, error } = await supabase.rpc("fiskalo_add_existing_member",{target_org:organizationId,target_email:email.trim(),target_role:role});
     setBusy(false);
-    if(error) { setError(error.message.includes("No account found") ? "Nuk u gjet llogari me këtë email. Punëtori duhet të regjistrohet fillimisht në Fiskalo." : error.message); return; }
-    setEmail(""); setNotice("Punëtori u shtua ose roli i tij u përditësua.");
+    if(error) { setError(error.message); return; }
+    const result = (data ?? {}) as { status?: string; role?: string };
+    const selectedRole = roles.find((item) => item.value === (result.role || role))?.label || labels[result.role || role];
+    setEmail("");
+    setNotice(result.status === "invited"
+      ? `Ftesa për ${selectedRole} u ruajt. Përdoruesi do të shtohet automatikisht kur të regjistrohet ose të hyjë me këtë email.`
+      : `Anëtari u shtua me rolin: ${selectedRole}.`);
     await load();
   }
   async function removeMember(member: Member) {
