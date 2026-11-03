@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { ArrowUpRight, Boxes, FileText, Settings2, ShoppingCart, Users, Wallet } from "lucide-react";
 
 type Props = { params: Promise<{ organizationId: string }> };
 
@@ -10,63 +11,35 @@ export default async function BusinessDashboard({ params }: Props) {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) redirect("/login");
 
-  const [{ data: membership }, { data: organization }] = await Promise.all([
-    supabase.from("fiskalo_organization_users").select("role")
-      .eq("organization_id", organizationId).eq("user_id", auth.user.id).maybeSingle(),
-    supabase.from("fiskalo_organizations").select("legal_name,trade_name,municipality")
-      .eq("id", organizationId).maybeSingle(),
+  const [{ data: membership }, { data: organization }, invoiceCount, productCount, posCount] = await Promise.all([
+    supabase.from("fiskalo_organization_users").select("role").eq("organization_id", organizationId).eq("user_id", auth.user.id).maybeSingle(),
+    supabase.from("fiskalo_organizations").select("legal_name,trade_name,municipality").eq("id", organizationId).maybeSingle(),
+    supabase.from("fiskalo_invoices").select("id", { count: "exact", head: true }).eq("organization_id", organizationId),
+    supabase.from("fiskalo_products").select("id", { count: "exact", head: true }).eq("organization_id", organizationId).eq("is_active", true),
+    supabase.from("fiskalo_atk_pos_installations").select("id", { count: "exact", head: true }).eq("organization_id", organizationId),
   ]);
-
   if (!membership || !organization) redirect("/app");
   const role = membership.role;
-  const isAdmin = ["owner", "administrator"].includes(role);
-  const isCashier = role === "cashier";
-  const roleLabel: Record<string, string> = { owner: "Pronari", administrator: "Administrator", manager: "Menaxher", accountant: "Kontabilist", cashier: "Punëtor / Arkëtar" };
+  const roleLabel: Record<string,string> = { owner:"Pronari", administrator:"Administrator", manager:"Menaxher", accountant:"Kontabilist", cashier:"Arkëtar" };
   const modules = [
-    { href: `/app/${organizationId}/pos`, title: "Arka / POS", description: "Regjistro shitjet, prano pagesat dhe hap faturat.", icon: "▦" },
-    { href: `/app/${organizationId}/pos/shifts`, title: "Ndërrimi i arkës", description: "Hap ndërrimin, regjistro hyrje/dalje dhe mbylle arkën.", icon: "◷" },
-    ...(!isCashier && role !== "accountant" ? [{ href: `/app/${organizationId}/pos/products`, title: "Produktet", description: "Shto artikuj, ndrysho çmimet, TVSH-në dhe stokun.", icon: "▤" }] : []),
-    ...(isAdmin ? [{ href: `/app/${organizationId}/pos/setup`, title: "Konfigurimi ATK", description: "Regjistrimi i POS-it, certifikatat dhe konfigurimi fiskal.", icon: "⚙" }] : []),
-    ...(isAdmin ? [{ href: `/app/${organizationId}/team`, title: "Punëtorët", description: "Shto punëtorë dhe cakto rolet e qasjen në biznes.", icon: "♙" }] : []),
+    { href:`/app/${organizationId}/pos`, title:"Arka / POS", description:"Regjistro shitjet, prano pagesat dhe lësho faturat.", icon:ShoppingCart, tint:"green", action:"Hap arkën" },
+    { href:`/app/${organizationId}/invoices`, title:"Faturat", description:"Gjej faturat, kontrollo pagesat dhe statusin fiskal.", icon:FileText, tint:"blue", action:"Shiko faturat" },
+    ...(["owner","administrator","manager"].includes(role) ? [{ href:`/app/${organizationId}/pos/products`, title:"Produktet", description:"Menaxho artikujt, çmimet, TVSH-në dhe stokun.", icon:Boxes, tint:"violet", action:"Menaxho produktet" }] : []),
+    ...(["owner","administrator","manager","cashier"].includes(role) ? [{ href:`/app/${organizationId}/pos/shifts`, title:"Ndërrimet e arkës", description:"Hap arkën, regjistro lëvizjet dhe bëj mbylljen.", icon:Wallet, tint:"amber", action:"Hap ndërrimet" }] : []),
+    ...(["owner","administrator"].includes(role) ? [
+      { href:`/app/${organizationId}/team`, title:"Ekipi", description:"Shto punëtorë dhe cakto qasjet sipas rolit.", icon:Users, tint:"blue", action:"Menaxho ekipin" },
+      { href:`/app/${organizationId}/pos/setup`, title:"Konfigurimi ATK", description:"Menaxho regjistrimin e POS-it dhe verifikimin për biznesin.", icon:Settings2, tint:"green", action:"Hap konfigurimin" },
+    ] : []),
   ];
-
-  return (
-    <main style={{ maxWidth: 1120, margin: "0 auto", padding: "28px clamp(16px,3vw,32px) 56px" }}>
-      <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 34 }}>
-        <Link href="/" style={{ color: "var(--brand)", fontSize: 24, fontWeight: 850, letterSpacing: "-.04em" }}>fiskalo</Link>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, color: "var(--muted)", fontSize: 13 }}>
-          <span>{auth.user.email}</span>
-          <span style={{ background: "#eaf5ef", color: "var(--brand-dark)", padding: "7px 11px", borderRadius: 999, fontWeight: 750 }}>{roleLabel[role] ?? role}</span>
-        </div>
-      </header>
-      <div style={{ marginBottom: 26 }}>
-        <p style={{ margin: "0 0 8px", color: "var(--brand)", fontSize: 12, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".08em" }}>Paneli i biznesit</p>
-        <h1 style={{ margin: 0, fontSize: "clamp(27px,4vw,36px)", letterSpacing: "-.04em" }}>{organization.trade_name || organization.legal_name}</h1>
-        <p style={{ margin: "8px 0 0", color: "var(--muted)" }}>{organization.municipality} · {isCashier ? "Këto janë veglat që të duhen për punën e përditshme." : "Zgjidh pjesën e biznesit që dëshiron të hapësh."}</p>
-      </div>
-      <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))", gap: 14 }}>
-        {modules.map((module, index) => (
-          <Link key={module.href} href={module.href} style={{ minHeight: 168, display: "flex", flexDirection: "column", gap: 12, background: "white", border: "1px solid var(--line)", borderRadius: 16, padding: 20, boxShadow: "0 5px 22px rgba(24,44,34,.04)" }}>
-            <span aria-hidden="true" style={{ width: 42, height: 42, display: "grid", placeItems: "center", borderRadius: 12, background: "#eaf5ef", color: "var(--brand)", fontSize: 23 }}>{module.icon}</span>
-            <strong style={{ fontSize: 17 }}>{module.title}</strong>
-            <span style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.5 }}>{module.description}</span>
-          </Link>
-        ))}
-      </section>
-      <section style={{ marginTop: 26, border: "1px solid var(--line)", borderRadius: 14, padding: 18, background: "#fbfcfb" }}>
-        <h2 style={{ margin: "0 0 12px", fontSize: 16 }}>Qasja sipas rolit</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: 14, fontSize: 13, color: "var(--muted)", lineHeight: 1.6 }}>
-          <div><strong>Pronari / Administratori</strong><br/>POS, shitjet, faturat, produktet, ndërrimet dhe konfigurimi ATK.</div>
-          <div><strong>Menaxheri</strong><br/>POS, faturat, produktet dhe ndërrimet. Pa konfigurimin ATK.</div>
-          <div><strong>Kontabilisti</strong><br/>POS dhe faturat për punë financiare. Pa konfigurimin ATK.</div>
-          <div><strong>Punëtori / Arkëtari</strong><br/>POS, shitjet dhe ndërrimi i arkës. Pa menaxhim biznesi ose ATK.</div>
-        </div>
-      </section>
-      <footer style={{ marginTop: 28, paddingTop: 16, borderTop: "1px solid var(--line)", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10, color: "var(--muted)", fontSize: 12 }}>
-        <Link href="/app" style={{ color: "var(--brand)", fontWeight: 700 }}>Ndërro biznesin</Link>
-        <span>Fiskalo · Menaxhimi i biznesit</span>
-      </footer>
-      <style>{`@media(max-width:600px){main{padding-top:18px!important} }`}</style>
-    </main>
-  );
+  return <main className="business-dashboard">
+    <section className="business-dashboard-hero"><div><span className="business-dashboard-kicker">PANELI I BIZNESIT</span><h1>{organization.trade_name || organization.legal_name}</h1><p>{organization.municipality} · {roleLabel[role] ?? role}</p></div><span className="business-role-chip">{roleLabel[role] ?? role}</span></section>
+    <section className="business-dashboard-stats">
+      <article><span>Fatura të regjistruara</span><strong>{invoiceCount.count ?? 0}</strong><small>Gjithsej në këtë biznes</small></article>
+      <article><span>Produkte aktive</span><strong>{productCount.count ?? 0}</strong><small>Artikuj në katalog</small></article>
+      <article><span>Instalime POS</span><strong>{posCount.count ?? 0}</strong><small>Pajisje të regjistruara</small></article>
+    </section>
+    <div className="business-dashboard-section-title"><div><h2>Veprimet e përditshme</h2><p>Zgjidh modulin që dëshiron të përdorësh.</p></div></div>
+    <section className="business-module-grid">{modules.map((module) => { const Icon=module.icon; return <Link key={module.href} href={module.href} className="business-module-card"><span className={"business-module-icon "+module.tint}><Icon size={21}/></span><strong>{module.title}</strong><p>{module.description}</p><span className="business-module-action">{module.action}<ArrowUpRight size={15}/></span></Link>; })}</section>
+    <footer className="business-dashboard-footer"><Link href="/app">Ndërro biznesin</Link><span>Fiskalo · Paneli i biznesit</span></footer>
+  </main>;
 }
