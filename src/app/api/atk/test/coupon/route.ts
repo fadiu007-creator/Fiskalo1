@@ -3,8 +3,8 @@ import { authorizeAtkOrganization, getAtkRequestContext, positiveInteger } from 
 export const runtime = "nodejs";
 
 function readVarint(bytes: Uint8Array, start: number): { value: bigint; next: number } {
-  let value = 0n; let shift = 0n; let cursor = start;
-  while (cursor < bytes.length && shift < 70n) {
+  let value = BigInt(0); let shift = BigInt(0); let cursor = start;
+  while (cursor < bytes.length && shift < 7BigInt(0)) {
     const byte = bytes[cursor++]; value |= BigInt(byte & 0x7f) << shift;
     if ((byte & 0x80) === 0) return { value, next: cursor };
     shift += 7n;
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
   let header: Map<number, bigint>;
   try { header = readCouponHeader(details); }
   catch { return Response.json({ error: "invalid_protobuf", detail: "The signed details are not a valid ATK Protobuf coupon." }, { status: 400 }); }
-  const expectedHeader = new Map<number, bigint>([[1, BigInt(nui)], [2, BigInt(couponId)], [3, BigInt(pos.atk_branch_id)], [6, BigInt(pos.pos_id)], [7, BigInt(applicationId)], [9, 1n], [13, BigInt(totalCents)]]);
+  const expectedHeader = new Map<number, bigint>([[1, BigInt(nui)], [2, BigInt(couponId)], [3, BigInt(pos.atk_branch_id)], [6, BigInt(pos.pos_id)], [7, BigInt(applicationId)], [9, BigInt(1)], [13, BigInt(totalCents)]]);
   for (const [field, expected] of expectedHeader) {
     if (header.get(field) !== expected) return Response.json({ error: "coupon_header_mismatch", detail: "The signed coupon identifiers or totals do not match the selected Fiskalo business, TEST POS and invoice." }, { status: 409 });
   }
