@@ -24,6 +24,7 @@ export async function POST(request: Request) {
   if (authError || !user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   const organizationId = typeof body.organizationId === "string" ? body.organizationId : "";
+  const posInstallationId = typeof body.posInstallationId === "string" ? body.posInstallationId : "";
   const nui = typeof body.nui === "string" ? body.nui : String(body.nui ?? "");
   const fiscalizationNumber = typeof body.fiscalizationNumber === "string" ? body.fiscalizationNumber.trim() : "";
   const branchId = positiveInteger(body.branchId);
@@ -34,6 +35,13 @@ export async function POST(request: Request) {
   }
   const authorization = await authorizeAtkOrganization(supabase, user.id, organizationId, nui);
   if (!authorization.ok) return Response.json({ error: "organization_not_authorized", detail: authorization.detail }, { status: authorization.status });
+
+  const { data: pos, error: posError } = await supabase.from("fiskalo_atk_pos_installations")
+    .select("id,organization_id,atk_branch_id,pos_id,environment")
+    .eq("id", posInstallationId).eq("organization_id", organizationId).maybeSingle();
+  if (posError || !pos || pos.environment !== "test" || Number(pos.atk_branch_id) !== branchId || Number(pos.pos_id) !== posId) {
+    return Response.json({ error: "test_pos_mismatch", detail: "The selected TEST POS does not match the submitted branch and POS identifiers." }, { status: 409 });
+  }
 
   try {
     const response = await fetch("https://fiskalizimi-test.atk-ks.org/ca/verify/" + encodeURIComponent(nui), {
@@ -53,6 +61,12 @@ export async function POST(request: Request) {
     const businessName = typeof result.business_name === "string" ? result.business_name : "";
     const verificationCode = typeof result.verification_code === "string" ? result.verification_code : "";
     if (!businessName || !verificationCode) return Response.json({ error: "atk_unexpected_response" }, { status: 502 });
+    const { error: saveError } = await supabase.from("fiskalo_atk_pos_verifications").upsert({
+      organization_id: organizationId, pos_installation_id: posInstallationId, nui,
+      atk_branch_id: branchId, pos_id: posId, application_id: applicationId,
+      verification_code: verificationCode, verified_at: new Date().toISOString(), created_by: user.id,
+    }, { onConflict: "pos_installation_id" });
+    if (saveError) return Response.json({ error: "verification_save_failed", detail: "ATK verified the POS, but Fiskalo could not save the verification to the business account: " + saveError.message }, { status: 500 });
     return Response.json({ businessName, verificationCode, environment: "TEST" }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const timeout = error instanceof Error && error.name === "TimeoutError";
