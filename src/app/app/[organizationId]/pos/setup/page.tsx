@@ -222,7 +222,7 @@ export default function WebPosSetupPage() {
       <div style={{ color: "var(--muted)", fontSize: 13 }}>NUI: {org?.nui || "—"} · Biznesi: {org?.legal_name || "—"}</div>
       <label>Numri i fiskalizimit TEST<input value={fiscalizationNumber} onChange={(e) => setFiscalizationNumber(e.target.value)} style={field} placeholder="Nga emaili i ATK-së" /></label>
       <button disabled={busy} onClick={() => void saveProfile()} style={primary}>Ruaj numrin e fiskalizimit</button>
-      <label>Application ID<input value={applicationId} onChange={(e) => setApplicationId(e.target.value)} style={field} inputMode="numeric" /></label>
+      <label>Application ID · menaxhohet nga Fiskalo<input value={applicationId} readOnly style={{ ...field, background: "#f1f5f2", color: "var(--muted)" }} inputMode="numeric" /></label>
     </section>
     <section style={{ ...panel, display: "grid", gap: 12, marginBottom: 12 }}>
       <strong>2. Krijo POS TEST drejtpërdrejt në Web</strong>
