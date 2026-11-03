@@ -128,8 +128,11 @@ export default function WebPosSetupPage() {
         body: JSON.stringify({ organizationId, nui: org.nui, fiscalizationNumber: profile.fiscalization_number, branchId: selected.atk_branch_id, posId: selected.pos_id, applicationId: appId }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.detail || data.error || "ATK nuk e verifikoi POS-in.");
+      const verified = { businessName: data.businessName, verificationCode: data.verificationCode, applicationId: appId,
+        nui: org.nui, branchId: selected.atk_branch_id, posId: selected.pos_id, verifiedAt: new Date().toISOString() };
+      window.localStorage.setItem("fiskalo-atk-verification:" + organizationId + ":" + selected.id, JSON.stringify(verified));
       setVerification({ businessName: data.businessName, verificationCode: data.verificationCode });
-      setNotice("ATK e verifikoi POS-in TEST. Vazhdo me krijimin e CSR-së.");
+      setNotice("ATK e verifikoi POS-in TEST. Kodi i verifikimit u ruajt për këtë POS në këtë shfletues.");
     } catch (e) { setError(e instanceof Error ? e.message : "Verifikimi dështoi."); }
     finally { setBusy(false); }
   }
@@ -161,6 +164,8 @@ export default function WebPosSetupPage() {
     setBusy(true); setError(""); setNotice("");
     try {
       await deleteBrowserPosKey(organizationId + ":" + selected.id);
+      window.localStorage.removeItem("fiskalo-atk-verification:" + organizationId + ":" + selected.id);
+      setVerification(null);
       setKeyReady(false);
       setNotice("Çelësi lokal u fshi. Verifiko POS-in dhe gjenero CSR të ri me emrin që ktheu ATK.");
     } catch (e) { setError(e instanceof Error ? e.message : "Çelësi lokal nuk u fshi."); }
