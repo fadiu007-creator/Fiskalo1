@@ -10,7 +10,7 @@ create policy fiskalo_atk_docs_insert_test on public.fiskalo_atk_fiscal_document
     and exists (
       select 1 from public.fiskalo_atk_pos_installations p
       where p.id = pos_installation_id and p.organization_id = fiskalo_atk_fiscal_documents.organization_id
-        and p.environment = 'test' and p.status = 'active' and p.certificate_serial is not null
+        and p.environment = 'test'
     )
   );
 
