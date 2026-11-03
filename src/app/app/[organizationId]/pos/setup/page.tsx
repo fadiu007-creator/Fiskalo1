@@ -142,8 +142,6 @@ export default function WebPosSetupPage() {
         body: JSON.stringify({ organizationId, posInstallationId: selected.id, nui: org.nui, fiscalizationNumber: profile.fiscalization_number, branchId: selected.atk_branch_id, posId: selected.pos_id, applicationId: appId }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.detail || data.error || "ATK nuk e verifikoi POS-in.");
-      const verified = { businessName: data.businessName, verificationCode: data.verificationCode, applicationId: appId,
-        nui: org.nui, branchId: selected.atk_branch_id, posId: selected.pos_id, verifiedAt: new Date().toISOString() };
       setVerification({ businessName: data.businessName, verificationCode: data.verificationCode });
       setNotice("ATK e verifikoi POS-in TEST. Verifikimi u ruajt në llogarinë e biznesit dhe do të jetë i disponueshëm edhe pas hyrjes nga pajisje tjetër.");
     } catch (e) { setError(e instanceof Error ? e.message : "Verifikimi dështoi."); }
