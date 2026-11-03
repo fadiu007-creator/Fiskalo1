@@ -48,7 +48,7 @@ export default function AtkTestPosPage() {
       supabase.from("fiskalo_atk_taxpayer_profiles").select("fiscalization_number").eq("organization_id", organizationId).maybeSingle(),
       supabase.from("fiskalo_atk_pos_installations").select("id,atk_branch_id,pos_id,label,location,environment").eq("organization_id", organizationId).eq("environment", "test").order("created_at", { ascending: false }),
       supabase.from("fiskalo_invoices").select("id,invoice_number,issue_date,status,payment_status,payment_method,subtotal,vat_total,total").eq("organization_id", organizationId).eq("status", "issued").eq("payment_status", "paid").eq("payment_method", "cash").order("issued_at", { ascending: false }).limit(50),
-      supabase.from("fiskalo_atk_fiscal_documents").select("id,document_type,status,coupon_id,total,atk_transaction_id,last_error,created_at,source_invoice_id").eq("organization_id", organizationId).eq("pos_installation_id", posResult.data?.[0]?.id ?? "00000000-0000-0000-0000-000000000000").order("created_at", { ascending: false }).limit(20),
+      supabase.from("fiskalo_atk_fiscal_documents").select("id,document_type,status,coupon_id,total,atk_transaction_id,last_error,created_at,source_invoice_id").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(20),
     ]);
     if (orgResult.error || !orgResult.data) setError("Nuk u lexuan të dhënat e biznesit.");
     else { setNui(String(orgResult.data.nui)); setMunicipality(orgResult.data.municipality || ""); }
