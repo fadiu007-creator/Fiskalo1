@@ -194,7 +194,7 @@ export default function AtkTestPosPage() {
         <strong>{line.description}</strong><small style={{ display: "block", color: "var(--muted)" }}>{line.quantity} × {Number(line.unit_price).toFixed(2)} € · Neto {Number(line.line_subtotal).toFixed(2)} € · TVSH {Number(line.line_vat).toFixed(2)} €</small>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8, marginTop: 8 }}>
           <label style={{ fontSize: 12 }}>Kodi ATK i njësisë<input value={mappings[line.id]?.unit || ""} onChange={(e) => setMapping(line.id, "unit", e.target.value)} placeholder="Kodi zyrtar" style={field} /></label>
-          <label style={{ fontSize: 12 }}>Kodi ATK i TVSH-së<input value={mappings[line.id]?.tax || ""} onChange={(e) => setMapping(line.id, "tax", e.target.value.toUpperCase())} maxLength={1} placeholder="1 shkronjë" style={field} /></label>
+          <label style={{ fontSize: 12 }}>Kodi ATK i TVSH-së<select value={mappings[line.id]?.tax || ""} onChange={(e) => setMapping(line.id, "tax", e.target.value)} style={field}><option value="">Zgjidh kodin</option><option value="A">A – Përjashtuar nga TVSH (0%)</option><option value="C">C – TVSH 0%</option><option value="D">D – TVSH 8%</option><option value="E">E – TVSH 18%</option></select></label>
           <label style={{ fontSize: 12 }}>Kodi ATK i artikullit<input value={mappings[line.id]?.itemType || ""} onChange={(e) => setMapping(line.id, "itemType", e.target.value)} placeholder="Kodi zyrtar" style={field} /></label>
         </div>
       </div>)}</div>
