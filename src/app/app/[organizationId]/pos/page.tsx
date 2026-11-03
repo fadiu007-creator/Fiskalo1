@@ -172,6 +172,9 @@ export default function WebPosPage() {
       const unmapped = valid.filter(({ product }) =>
         !product!.atk_unit_code?.trim() ||
         !/^[A-Z]$/.test(product!.atk_tax_code?.trim() ?? "") ||
+        (Number(product!.vat_rate) === 8 && product!.atk_tax_code !== "D") ||
+        (Number(product!.vat_rate) === 18 && product!.atk_tax_code !== "E") ||
+        (Number(product!.vat_rate) === 0 && !["A", "C"].includes(product!.atk_tax_code ?? "")) ||
         !product!.atk_item_category_code?.trim()
       );
       if (unmapped.length) {
