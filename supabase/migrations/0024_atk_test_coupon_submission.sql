@@ -51,3 +51,22 @@ create policy fiskalo_atk_docs_update_test on public.fiskalo_atk_fiscal_document
     )
   );
 grant update on public.fiskalo_atk_fiscal_documents to authenticated;
+
+create sequence if not exists public.fiskalo_atk_coupon_id_seq;
+revoke all on sequence public.fiskalo_atk_coupon_id_seq from public, anon;
+grant usage, select on sequence public.fiskalo_atk_coupon_id_seq to authenticated;
+
+create or replace function public.fiskalo_next_atk_coupon_id()
+returns bigint language plpgsql security definer set search_path = public, pg_temp
+as $$
+begin
+  if auth.uid() is null then raise exception 'Authentication required'; end if;
+  if not exists (
+    select 1 from public.fiskalo_organization_users
+    where user_id = auth.uid() and role in ('owner','administrator')
+  ) then raise exception 'Owner or administrator access required'; end if;
+  return nextval('public.fiskalo_atk_coupon_id_seq');
+end;
+$$;
+revoke all on function public.fiskalo_next_atk_coupon_id() from public, anon;
+grant execute on function public.fiskalo_next_atk_coupon_id() to authenticated;
