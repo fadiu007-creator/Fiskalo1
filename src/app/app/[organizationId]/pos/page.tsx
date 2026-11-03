@@ -8,7 +8,7 @@ import { submitPaidInvoiceToATK } from "@/lib/atk/submit-paid-invoice";
 import { ensureATKTestPosReady } from "@/lib/atk/ensure-test-pos-ready";
 import { ArrowRight, FileText, Plus, RefreshCw, Search, Settings2, ShoppingCart } from "lucide-react";
 
-type Product = { id: string; name: string; sku: string | null; unit_price: number; vat_rate: number; stock_quantity: number; track_stock: boolean; item_type: string; is_active: boolean };
+type Product = { id: string; name: string; sku: string | null; pos_category: string; image_url: string | null; unit_price: number; vat_rate: number; stock_quantity: number; track_stock: boolean; item_type: string; is_active: boolean };
 type Customer = { id: string; name: string; phone: string | null };
 type InvoiceRow = { id: string; invoice_number: string | null; issue_date: string; status: string; payment_status: string; payment_method: string; total: number; customer_id: string | null; atk_test_status?: string | null };
 type CartLine = { productId: string; quantity: string };
@@ -36,8 +36,8 @@ export default function WebPosPage() {
   const [atkSetupNotice, setAtkSetupNotice] = useState("Duke kontrolluar konfigurimin ATK TEST…");
   const atkAutoInitRef = useRef(false);
   const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState("Të gjitha");
   const searchRef = useRef<HTMLInputElement>(null);
-  const [cashReceived, setCashReceived] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -48,7 +48,7 @@ export default function WebPosPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const [productResult, customerResult, invoiceResult] = await Promise.all([
-      supabase.from("fiskalo_products").select("id,name,sku,unit_price,vat_rate,stock_quantity,track_stock,item_type,is_active").eq("organization_id", organizationId).eq("is_active", true).order("name"),
+      supabase.from("fiskalo_products").select("id,name,sku,pos_category,image_url,unit_price,vat_rate,stock_quantity,track_stock,item_type,is_active").eq("organization_id", organizationId).eq("is_active", true).order("name"),
       supabase.from("fiskalo_customers").select("id,name,phone").eq("organization_id", organizationId).order("name"),
       supabase.from("fiskalo_invoices").select("id,invoice_number,issue_date,status,payment_status,payment_method,total,customer_id").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
     ]);
@@ -83,9 +83,12 @@ export default function WebPosPage() {
   }, [organizationId, supabase]);
 
   const visibleInvoices = invoices.filter((invoice) => `${invoice.invoice_number ?? ""} ${invoice.status} ${invoice.payment_status} ${invoice.issue_date}`.toLocaleLowerCase().includes(invoiceSearch.trim().toLocaleLowerCase()));
+  const categories = ["Të gjitha", "Burgerë", "Menu", "Pije", "Shtesa", "Ëmbëlsira", "Tjera"];
   const visibleProducts = products.filter((product) => {
     const q = search.trim().toLocaleLowerCase();
-    return !q || product.name.toLocaleLowerCase().includes(q) || (product.sku ?? "").toLocaleLowerCase().includes(q);
+    const matchesCategory = activeCategory === "Të gjitha" || (product.pos_category || "Tjera") === activeCategory;
+    const matchesSearch = !q || product.name.toLocaleLowerCase().includes(q) || (product.sku ?? "").toLocaleLowerCase().includes(q);
+    return matchesCategory && matchesSearch;
   });
   const lines = cart.map((line) => {
     const product = products.find((item) => item.id === line.productId);
@@ -97,8 +100,6 @@ export default function WebPosPage() {
   const subtotal = roundMoney(lines.reduce((sum, line) => sum + line.lineSubtotal, 0));
   const vatTotal = roundMoney(lines.reduce((sum, line) => sum + line.lineVat, 0));
   const total = roundMoney(subtotal + vatTotal);
-  const cashReceivedAmount = cashReceived.trim() === "" ? 0 : Number(cashReceived);
-  const cashChange = paymentMethod === "cash" && Number.isFinite(cashReceivedAmount) ? roundMoney(Math.max(0, cashReceivedAmount - total)) : 0;
 
   function addProduct(product: Product) {
     setCart((current) => {
@@ -133,10 +134,6 @@ export default function WebPosPage() {
     const valid = lines.filter((line) => Number.isFinite(line.quantity) && line.quantity > 0);
     if (!valid.length || valid.length !== lines.length) { setError("Shto artikuj dhe kontrollo sasitë."); return; }
     if (paymentMethod !== "credit" && !confirmedPayment) { setError("Konfirmo që pagesa është pranuar para se ta regjistrosh si të paguar."); return; }
-    if (paymentMethod === "cash" && (!Number.isFinite(cashReceivedAmount) || cashReceivedAmount + 0.0001 < total)) {
-      setError("Shuma e pranuar në para duhet të jetë së paku sa totali i shitjes.");
-      return;
-    }
     for (const line of valid) {
       if (line.product!.track_stock && line.quantity > Number(line.product!.stock_quantity)) {
         setError("Stoku i pamjaftueshëm për: " + line.product!.name + ". Ndrysho sasinë ose rifresko produktet.");
@@ -229,7 +226,6 @@ export default function WebPosPage() {
     setCart([]);
     setCustomerId("");
     setPaymentMethod("cash");
-    setCashReceived("");
     setConfirmedPayment(false);
     await load();
   }
@@ -238,7 +234,7 @@ export default function WebPosPage() {
 
   return <main className="fiskalo-pos" style={{ maxWidth: 1440, margin: "0 auto", padding: "22px clamp(12px,3vw,28px) 50px" }}>
     <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
-      <div><Link href={`/app/${organizationId}`} style={{ color: "var(--brand)", fontWeight: 750 }}>← Paneli i biznesit</Link><h1 style={{ margin: "8px 0 0", fontSize: 28 }}>Arka</h1><div style={{ color: "var(--muted)", fontSize: 13 }}>Regjistro shitjen; faturat e paguara dërgohen automatikisht në ATK TEST.</div></div>
+      <div><Link href={`/app/${organizationId}`} style={{ color: "var(--brand)", fontWeight: 750 }}>← Paneli i biznesit</Link><h1 style={{ margin: "8px 0 0", fontSize: 28 }}>Arka</h1><div style={{ color: "var(--muted)", fontSize: 13 }}>Zgjedh produktet, shto në porosi dhe prano pagesën. Totali llogaritet vetë.</div></div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Link href={`/app/${organizationId}/pos/products`} style={{ ...secondary, textDecoration: "none" }}>Produktet</Link><Link href={`/app/${organizationId}/pos/setup`} style={{ ...secondary, textDecoration: "none" }}><Settings2 size={15} /> Konfiguro ATK</Link><button style={secondary} onClick={() => void load()}><RefreshCw size={15} /> Rifresko</button></div>
     </header>
     <div role="status" style={{ marginBottom: 12, border: "1px solid var(--line)", borderRadius: 10, padding: "10px 12px", color: "var(--muted)", fontSize: 13 }}>{atkSetupNotice}</div>\n    <nav aria-label="POS dhe faturat" style={{ display: "flex", gap: 8, marginBottom: 14, borderBottom: "1px solid var(--line)", paddingBottom: 10 }}><button aria-pressed={activeView === "pos"} onClick={() => setActiveView("pos")} style={{ ...(activeView === "pos" ? button : secondary) }}><ShoppingCart size={15} /> Shitje</button><button aria-pressed={activeView === "invoices"} onClick={() => setActiveView("invoices")} style={{ ...(activeView === "invoices" ? button : secondary) }}><FileText size={15} /> Faturat <span className="status-pill">{invoices.length}</span></button></nav>
@@ -254,10 +250,13 @@ export default function WebPosPage() {
     <div className="pos-layout" style={{ display: activeView === "pos" ? "grid" : "none", gridTemplateColumns: "minmax(0,1.55fr) minmax(310px,0.85fr)", gap: 14, alignItems: "start" }}>
       <section style={panel}>
         <input ref={searchRef} aria-label="Kërko produkt ose skano barkod" placeholder="Kërko produkt ose skano barkod / SKU..." value={search} onChange={(event) => { setSearch(event.target.value); setError(""); }} onKeyDown={handleProductSearchKeyDown} style={{ ...field, marginBottom: 12 }} />
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(145px,1fr))", gap: 9 }}>
-          {visibleProducts.map((product) => <button key={product.id} onClick={() => addProduct(product)} style={{ ...secondary, textAlign: "left", minHeight: 100, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 8 }}>
-            <span style={{ fontWeight: 700 }}>{product.name}</span><span style={{ color: "var(--brand)", fontSize: 17, fontWeight: 800 }}>{money(Number(product.unit_price))}</span>
-            <small style={{ color: "var(--muted)" }}>{product.item_type === "service" ? "Shërbim" : product.track_stock ? "Stok: " + product.stock_quantity : "Produkt"}</small>
+        <div className="pos-categories" aria-label="Kategoritë e produkteve">{categories.map((category) => <button key={category} type="button" aria-pressed={activeCategory === category} onClick={() => setActiveCategory(category)} className={activeCategory === category ? "pos-category active" : "pos-category"}>{category}</button>)}</div>
+        <div className="pos-product-grid">
+          {visibleProducts.map((product) => <button key={product.id} type="button" onClick={() => addProduct(product)} className="pos-product-card">
+            <div className="pos-product-image" role="img" aria-label={product.name} style={{ backgroundImage: product.image_url ? "url(" + product.image_url + ")" : undefined }}>{!product.image_url && <span>{(product.pos_category || "Tjera") === "Pije" ? "🥤" : (product.pos_category || "Tjera") === "Ëmbëlsira" ? "🍰" : (product.pos_category || "Tjera") === "Shtesa" ? "🍟" : "🍔"}</span>}</div>
+            <span className="pos-product-name">{product.name}</span>
+            <span className="pos-product-price">{money(Number(product.unit_price) * (1 + Number(product.vat_rate) / 100))}</span>
+            <small>{product.track_stock ? "Stok: " + product.stock_quantity : "Shto në porosi"}</small>
           </button>)}
           {!visibleProducts.length && <p style={{ color: "var(--muted)" }}>Nuk u gjetën produkte aktive.</p>}
         </div>
@@ -282,25 +281,34 @@ export default function WebPosPage() {
             <select value={customerId} onChange={(event) => setCustomerId(event.target.value)} style={field}><option value="">Klient pa emër</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}{customer.phone ? " · " + customer.phone : ""}</option>)}</select>
           </label>
           <label style={{ display: "grid", gap: 5, fontSize: 12, fontWeight: 650 }}>Mënyra e pagesës
-            <select value={paymentMethod} onChange={(event) => { setPaymentMethod(event.target.value); setConfirmedPayment(false); setCashReceived(""); }} style={field}>
+            <select value={paymentMethod} onChange={(event) => { setPaymentMethod(event.target.value); setConfirmedPayment(false); }} style={field}>
               <option value="cash">Para në dorë</option><option value="card">Kartelë (e pranuar manualisht)</option><option value="bank_transfer">Transfer bankar (i konfirmuar)</option><option value="credit">Me afat — pa pagesë</option>
             </select>
           </label>
-          {paymentMethod === "cash" && <label style={{ display: "grid", gap: 5, fontSize: 12, fontWeight: 650 }}>Para të pranuara (€)
-            <input type="number" min={total} step="0.01" inputMode="decimal" value={cashReceived} onChange={(event) => setCashReceived(event.target.value)} placeholder={total.toFixed(2)} style={field} />
-            <span style={{ display: "flex", justifyContent: "space-between", color: "var(--muted)", fontWeight: 500 }}><span>Kusuri</span><strong style={{ color: "var(--ink)" }}>{money(cashChange)}</strong></span>
-          </label>}
+          {paymentMethod === "cash" && }
           {paymentMethod !== "credit" && <label style={{ display: "flex", alignItems: "start", gap: 8, fontSize: 12, lineHeight: 1.4 }}>
             <input type="checkbox" checked={confirmedPayment} onChange={(event) => setConfirmedPayment(event.target.checked)} style={{ marginTop: 2 }} />
             Konfirmoj se pagesa është pranuar. Fiskalo nuk proceson pagesa me kartelë.
           </label>}
           <button disabled={busy || !lines.length} onClick={() => void completeSale()} style={{ ...button, width: "100%", opacity: busy || !lines.length ? 0.55 : 1 }}>{busy ? "Duke regjistruar..." : paymentMethod === "credit" ? "Lësho faturën" : "Përfundo shitjen · " + money(total)}</button>
-          <button disabled={busy || !cart.length} onClick={() => { setCart([]); setConfirmedPayment(false); setCashReceived(""); }} style={{ ...secondary, width: "100%" }}>Pastro shportën</button>
+          <button disabled={busy || !cart.length} onClick={() => { setCart([]); setConfirmedPayment(false); }} style={{ ...secondary, width: "100%" }}>Pastro shportën</button>
         </div>
       </aside>
     </div>
     <p style={{ display: activeView === "pos" ? "block" : "none", color: "var(--muted)", fontSize: 11, lineHeight: 1.5, marginTop: 14 }}>Shitjet regjistrohen në arkë. Pas pagesës së plotë, Fiskalo tenton dërgimin automatik në ATK TEST. Pagesat me kartelë nuk procesohen nga aplikacioni.</p>
     <section style={{ display: activeView === "invoices" ? "block" : "none", ...panel }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 }}><div><h2 style={{ margin: 0, fontSize: 20 }}>Faturat</h2><p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: 12 }}>Shitjet e regjistruara së fundmi</p></div><button onClick={() => setActiveView("pos")} style={button}><Plus size={16} /> Shitje e re</button></div><div style={{ display: "flex", gap: 8, marginBottom: 12 }}><div style={{ position: "relative", flex: 1, maxWidth: 360 }}><Search size={16} style={{ position: "absolute", left: 12, top: 13, color: "var(--muted)" }} /><input className="invoice-search" aria-label="Kërko faturë" value={invoiceSearch} onChange={(e) => setInvoiceSearch(e.target.value)} placeholder="Kërko sipas numrit ose statusit..." style={{ ...field, paddingLeft: 36 }} /></div></div><div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}><thead><tr><th style={{ textAlign: "left", padding: 9 }}>Numri</th><th style={{ textAlign: "left", padding: 9 }}>Data</th><th style={{ textAlign: "left", padding: 9 }}>Statusi</th><th style={{ textAlign: "left", padding: 9 }}>Fiskalizimi ATK</th><th style={{ textAlign: "right", padding: 9 }}>Totali</th><th style={{ textAlign: "right", padding: 9 }}> </th></tr></thead><tbody>{visibleInvoices.map((invoice) => <tr key={invoice.id} style={{ borderTop: "1px solid var(--line)" }}><td style={{ padding: 9 }}>{invoice.invoice_number || "Draft"}</td><td style={{ padding: 9 }}>{invoice.issue_date}</td><td style={{ padding: 9 }}><span className={"status-pill " + (invoice.status === "draft" ? "" : invoice.payment_status === "paid" ? "paid" : "unpaid")}>{invoice.status === "draft" ? "Draft" : invoice.payment_status === "paid" ? "Paguar" : "E papaguar"}</span></td><td style={{ padding: 9 }}>{invoice.atk_test_status ? <span className={"status-pill " + (invoice.atk_test_status === "accepted" ? "accepted" : invoice.atk_test_status === "rejected" ? "rejected" : invoice.atk_test_status === "queued" || invoice.atk_test_status === "offline_pending" ? "queued" : "")}>{({ queued: "Në radhë", submitted: "Dërguar", accepted: "Pranuar", rejected: "Refuzuar", offline_pending: "Në pritje", draft: "Draft" } as Record<string,string>)[invoice.atk_test_status] || invoice.atk_test_status}</span> : <span style={{ color: "var(--muted)", fontSize: 12 }}>{invoice.payment_status === "paid" ? "Dërgimi nuk u krye" : "Pas pagesës"}</span>}</td><td style={{ padding: 9, textAlign: "right", fontWeight: 700 }}>{money(Number(invoice.total))}</td><td style={{ padding: 9, textAlign: "right", whiteSpace: "nowrap" }}><Link href={`/app/${organizationId}/invoices/${invoice.id}`} style={{ color: "var(--brand)", fontWeight: 700 }}>Hap <ArrowRight size={14} /></Link></td></tr>)}{!visibleInvoices.length && <tr><td colSpan={6} style={{ padding: 18, color: "var(--muted)", textAlign: "center" }}>Nuk ka fatura ende. Krijo shitjen e parë nga POS.</td></tr>}</tbody></table></div></section>
-    <style jsx>{`.pos-layout { grid-template-columns: minmax(0,1.55fr) minmax(310px,0.85fr); } @media (max-width: 760px) { .pos-layout { grid-template-columns: minmax(0,1fr) !important; } .pos-layout aside { position: static !important; } }`}</style>
+    <style jsx>{`
+      .pos-layout { grid-template-columns: minmax(0,1.45fr) minmax(330px,0.85fr); }
+      .pos-categories { display:flex; gap:8px; overflow-x:auto; padding:2px 0 14px; }
+      .pos-category { flex:0 0 auto; border:1px solid var(--line); border-radius:999px; padding:10px 16px; background:white; color:var(--ink); font-weight:750; cursor:pointer; }
+      .pos-category.active { background:var(--brand); color:white; border-color:var(--brand); }
+      .pos-product-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(155px,1fr)); gap:12px; }
+      .pos-product-card { overflow:hidden; border:1px solid var(--line); border-radius:14px; padding:0 0 12px; background:white; color:var(--ink); text-align:left; display:flex; flex-direction:column; gap:7px; cursor:pointer; min-width:0; }
+      .pos-product-image { width:100%; aspect-ratio:1.45 / 1; display:grid; place-items:center; background:#f4f1eb center/cover no-repeat; color:#a75b27; font-size:48px; }
+      .pos-product-name { font-size:14px; font-weight:800; padding:0 11px; min-height:36px; }
+      .pos-product-price { color:var(--brand); font-size:17px; font-weight:900; padding:0 11px; }
+      .pos-product-card small { color:var(--muted); padding:0 11px; }
+      @media (max-width:760px) { .pos-layout { grid-template-columns:minmax(0,1fr) !important; } .pos-layout aside { position:static !important; } .pos-product-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    `}</style>
   </main>;
 }
