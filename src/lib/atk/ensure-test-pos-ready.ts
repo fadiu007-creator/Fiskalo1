@@ -51,7 +51,7 @@ async function runEnsureATKTestPosReady(
   const applicationStorageKey = "fiskalo-atk-application-id:" + organizationId;
   const savedApplicationId = window.localStorage.getItem(applicationStorageKey);
   // 929645146946 was an old placeholder, not the application ID supplied for this ATK TEST account.
-  const applicationId = Number(savedApplicationId && savedApplicationId !== "929645146946" ? savedApplicationId : "457818860373");
+  let applicationId = Number(savedApplicationId && savedApplicationId !== "929645146946" ? savedApplicationId : "457818860373");
   const orderedPositions = [...positions]
     .filter((candidate) => candidate.status !== "suspended" && candidate.status !== "revoked")
     .sort((a, b) => Number(a.atk_branch_id) - Number(b.atk_branch_id) || Number(a.pos_id) - Number(b.pos_id));
