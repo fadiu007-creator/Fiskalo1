@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { submitPaidInvoiceToATK } from "@/lib/atk/submit-paid-invoice";
 import { ArrowRight, FileText, Plus, RefreshCw, Search, Settings2, ShoppingCart } from "lucide-react";
 
 type Product = { id: string; name: string; sku: string | null; unit_price: number; vat_rate: number; stock_quantity: number; track_stock: boolean; item_type: string; is_active: boolean };
@@ -40,7 +41,6 @@ export default function WebPosPage() {
   const [notice, setNotice] = useState("");
   const [issuedInvoiceId, setIssuedInvoiceId] = useState("");
   const [issuedNumber, setIssuedNumber] = useState("");
-  const [issuedCouponEligible, setIssuedCouponEligible] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -114,7 +114,7 @@ export default function WebPosPage() {
   }
 
   async function completeSale() {
-    setError(""); setNotice(""); setIssuedInvoiceId(""); setIssuedNumber(""); setIssuedCouponEligible(false);
+    setError(""); setNotice(""); setIssuedInvoiceId(""); setIssuedNumber("");
     const valid = lines.filter((line) => Number.isFinite(line.quantity) && line.quantity > 0);
     if (!valid.length || valid.length !== lines.length) { setError("Shto artikuj dhe kontrollo sasitë."); return; }
     if (paymentMethod !== "credit" && !confirmedPayment) { setError("Konfirmo që pagesa është pranuar para se ta regjistrosh si të paguar."); return; }
@@ -197,10 +197,20 @@ export default function WebPosPage() {
     setBusy(false);
     setIssuedInvoiceId(invoice.id);
     setIssuedNumber(String(invoiceNumber ?? ""));
-    setIssuedCouponEligible(paymentMethod === "cash");
+    let fiscalNotice = "";
+    if (paymentMethod !== "credit") {
+      try {
+        const fiscalResult = await submitPaidInvoiceToATK(supabase, organizationId, invoice.id);
+        fiscalNotice = " " + fiscalResult.message;
+      } catch (fiscalError) {
+        fiscalNotice = " Pagesa u ruajt, por dërgimi automatik në ATK nuk u përfundua: " +
+          (fiscalError instanceof Error ? fiscalError.message : "Gabim i panjohur.") +
+          " Kontrollo statusin e faturës para çdo prove tjetër.";
+      }
+    }
     setNotice(paymentMethod === "credit"
       ? "Fatura u lëshua. Pagesa mbeti e papaguar."
-      : "Shitja u regjistrua dhe pagesa u shënua si e pranuar.");
+      : "Shitja u regjistrua dhe pagesa u shënua si e pranuar." + fiscalNotice);
     setCart([]);
     setCustomerId("");
     setPaymentMethod("cash");
@@ -213,8 +223,8 @@ export default function WebPosPage() {
 
   return <main className="fiskalo-pos" style={{ maxWidth: 1440, margin: "0 auto", padding: "22px clamp(12px,3vw,28px) 50px" }}>
     <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
-      <div><Link href={`/app/${organizationId}`} style={{ color: "var(--brand)", fontWeight: 750 }}>← Paneli i biznesit</Link><h1 style={{ margin: "8px 0 0", fontSize: 28 }}>Arka</h1><div style={{ color: "var(--muted)", fontSize: 13 }}>Regjistro shitje, pagesa dhe kuponë nga një vend.</div></div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Link href={`/app/${organizationId}/pos/setup`} style={{ ...secondary, textDecoration: "none" }}><Settings2 size={15} /> Konfiguro ATK</Link><Link href={`/app/${organizationId}/pos/atk-test`} style={{ ...secondary, textDecoration: "none" }}><FileText size={15} /> Testo ATK</Link><Link href={`/app/${organizationId}/pos/shifts`} style={{ ...secondary, textDecoration: "none" }}>Ndërrimet</Link><button style={secondary} onClick={() => void load()}><RefreshCw size={15} /> Rifresko</button></div>
+      <div><Link href={`/app/${organizationId}`} style={{ color: "var(--brand)", fontWeight: 750 }}>← Paneli i biznesit</Link><h1 style={{ margin: "8px 0 0", fontSize: 28 }}>Arka</h1><div style={{ color: "var(--muted)", fontSize: 13 }}>Regjistro shitjen; faturat e paguara dërgohen automatikisht në ATK TEST.</div></div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Link href={`/app/${organizationId}/pos/setup`} style={{ ...secondary, textDecoration: "none" }}><Settings2 size={15} /> Konfiguro ATK</Link><Link href={`/app/${organizationId}/pos/shifts`} style={{ ...secondary, textDecoration: "none" }}>Ndërrimet</Link><button style={secondary} onClick={() => void load()}><RefreshCw size={15} /> Rifresko</button></div>
     </header>
     <nav aria-label="POS dhe faturat" style={{ display: "flex", gap: 8, marginBottom: 14, borderBottom: "1px solid var(--line)", paddingBottom: 10 }}><button aria-pressed={activeView === "pos"} onClick={() => setActiveView("pos")} style={{ ...(activeView === "pos" ? button : secondary) }}><ShoppingCart size={15} /> Shitje</button><button aria-pressed={activeView === "invoices"} onClick={() => setActiveView("invoices")} style={{ ...(activeView === "invoices" ? button : secondary) }}><FileText size={15} /> Faturat <span className="status-pill">{invoices.length}</span></button></nav>
     {error && <div role="alert" style={{ background: "#fff0ef", color: "#982d25", padding: 12, borderRadius: 9, marginBottom: 12 }}>{error}</div>}
@@ -223,7 +233,7 @@ export default function WebPosPage() {
       <div><strong>{issuedNumber ? "Fatura " + issuedNumber : "Draft i ruajtur"}</strong><div style={{ color: "var(--muted)", fontSize: 12, marginTop: 3 }}>{issuedCouponEligible ? "Pagesa u regjistrua. Mund ta hapësh rrjedhën e kuponit TEST." : "Kontrollo faturën dhe pagesën."}</div></div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <Link href={`/app/${organizationId}/invoices/${issuedInvoiceId}`} style={{ color: "var(--brand)", fontWeight: 750, alignSelf: "center" }}>Hap faturën →</Link>
-        {issuedCouponEligible && <Link href={`/app/${organizationId}/pos/atk-test?invoiceId=${encodeURIComponent(issuedInvoiceId)}`} style={{ ...button, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}>Përgatit kupon TEST <ArrowRight size={15} /></Link>}
+        {issuedCouponEligible && <Link href={`/app/${organizationId}/pos/atk-test?invoiceId=${encodeURIComponent(issuedInvoiceId)}`} style={{ ...button, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}> <ArrowRight size={15} /></Link>}
       </div>
     </div>}
     <div className="pos-layout" style={{ display: activeView === "pos" ? "grid" : "none", gridTemplateColumns: "minmax(0,1.55fr) minmax(310px,0.85fr)", gap: 14, alignItems: "start" }}>
@@ -274,8 +284,8 @@ export default function WebPosPage() {
         </div>
       </aside>
     </div>
-    <p style={{ display: activeView === "pos" ? "block" : "none", color: "var(--muted)", fontSize: 11, lineHeight: 1.5, marginTop: 14 }}>Shitjet dhe faturat regjistrohen nga e njëjta arkë. Fiskalizimi ATK TEST është hap i veçantë derisa Fiskalo të certifikohet. Pagesat me kartelë nuk procesohen nga aplikacioni.</p>
-    <section style={{ display: activeView === "invoices" ? "block" : "none", ...panel }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 }}><div><h2 style={{ margin: 0, fontSize: 20 }}>Faturat</h2><p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: 12 }}>Shitjet e regjistruara së fundmi</p></div><button onClick={() => setActiveView("pos")} style={button}><Plus size={16} /> Shitje e re</button></div><div style={{ display: "flex", gap: 8, marginBottom: 12 }}><div style={{ position: "relative", flex: 1, maxWidth: 360 }}><Search size={16} style={{ position: "absolute", left: 12, top: 13, color: "var(--muted)" }} /><input className="invoice-search" aria-label="Kërko faturë" value={invoiceSearch} onChange={(e) => setInvoiceSearch(e.target.value)} placeholder="Kërko sipas numrit ose statusit..." style={{ ...field, paddingLeft: 36 }} /></div></div><div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}><thead><tr><th style={{ textAlign: "left", padding: 9 }}>Numri</th><th style={{ textAlign: "left", padding: 9 }}>Data</th><th style={{ textAlign: "left", padding: 9 }}>Statusi</th><th style={{ textAlign: "left", padding: 9 }}>Kuponi ATK TEST</th><th style={{ textAlign: "right", padding: 9 }}>Totali</th><th style={{ textAlign: "right", padding: 9 }}> </th></tr></thead><tbody>{visibleInvoices.map((invoice) => <tr key={invoice.id} style={{ borderTop: "1px solid var(--line)" }}><td style={{ padding: 9 }}>{invoice.invoice_number || "Draft"}</td><td style={{ padding: 9 }}>{invoice.issue_date}</td><td style={{ padding: 9 }}><span className={"status-pill " + (invoice.status === "draft" ? "" : invoice.payment_status === "paid" ? "paid" : "unpaid")}>{invoice.status === "draft" ? "Draft" : invoice.payment_status === "paid" ? "Paguar" : "E papaguar"}</span></td><td style={{ padding: 9 }}>{invoice.atk_test_status ? <span className={"status-pill " + (invoice.atk_test_status === "accepted" ? "accepted" : invoice.atk_test_status === "rejected" ? "rejected" : invoice.atk_test_status === "queued" || invoice.atk_test_status === "offline_pending" ? "queued" : "")}>{({ queued: "Në radhë", submitted: "Dërguar", accepted: "Pranuar", rejected: "Refuzuar", offline_pending: "Në pritje", draft: "Draft" } as Record<string,string>)[invoice.atk_test_status] || invoice.atk_test_status}</span> : <span style={{ color: "var(--muted)", fontSize: 12 }}>Pa kupon</span>}</td><td style={{ padding: 9, textAlign: "right", fontWeight: 700 }}>{money(Number(invoice.total))}</td><td style={{ padding: 9, textAlign: "right", whiteSpace: "nowrap" }}><Link href={`/app/${organizationId}/invoices/${invoice.id}`} style={{ color: "var(--brand)", fontWeight: 700 }}>Hap <ArrowRight size={14} /></Link>{invoice.status === "issued" && invoice.payment_status === "paid" && invoice.payment_method === "cash" && !invoice.atk_test_status && <><span> · </span><Link href={`/app/${organizationId}/pos/atk-test?invoiceId=${encodeURIComponent(invoice.id)}`} style={{ color: "var(--brand)", fontWeight: 700 }}>Testo kuponin</Link></>}</td></tr>)}{!visibleInvoices.length && <tr><td colSpan={6} style={{ padding: 18, color: "var(--muted)", textAlign: "center" }}>Nuk ka fatura ende. Krijo shitjen e parë nga POS.</td></tr>}</tbody></table></div></section>
+    <p style={{ display: activeView === "pos" ? "block" : "none", color: "var(--muted)", fontSize: 11, lineHeight: 1.5, marginTop: 14 }}>Shitjet regjistrohen në arkë. Pas pagesës së plotë, Fiskalo tenton dërgimin automatik në ATK TEST. Pagesat me kartelë nuk procesohen nga aplikacioni.</p>
+    <section style={{ display: activeView === "invoices" ? "block" : "none", ...panel }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 }}><div><h2 style={{ margin: 0, fontSize: 20 }}>Faturat</h2><p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: 12 }}>Shitjet e regjistruara së fundmi</p></div><button onClick={() => setActiveView("pos")} style={button}><Plus size={16} /> Shitje e re</button></div><div style={{ display: "flex", gap: 8, marginBottom: 12 }}><div style={{ position: "relative", flex: 1, maxWidth: 360 }}><Search size={16} style={{ position: "absolute", left: 12, top: 13, color: "var(--muted)" }} /><input className="invoice-search" aria-label="Kërko faturë" value={invoiceSearch} onChange={(e) => setInvoiceSearch(e.target.value)} placeholder="Kërko sipas numrit ose statusit..." style={{ ...field, paddingLeft: 36 }} /></div></div><div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}><thead><tr><th style={{ textAlign: "left", padding: 9 }}>Numri</th><th style={{ textAlign: "left", padding: 9 }}>Data</th><th style={{ textAlign: "left", padding: 9 }}>Statusi</th><th style={{ textAlign: "left", padding: 9 }}>Fiskalizimi ATK</th><th style={{ textAlign: "right", padding: 9 }}>Totali</th><th style={{ textAlign: "right", padding: 9 }}> </th></tr></thead><tbody>{visibleInvoices.map((invoice) => <tr key={invoice.id} style={{ borderTop: "1px solid var(--line)" }}><td style={{ padding: 9 }}>{invoice.invoice_number || "Draft"}</td><td style={{ padding: 9 }}>{invoice.issue_date}</td><td style={{ padding: 9 }}><span className={"status-pill " + (invoice.status === "draft" ? "" : invoice.payment_status === "paid" ? "paid" : "unpaid")}>{invoice.status === "draft" ? "Draft" : invoice.payment_status === "paid" ? "Paguar" : "E papaguar"}</span></td><td style={{ padding: 9 }}>{invoice.atk_test_status ? <span className={"status-pill " + (invoice.atk_test_status === "accepted" ? "accepted" : invoice.atk_test_status === "rejected" ? "rejected" : invoice.atk_test_status === "queued" || invoice.atk_test_status === "offline_pending" ? "queued" : "")}>{({ queued: "Në radhë", submitted: "Dërguar", accepted: "Pranuar", rejected: "Refuzuar", offline_pending: "Në pritje", draft: "Draft" } as Record<string,string>)[invoice.atk_test_status] || invoice.atk_test_status}</span> : <span style={{ color: "var(--muted)", fontSize: 12 }}>Pa kupon</span>}</td><td style={{ padding: 9, textAlign: "right", fontWeight: 700 }}>{money(Number(invoice.total))}</td><td style={{ padding: 9, textAlign: "right", whiteSpace: "nowrap" }}><Link href={`/app/${organizationId}/invoices/${invoice.id}`} style={{ color: "var(--brand)", fontWeight: 700 }}>Hap <ArrowRight size={14} /></Link>{invoice.status === "issued" && invoice.payment_status === "paid" && invoice.payment_method === "cash" && !invoice.atk_test_status && <><span> · </span><Link href={`/app/${organizationId}/pos/atk-test?invoiceId=${encodeURIComponent(invoice.id)}`} style={{ color: "var(--brand)", fontWeight: 700 }}></Link></>}</td></tr>)}{!visibleInvoices.length && <tr><td colSpan={6} style={{ padding: 18, color: "var(--muted)", textAlign: "center" }}>Nuk ka fatura ende. Krijo shitjen e parë nga POS.</td></tr>}</tbody></table></div></section>
     <style jsx>{`.pos-layout { grid-template-columns: minmax(0,1.55fr) minmax(310px,0.85fr); } @media (max-width: 760px) { .pos-layout { grid-template-columns: minmax(0,1fr) !important; } .pos-layout aside { position: static !important; } }`}</style>
   </main>;
 }
