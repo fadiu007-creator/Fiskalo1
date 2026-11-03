@@ -36,6 +36,8 @@ export default function CashierShiftsPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [permissionChecked, setPermissionChecked] = useState(false);
+  const [canUseShift, setCanUseShift] = useState(false);
 
   const load = useCallback(async () => {
     const { data: auth } = await supabase.auth.getUser();
@@ -50,6 +52,10 @@ export default function CashierShiftsPage() {
       setError("Nuk u verifikua anëtarësia në këtë biznes.");
       return;
     }
+    const allowed = ["owner", "administrator", "manager", "cashier"].includes(membership.role);
+    setCanUseShift(allowed);
+    setPermissionChecked(true);
+    if (!allowed) return;
     const historyQuery = supabase.from("fiskalo_cashier_shifts").select("*")
       .eq("organization_id", organizationId)
       .order("opened_at", { ascending: false })
@@ -114,6 +120,9 @@ export default function CashierShiftsPage() {
     }
     setBusy(false);
   }
+
+  if (!permissionChecked) return <main style={{ maxWidth: 1050, margin: "0 auto", padding: 24 }}>Po kontrollohet qasja…</main>;
+  if (!canUseShift) return <main style={{ maxWidth: 650, margin: "40px auto", padding: 24 }}><h1>Qasje e kufizuar</h1><p style={{ color: "var(--muted)" }}>Ndërrimet e arkës përdoren nga pronari, administratori, menaxheri ose arkëtari.</p><Link href={"/app/" + organizationId} style={{ color: "var(--brand)", fontWeight: 750 }}>Kthehu te paneli</Link></main>;
 
   return <main style={{ maxWidth: 1050, margin: "0 auto", padding: "22px 16px 50px" }}>
     <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
