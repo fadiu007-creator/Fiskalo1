@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -14,6 +14,7 @@ const field: React.CSSProperties = { width: "100%", minWidth: 0, border: "1px so
 const button: React.CSSProperties = { border: 0, borderRadius: 9, padding: "12px 15px", background: "var(--brand)", color: "white", fontWeight: 750, cursor: "pointer" };
 const secondary: React.CSSProperties = { border: "1px solid var(--line)", borderRadius: 9, padding: "10px 12px", background: "white", color: "var(--ink)", fontWeight: 650, cursor: "pointer" };
 const money = (n: number) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR" }).format(n);
+const roundMoney = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 export default function WebPosPage() {
   const params = useParams<{ organizationId: string }>();
@@ -26,6 +27,8 @@ export default function WebPosPage() {
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [confirmedPayment, setConfirmedPayment] = useState(false);
   const [search, setSearch] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [cashReceived, setCashReceived] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -54,13 +57,15 @@ export default function WebPosPage() {
   const lines = cart.map((line) => {
     const product = products.find((item) => item.id === line.productId);
     const quantity = Number(line.quantity);
-    return { ...line, product, quantity, lineTotal: product && Number.isFinite(quantity) ? product.unit_price * quantity : 0 };
+    const lineSubtotal = product && Number.isFinite(quantity) ? roundMoney(Number(product.unit_price) * quantity) : 0;
+    const lineVat = product && Number.isFinite(quantity) ? roundMoney(Number(product.unit_price) * quantity * Number(product.vat_rate) / 100) : 0;
+    return { ...line, product, quantity, lineSubtotal, lineVat, lineTotal: lineSubtotal + lineVat };
   }).filter((line) => line.product);
-  const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
-  const total = lines.reduce((sum, line) => {
-    const base = line.lineTotal;
-    return sum + base + base * Number(line.product!.vat_rate) / 100;
-  }, 0);
+  const subtotal = roundMoney(lines.reduce((sum, line) => sum + line.lineSubtotal, 0));
+  const vatTotal = roundMoney(lines.reduce((sum, line) => sum + line.lineVat, 0));
+  const total = roundMoney(subtotal + vatTotal);
+  const cashReceivedAmount = cashReceived.trim() === "" ? 0 : Number(cashReceived);
+  const cashChange = paymentMethod === "cash" && Number.isFinite(cashReceivedAmount) ? roundMoney(Math.max(0, cashReceivedAmount - total)) : 0;
 
   function addProduct(product: Product) {
     setCart((current) => {
@@ -75,11 +80,30 @@ export default function WebPosPage() {
     setCart((current) => current.map((line) => line.productId === productId ? { ...line, quantity } : line));
   }
 
+  function handleProductSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    const code = search.trim().toLocaleLowerCase();
+    if (!code) return;
+    const exact = products.find((product) => product.is_active && (product.sku ?? "").trim().toLocaleLowerCase() === code);
+    if (!exact) {
+      setError("Nuk u gjet produkt me këtë barkod ose SKU. Kontrollo kodin ose kërko produktin me emër.");
+      return;
+    }
+    addProduct(exact);
+    setSearch("");
+    requestAnimationFrame(() => searchRef.current?.focus());
+  }
+
   async function completeSale() {
     setError(""); setNotice(""); setIssuedInvoiceId(""); setIssuedNumber("");
     const valid = lines.filter((line) => Number.isFinite(line.quantity) && line.quantity > 0);
     if (!valid.length || valid.length !== lines.length) { setError("Shto artikuj dhe kontrollo sasitë."); return; }
     if (paymentMethod !== "credit" && !confirmedPayment) { setError("Konfirmo që pagesa është pranuar para se ta regjistrosh si të paguar."); return; }
+    if (paymentMethod === "cash" && (!Number.isFinite(cashReceivedAmount) || cashReceivedAmount + 0.0001 < total)) {
+      setError("Shuma e pranuar në para duhet të jetë së paku sa totali i shitjes.");
+      return;
+    }
     for (const line of valid) {
       if (line.product!.track_stock && line.quantity > Number(line.product!.stock_quantity)) {
         setError("Stoku i pamjaftueshëm për: " + line.product!.name + ". Ndrysho sasinë ose rifresko produktet.");
@@ -161,6 +185,7 @@ export default function WebPosPage() {
     setCart([]);
     setCustomerId("");
     setPaymentMethod("cash");
+    setCashReceived("");
     setConfirmedPayment(false);
     await load();
   }
@@ -180,7 +205,7 @@ export default function WebPosPage() {
     </div>}
     <div className="pos-layout" style={{ display: "grid", gridTemplateColumns: "minmax(0,1.55fr) minmax(310px,0.85fr)", gap: 14, alignItems: "start" }}>
       <section style={panel}>
-        <input aria-label="Kërko produkt" placeholder="Kërko sipas emrit ose SKU..." value={search} onChange={(event) => setSearch(event.target.value)} style={{ ...field, marginBottom: 12 }} />
+        <input ref={searchRef} aria-label="Kërko produkt ose skano barkod" placeholder="Kërko produkt ose skano barkod / SKU dhe shtyp Enter..." value={search} onChange={(event) => { setSearch(event.target.value); setError(""); }} onKeyDown={handleProductSearchKeyDown} style={{ ...field, marginBottom: 12 }} />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(145px,1fr))", gap: 9 }}>
           {visibleProducts.map((product) => <button key={product.id} onClick={() => addProduct(product)} style={{ ...secondary, textAlign: "left", minHeight: 100, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 8 }}>
             <span style={{ fontWeight: 700 }}>{product.name}</span><span style={{ color: "var(--brand)", fontSize: 17, fontWeight: 800 }}>{money(Number(product.unit_price))}</span>
@@ -202,26 +227,31 @@ export default function WebPosPage() {
           {!lines.length && <p style={{ color: "var(--muted)", textAlign: "center", padding: 18 }}>Zgjidh produktet për të filluar shitjen.</p>}
         </div>
         <div style={{ borderTop: "1px solid var(--line)", marginTop: 12, paddingTop: 12, display: "grid", gap: 8 }}>
-          <div style={{ display: "flex", justifyContent: "space-between" }}><span>Nëntotali pa TVSH (orientues)</span><strong>{money(subtotal)}</strong></div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}><span>Nëntotali pa TVSH</span><strong>{money(subtotal)}</strong></div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}><span>TVSH</span><strong>{money(vatTotal)}</strong></div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 20 }}><strong>Totali</strong><strong>{money(total)}</strong></div>
           <label style={{ display: "grid", gap: 5, fontSize: 12, fontWeight: 650 }}>Klienti
             <select value={customerId} onChange={(event) => setCustomerId(event.target.value)} style={field}><option value="">Klient pa emër</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}{customer.phone ? " · " + customer.phone : ""}</option>)}</select>
           </label>
           <label style={{ display: "grid", gap: 5, fontSize: 12, fontWeight: 650 }}>Mënyra e pagesës
-            <select value={paymentMethod} onChange={(event) => { setPaymentMethod(event.target.value); setConfirmedPayment(false); }} style={field}>
+            <select value={paymentMethod} onChange={(event) => { setPaymentMethod(event.target.value); setConfirmedPayment(false); setCashReceived(""); }} style={field}>
               <option value="cash">Para në dorë</option><option value="card">Kartelë (e pranuar manualisht)</option><option value="bank_transfer">Transfer bankar (i konfirmuar)</option><option value="credit">Me afat — pa pagesë</option>
             </select>
           </label>
+          {paymentMethod === "cash" && <label style={{ display: "grid", gap: 5, fontSize: 12, fontWeight: 650 }}>Para të pranuara (€)
+            <input type="number" min={total} step="0.01" inputMode="decimal" value={cashReceived} onChange={(event) => setCashReceived(event.target.value)} placeholder={total.toFixed(2)} style={field} />
+            <span style={{ display: "flex", justifyContent: "space-between", color: "var(--muted)", fontWeight: 500 }}><span>Kusuri</span><strong style={{ color: "var(--ink)" }}>{money(cashChange)}</strong></span>
+          </label>}
           {paymentMethod !== "credit" && <label style={{ display: "flex", alignItems: "start", gap: 8, fontSize: 12, lineHeight: 1.4 }}>
             <input type="checkbox" checked={confirmedPayment} onChange={(event) => setConfirmedPayment(event.target.checked)} style={{ marginTop: 2 }} />
             Konfirmoj se pagesa është pranuar. Fiskalo nuk proceson pagesa me kartelë.
           </label>}
           <button disabled={busy || !lines.length} onClick={() => void completeSale()} style={{ ...button, width: "100%", opacity: busy || !lines.length ? 0.55 : 1 }}>{busy ? "Duke regjistruar..." : paymentMethod === "credit" ? "Lësho faturën" : "Përfundo shitjen · " + money(total)}</button>
-          <button disabled={busy || !cart.length} onClick={() => { setCart([]); setConfirmedPayment(false); }} style={{ ...secondary, width: "100%" }}>Pastro shportën</button>
+          <button disabled={busy || !cart.length} onClick={() => { setCart([]); setConfirmedPayment(false); setCashReceived(""); }} style={{ ...secondary, width: "100%" }}>Pastro shportën</button>
         </div>
       </aside>
     </div>
-    <p style={{ color: "var(--muted)", fontSize: 11, lineHeight: 1.5, marginTop: 14 }}>Ky POS krijon dhe lëshon faturë të brendshme në Fiskalo. Nuk është ende POS fiskal i certifikuar nga ATK dhe nuk dërgon kupon fiskal. Pagesat me kartelë nuk procesohen nga aplikacioni.</p>
+    <p style={{ color: "var(--muted)", fontSize: 11, lineHeight: 1.5, marginTop: 14 }}>Ky POS krijon fatura të brendshme në Fiskalo. Nuk është ende POS fiskal i certifikuar nga ATK dhe nuk dërgon kupon fiskal. Barkodet skanohen përmes lexuesit që shkruan SKU-në në fushën e kërkimit. Pagesat me kartelë nuk procesohen nga aplikacioni.</p>
     <style jsx>{`.pos-layout { grid-template-columns: minmax(0,1.55fr) minmax(310px,0.85fr); } @media (max-width: 760px) { .pos-layout { grid-template-columns: minmax(0,1fr) !important; } .pos-layout aside { position: static !important; } }`}</style>
   </main>;
 }
