@@ -1,5 +1,20 @@
 import { authorizeAtkOrganization, getAtkRequestContext, positiveInteger } from "@/lib/atk/server-auth";
 
+function readableProviderMessage(value: unknown, fallback: string): string {
+  if (typeof value === "string" && value.trim()) return value.slice(0, 800);
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    for (const key of ["message", "detail", "error", "description", "title"]) {
+      if (record[key] !== undefined) {
+        const message = readableProviderMessage(record[key], "");
+        if (message) return message;
+      }
+    }
+    try { return JSON.stringify(value).slice(0, 800); } catch { return fallback; }
+  }
+  return fallback;
+}
+
 export async function POST(request: Request) {
   let body: Record<string, unknown>;
   try { body = await request.json() as Record<string, unknown>; }
@@ -32,7 +47,7 @@ export async function POST(request: Request) {
     let result: Record<string, unknown> = {};
     try { result = JSON.parse(text) as Record<string, unknown>; } catch { /* handled below */ }
     if (!response.ok) {
-      const detail = String(result.message ?? result.error ?? result.detail ?? "ATK test verification was rejected.").slice(0, 800);
+      const detail = readableProviderMessage(result, readableProviderMessage(text, "ATK test verification was rejected."));
       return Response.json({ error: "atk_verification_rejected", detail, atkStatus: response.status }, { status: 502, headers: { "Cache-Control": "no-store" } });
     }
     const businessName = typeof result.business_name === "string" ? result.business_name : "";
