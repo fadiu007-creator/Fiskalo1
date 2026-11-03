@@ -49,11 +49,12 @@ export default function WebPosPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    const { data: currentAuth } = await supabase.auth.getUser();
     const [productResult, customerResult, invoiceResult, membershipResult] = await Promise.all([
       supabase.from("fiskalo_products").select("id,name,sku,pos_category,image_url,unit_price,vat_rate,stock_quantity,track_stock,item_type,is_active").eq("organization_id", organizationId).eq("is_active", true).order("name"),
       supabase.from("fiskalo_customers").select("id,name,phone").eq("organization_id", organizationId).order("name"),
       supabase.from("fiskalo_invoices").select("id,invoice_number,issue_date,status,payment_status,payment_method,total,customer_id").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
-      supabase.from("fiskalo_organization_users").select("role").eq("organization_id", organizationId).maybeSingle(),
+      supabase.from("fiskalo_organization_users").select("role").eq("organization_id", organizationId).eq("user_id", currentAuth.user?.id ?? "").maybeSingle(),
     ]);
     if (productResult.error || customerResult.error || invoiceResult.error) setError("Nuk u ngarkuan të gjitha të dhënat. Rifresko faqen ose kontrollo qasjen në biznes.");
     setUserRole(membershipResult.data?.role ?? "");
