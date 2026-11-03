@@ -44,6 +44,9 @@ export default function App() {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "bank_transfer" | "credit">("cash");
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+  const [activeShift, setActiveShift] = useState<{ id: string; opening_cash: number; opened_at: string } | null>(null);
+  const [openingCash, setOpeningCash] = useState("0");
+  const [countedCash, setCountedCash] = useState("");
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -85,6 +88,7 @@ export default function App() {
   }
 
   async function selectOrganization(org: Org) {
+    if (org.role === "accountant") { setError("Roli Kontabilist mund t’i kontrollojë faturat, por nuk mund të përdorë arkën e shitjeve."); return; }
     setBusy(true); setError(""); setMessage("");
     const { data: p, error: pError } = await supabase.from("fiskalo_products")
       .select("id,name,sku,unit_price,vat_rate,stock_quantity,track_stock,item_type,is_active,atk_unit_code,atk_tax_code,atk_item_category_code")
@@ -99,6 +103,13 @@ export default function App() {
     }
     setBusy(false);
     if (pError || cError) { setError(pError?.message ?? cError?.message ?? "Nuk u ngarkuan të dhënat."); return; }
+    const { data: authForShift } = await supabase.auth.getUser();
+    const { data: openShift, error: shiftError } = authForShift.user
+      ? await supabase.from("fiskalo_cashier_shifts").select("id,opening_cash,opened_at").eq("organization_id", org.organization_id).eq("opened_by", authForShift.user.id).eq("status", "open").maybeSingle()
+      : { data: null, error: null };
+    if (shiftError) { setBusy(false); setError("Ndërrimi i arkës nuk u lexua: " + shiftError.message); return; }
+    setActiveShift(openShift as { id: string; opening_cash: number; opened_at: string } | null);
+    setOpeningCash("0"); setCountedCash("");
     setOrganizationId(org.organization_id);
     setOrganizationName(org.fiskalo_organizations?.legal_name ?? "Biznesi");
     setOrganizationNui(org.fiskalo_organizations?.nui ?? "");
@@ -106,6 +117,37 @@ export default function App() {
     setAtkCsr(""); setAtkFingerprint(""); setAtkHardwareBacked(null);
     setProducts((p ?? []) as Product[]);
     setCustomers((c ?? []) as Customer[]);
+  }
+
+  async function openCashierShift() {
+    const amount = Number(openingCash.replace(",", "."));
+    if (!Number.isFinite(amount) || amount < 0) { setError("Shkruaj shumën fillestare të arkës."); return; }
+    setBusy(true); setError(""); setMessage("");
+    const { error: openError } = await supabase.rpc("fiskalo_open_cashier_shift", { target_org: organizationId, opening_amount: amount });
+    if (openError) { setBusy(false); setError(openError.message); return; }
+    const { data: auth } = await supabase.auth.getUser();
+    const { data, error: readError } = auth.user
+      ? await supabase.from("fiskalo_cashier_shifts").select("id,opening_cash,opened_at").eq("organization_id", organizationId).eq("opened_by", auth.user.id).eq("status", "open").maybeSingle()
+      : { data: null, error: new Error("Sesioni ka skaduar.") };
+    setBusy(false);
+    if (readError || !data) { setError(readError?.message ?? "Ndërrimi u hap, por nuk u lexua."); return; }
+    setActiveShift(data as { id: string; opening_cash: number; opened_at: string });
+    setMessage("Ndërrimi i arkës u hap.");
+  }
+
+  async function closeCashierShift() {
+    if (!activeShift) return;
+    const amount = Number(countedCash.replace(",", "."));
+    if (!Number.isFinite(amount) || amount < 0) { setError("Shkruaj shumën e numëruar në fund të ndërrimit."); return; }
+    setBusy(true); setError(""); setMessage("");
+    const { data, error: closeError } = await supabase.rpc("fiskalo_close_cashier_shift", {
+      target_shift: activeShift.id, counted_amount: amount, closing_note: null,
+    });
+    setBusy(false);
+    if (closeError) { setError(closeError.message); return; }
+    const result = Array.isArray(data) ? data[0] : data;
+    setActiveShift(null); setCountedCash("");
+    setMessage("Ndërrimi u mbyll. Gjendja e pritur: " + money(Number(result?.expected ?? 0)) + "; diferenca: " + money(Number(result?.difference ?? 0)) + ".");
   }
 
   function add(product: Product) {
@@ -119,6 +161,7 @@ export default function App() {
 
   async function checkout() {
     setError(""); setMessage("");
+    if (paymentMethod === "cash" && !activeShift) { setError("Hap ndërrimin e arkës para se të pranosh pagesë me para në dorë."); return; }
     if (!cart.length) { setError("Shporta është bosh."); return; }
     if (paymentMethod !== "credit" && !paymentConfirmed) { setError("Konfirmo se pagesa është pranuar."); return; }
     if (paymentMethod !== "credit") {
@@ -487,6 +530,18 @@ export default function App() {
           </>}
           <Text style={{ color: "#8a5a18", fontSize: 11 }}>Mos e dërgo çelësin privat askund. Android-i dërgon automatikisht kuponin TEST pas pagesës së plotë kur POS-i dhe certifikata janë gati. Ky version nuk përbën certifikim zyrtar për prodhim; konfirmo me ATK pranueshmërinë e pajisjes para përdorimit zyrtar.</Text>
         </View>}
+        {paymentMethod === "cash" && <View style={{ padding: 11, marginBottom: 8, backgroundColor: "white", borderWidth: 1, borderColor: line, borderRadius: 9, gap: 7 }}>
+          {activeShift ? <>
+            <Text style={{ color: "#145b3a", fontWeight: "800" }}>Ndërrimi i arkës është i hapur</Text>
+            <Text style={{ color: "#687773", fontSize: 11 }}>Hapur: {new Date(activeShift.opened_at).toLocaleString("sq-XK")} · Fillimi: {money(Number(activeShift.opening_cash))}</Text>
+            <TextInput placeholder="Paratë e numëruara në fund (€)" keyboardType="decimal-pad" value={countedCash} onChangeText={setCountedCash} style={inputStyle} />
+            <Action label={busy ? "Duke mbyllur..." : "Mbyll ndërrimin"} secondary disabled={busy || !countedCash.trim()} onPress={() => void closeCashierShift()} />
+          </> : <>
+            <Text style={{ color: ink, fontWeight: "800" }}>Hap ndërrimin para pagesave cash</Text>
+            <TextInput placeholder="Paratë fillestare në arkë (€)" keyboardType="decimal-pad" value={openingCash} onChangeText={setOpeningCash} style={inputStyle} />
+            <Action label={busy ? "Duke hapur..." : "Hap ndërrimin"} disabled={busy} onPress={() => void openCashierShift()} />
+          </>}
+        </View>}
         <TextInput placeholder="Kërko produkt / SKU" value={search} onChangeText={setSearch} style={inputStyle} />
       </View>
       <View style={{ flex: 1 }}>
@@ -532,8 +587,8 @@ export default function App() {
         {paymentMethod !== "credit" && <TouchableOpacity onPress={() => setPaymentConfirmed((value) => !value)} style={{ flexDirection: "row", alignItems: "center", paddingVertical: 8 }}>
           <Text style={{ color: ink }}>{paymentConfirmed ? "☑" : "□"} Konfirmoj se pagesa është pranuar</Text>
         </TouchableOpacity>}
-        <Action label={busy ? "Duke regjistruar..." : paymentMethod === "credit" ? "Lësho faturën" : "Përfundo shitjen"} disabled={busy || !cart.length} onPress={() => void checkout()} />
-        <Action label="Ndërro biznesin" secondary onPress={() => { setOrganizationId(""); setCart([]); }} />
+        <Action label={busy ? "Duke regjistruar..." : paymentMethod === "credit" ? "Lësho faturën" : "Përfundo shitjen"} disabled={busy || !cart.length || (paymentMethod === "cash" && !activeShift)} onPress={() => void checkout()} />
+        <Action label="Ndërro biznesin" secondary onPress={() => { setOrganizationId(""); setActiveShift(null); setCart([]); }} />
         <Action label="Dil nga llogaria" secondary onPress={() => void signOut()} />
       </View>
     </View>}
