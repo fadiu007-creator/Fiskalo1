@@ -70,7 +70,15 @@ export default function AtkTestPosPage() {
       if (lineError) { setError("Nuk u lexuan artikujt e faturës."); return; }
       const rows = (data || []) as Line[];
       setLines(rows);
-      setMappings(Object.fromEntries(rows.map((line) => [line.id, { unit: "", tax: "", itemType: "" }])));
+      const productIds = Array.from(new Set(rows.map((line) => line.product_id).filter((id): id is string => Boolean(id))));
+      const productResult = productIds.length
+        ? await supabase.from("fiskalo_products").select("id,atk_unit_code,atk_tax_code,atk_item_category_code").eq("organization_id", organizationId).in("id", productIds)
+        : { data: [], error: null };
+      const saved = new Map((productResult.data || []).map((product) => [product.id, product]));
+      setMappings(Object.fromEntries(rows.map((line) => {
+        const product = line.product_id ? saved.get(line.product_id) : null;
+        return [line.id, { unit: product?.atk_unit_code || "", tax: product?.atk_tax_code || "", itemType: product?.atk_item_category_code || "" }];
+      })));
     })();
     return () => { cancelled = true; };
   }, [invoiceId, supabase]);
@@ -93,6 +101,15 @@ export default function AtkTestPosPage() {
           throw new Error("Plotëso për çdo artikull kodin e njësisë, kodin e TVSH-së (një shkronjë sipas katalogut ATK) dhe kodin e kategorisë së artikullit.");
         }
       }
+      const mappingWrites = lines.filter((line) => line.product_id).map((line) => {
+        const m = mappings[line.id];
+        return supabase.from("fiskalo_products").update({
+          atk_unit_code: m.unit.trim(), atk_tax_code: m.tax.trim(), atk_item_category_code: m.itemType.trim(),
+        }).eq("organization_id", organizationId).eq("id", line.product_id!);
+      });
+      const mappingResults = await Promise.all(mappingWrites);
+      const failedMapping = mappingResults.find((write) => write.error);
+      if (failedMapping?.error) throw new Error("Kodet u lexuan, por nuk u ruajtën te produktet: " + failedMapping.error.message);
       const keyId = organizationId + ":" + selectedPos.id;
       if (!await hasBrowserPosCertificate(keyId)) throw new Error("Nuk u gjet certifikata TEST për këtë POS në këtë shfletues. Hape lidhjen Regjistro / certifiko POS më sipër dhe përfundo të tre hapat në këtë profil të shfletuesit.");
       const { data: auth } = await supabase.auth.getUser();
@@ -172,7 +189,7 @@ export default function AtkTestPosPage() {
     </section>
     {selectedInvoice && <section style={{ ...panel, marginTop: 12 }}>
       <strong>3. Kodet e katalogut ATK për artikujt</strong>
-      <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>Këto kode nuk hamendësohen nga përqindja e TVSH-së. Vendosi sipas katalogut zyrtar ATK për njësinë matëse, kodin e tatimit dhe llojin e artikullit.</p>
+      <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>Këto kode nuk hamendësohen nga përqindja e TVSH-së. Vendosi sipas katalogut zyrtar ATK. Për produktet e ruajtura, kodet ruhen në kartelën e produktit dhe plotësohen automatikisht në testet e ardhshme.</p>
       <div style={{ display: "grid", gap: 12 }}>{lines.map((line) => <div key={line.id} style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
         <strong>{line.description}</strong><small style={{ display: "block", color: "var(--muted)" }}>{line.quantity} × {Number(line.unit_price).toFixed(2)} € · Neto {Number(line.line_subtotal).toFixed(2)} € · TVSH {Number(line.line_vat).toFixed(2)} €</small>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8, marginTop: 8 }}>
