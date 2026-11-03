@@ -38,7 +38,6 @@ export default async function BusinessDashboard({ params }: Props) {
         <div style={{ display: "flex", alignItems: "center", gap: 12, color: "var(--muted)", fontSize: 13 }}>
           <span>{auth.user.email}</span>
           <span style={{ background: "#eaf5ef", color: "var(--brand-dark)", padding: "7px 11px", borderRadius: 999, fontWeight: 750 }}>{membership.role}</span>
-          <form action="/auth/signout" method="post"><button type="submit" style={{ border: "1px solid var(--line)", background: "white", borderRadius: 9, padding: "8px 11px", cursor: "pointer" }}>Dil</button></form>
         </div>
       </header>
       <div style={{ marginBottom: 26 }}>
