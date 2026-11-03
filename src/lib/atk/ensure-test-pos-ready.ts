@@ -48,19 +48,37 @@ async function runEnsureATKTestPosReady(
   }
   if (!/^\d{9}$/.test(String(org.nui))) throw new Error("NUI i biznesit duhet të ketë 9 shifra.");
 
-  const pos = [...positions].sort((a, b) => Number(a.atk_branch_id) - Number(b.atk_branch_id) || Number(a.pos_id) - Number(b.pos_id))[0];
-  const keyId = organizationId + ":" + pos.id;
-  const { data: saved, error: savedError } = await supabase.from("fiskalo_atk_pos_verifications")
-    .select("business_name,verification_code,nui,atk_branch_id,pos_id,application_id")
-    .eq("organization_id", organizationId).eq("pos_installation_id", pos.id).maybeSingle();
-  if (savedError) throw new Error("Verifikimi i ruajtur i POS-it nuk u lexua: " + savedError.message);
-
-  let businessName = "";
-  let verificationCode = "";
   const applicationStorageKey = "fiskalo-atk-application-id:" + organizationId;
   const savedApplicationId = window.localStorage.getItem(applicationStorageKey);
   // 929645146946 was an old placeholder, not the application ID supplied for this ATK TEST account.
-  let applicationId = Number(savedApplicationId && savedApplicationId !== "929645146946" ? savedApplicationId : "457818860373");
+  const applicationId = Number(savedApplicationId && savedApplicationId !== "929645146946" ? savedApplicationId : "457818860373");
+  const orderedPositions = [...positions].sort((a, b) =>
+    Number(a.atk_branch_id) - Number(b.atk_branch_id) || Number(a.pos_id) - Number(b.pos_id)
+  );
+  const { data: savedVerifications, error: savedError } = await supabase.from("fiskalo_atk_pos_verifications")
+    .select("pos_installation_id,business_name,verification_code,nui,atk_branch_id,pos_id,application_id")
+    .eq("organization_id", organizationId)
+    .in("pos_installation_id", orderedPositions.map((candidate) => candidate.id));
+  if (savedError) throw new Error("Verifikimet e ruajtura të POS-it nuk u lexuan: " + savedError.message);
+  const verificationByPos = new Map((savedVerifications ?? []).map((row) => [row.pos_installation_id, row]));
+  const validVerifiedPositions = orderedPositions.filter((candidate) => {
+    const row = verificationByPos.get(candidate.id);
+    return Boolean(row && row.nui === String(org.nui) &&
+      Number(row.atk_branch_id) === Number(candidate.atk_branch_id) &&
+      Number(row.pos_id) === Number(candidate.pos_id) &&
+      Number(row.application_id) === applicationId && row.verification_code);
+  });
+  const certificateChecks = await Promise.all(validVerifiedPositions.map(async (candidate) => ({
+    candidate,
+    hasCertificate: await hasBrowserPosCertificate(organizationId + ":" + candidate.id).catch(() => false),
+  })));
+  const pos = certificateChecks.find((entry) => entry.hasCertificate)?.candidate ??
+    validVerifiedPositions[0] ?? orderedPositions[0];
+  const keyId = organizationId + ":" + pos.id;
+  const saved = verificationByPos.get(pos.id) ?? null;
+
+  let businessName = "";
+  let verificationCode = "";
   if (saved && saved.nui === String(org.nui) &&
       Number(saved.atk_branch_id) === Number(pos.atk_branch_id) &&
       Number(saved.pos_id) === Number(pos.pos_id) &&
