@@ -64,7 +64,7 @@ export async function submitPaidInvoiceToATK(
       .eq("invoice_id", invoiceId),
     supabase.from("fiskalo_invoice_payments").select("amount,payment_method").eq("invoice_id", invoiceId).order("created_at"),
   ]);
-  if (orgError || !org || !/^\\d{9}$/.test(String(org.nui))) throw new Error("NUI i biznesit mungon ose nuk është valid.");
+  if (orgError || !org || !new RegExp("^[0-9]{9}$").test(String(org.nui))) throw new Error("NUI i biznesit mungon ose nuk është valid.");
   if (posError || !positions?.length) throw new Error("Nuk ka POS TEST aktiv. Përfundo konfigurimin dhe certifikimin një herë.");
   if (linesError || !lines?.length) throw new Error("Fatura nuk ka artikuj të lexueshëm.");
   if (paymentsError || !paymentRows?.length) throw new Error("Nuk u lexua evidenca e pagesave të faturës.");
