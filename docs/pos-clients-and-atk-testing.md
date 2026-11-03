@@ -86,3 +86,12 @@ References: [ATK Administrative Instruction 01/2026, Article 34](https://apps.at
 - Android native module exposes Android Keystore P-256 CSR generation, P1363 ECDSA signing and X.509 certificate public-key matching.
 - Android app has ATK TEST fiscalization number/Application ID fields, server-proxied Verify and Sign CSR actions, and local certificate-match validation.
 - Android CI now runs native compilation and attempts to assemble a debug APK, then upload the APK as an Actions artifact. Latest run must complete successfully before claiming an installable APK exists.
+
+
+## Web POS ATK Protobuf milestone — 3 November 2026
+
+- Added `src/lib/atk/protobuf.ts`, a browser-compatible encoder for the official ATK `PosCoupon` Protobuf field layout.
+- The encoder validates required identifiers, coupon type/reference rules, explicit one-character ATK tax codes, payment type codes, and reconciliation of item, payment, tax-group and coupon totals.
+- Monetary representation follows the official integration reference: item unit price is encoded in 1/10,000 EUR units; coupon, line, payment and tax totals are encoded in cents.
+- This is a serialization foundation only. It does not infer ATK tax/unit/item codes, build a coupon from the live invoice database, verify a registered certificate, submit to `/pos/coupon`, persist ATK responses, or provide an offline queue.
+- The next implementation step is a server-authorized, idempotent TEST submission flow that binds the signed payload to an issued invoice and a verified POS installation. Do not send arbitrary browser-supplied Protobuf payloads directly to ATK.
