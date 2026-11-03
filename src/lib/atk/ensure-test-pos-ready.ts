@@ -41,7 +41,6 @@ async function runEnsureATKTestPosReady(
     supabase.from("fiskalo_atk_provider_settings").select("application_id").eq("singleton", true).maybeSingle(),
   ]);
   if (orgError || !org) throw new Error("Nuk u lexuan të dhënat e biznesit.");
-  if (providerSettingsError) throw new Error("Konfigurimi ATK i ofruesit nuk u lexua: " + providerSettingsError.message);
   if (profileError || !profile?.fiscalization_number) {
     return { ready: false, message: "Ruaje numrin e fiskalizimit TEST një herë te konfigurimi i ATK-së." };
   }
@@ -65,6 +64,15 @@ async function runEnsureATKTestPosReady(
     .in("pos_installation_id", orderedPositions.map((candidate) => candidate.id));
   if (savedError) throw new Error("Verifikimet e ruajtura të POS-it nuk u lexuan: " + savedError.message);
   const verificationByPos = new Map((savedVerifications ?? []).map((row) => [row.pos_installation_id, row]));
+  // Cashiers/managers cannot read provider-wide settings. Reuse the exact
+  // Application ID saved with this POS verification instead of failing POS login.
+  if (providerSettingsError || configuredApplicationId <= 0) {
+    const savedForBusiness = orderedPositions
+      .map((candidate) => verificationByPos.get(candidate.id))
+      .find((row) => row && row.nui === String(org.nui) &&
+        Number.isSafeInteger(Number(row.application_id)) && Number(row.application_id) > 0);
+    if (savedForBusiness) applicationId = Number(savedForBusiness.application_id);
+  }
   const validVerifiedPositions = orderedPositions.filter((candidate) => {
     const row = verificationByPos.get(candidate.id);
     return Boolean(row && row.nui === String(org.nui) &&
