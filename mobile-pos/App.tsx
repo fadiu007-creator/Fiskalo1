@@ -230,11 +230,8 @@ export default function App() {
     return value.endsWith("/") ? value.slice(0, -1) : value;
   }
 
-  function createAndroidVerificationNo(): string {
-    const alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    let value = "";
-    for (let i = 0; i < 16; i++) value += alphabet[Math.floor(Math.random() * alphabet.length)];
-    return value;
+  async function createAndroidVerificationNo(): Promise<string> {
+    return FiskaloAtkCrypto.createVerificationNo();
   }
 
   async function submitAndroidPaidInvoiceToATK(invoiceId: string): Promise<string> {
@@ -321,7 +318,7 @@ export default function App() {
       businessId: String(org.nui), couponId, branchId: pos.atk_branch_id,
       location: pos.location || org.municipality || "", operatorId: auth.user.id,
       posId: pos.pos_id, applicationId: Number(verification.application_id),
-      verificationNo: createAndroidVerificationNo(), type: 1, unixTime: Math.floor(Date.now() / 1000),
+      verificationNo: await createAndroidVerificationNo(), type: 1, unixTime: Math.floor(Date.now() / 1000),
       items: itemRows.map(({ line, unit, tax, itemType }) => ({
         name: line.description, unitPriceEuro: Number(line.unit_price), unit, quantity: Number(line.quantity),
         lineTotalCents: Math.round((Number(line.line_subtotal) + Number(line.line_vat)) * 100), taxRate: tax, itemType,
