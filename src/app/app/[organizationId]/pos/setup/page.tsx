@@ -35,12 +35,22 @@ export default function WebPosSetupPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [permissionChecked, setPermissionChecked] = useState(false);
+  const [canManage, setCanManage] = useState(false);
 
   const selected = positions.find((p) => p.id === selectedId);
   const keyId = selected ? organizationId + ":" + selected.id : "";
 
   const load = useCallback(async () => {
     setError("");
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth.user) { setCanManage(false); setPermissionChecked(true); setError("Sesioni ka skaduar. Hyr përsëri."); return; }
+    const { data: membership } = await supabase.from("fiskalo_organization_users")
+      .select("role").eq("organization_id", organizationId).eq("user_id", auth.user.id).maybeSingle();
+    const allowed = Boolean(membership && ["owner", "administrator"].includes(membership.role));
+    setCanManage(allowed);
+    setPermissionChecked(true);
+    if (!allowed) return;
     const [orgRes, profileRes, posRes, providerSettingsRes] = await Promise.all([
       supabase.from("fiskalo_organizations").select("nui,legal_name,municipality").eq("id", organizationId).single(),
       supabase.from("fiskalo_atk_taxpayer_profiles").select("fiscalization_number").eq("organization_id", organizationId).maybeSingle(),
@@ -51,6 +61,7 @@ export default function WebPosSetupPage() {
     else setOrg(orgRes.data as Organization);
     setProfile((profileRes.data as Profile | null) ?? null);
     const configuredApplicationId = providerSettingsRes.data?.application_id;
+    if (providerSettingsRes.error) setError("Konfigurimi i Application ID mund të shihet vetëm nga pronari ose administratori.");
     if (configuredApplicationId) {
       setApplicationId(String(configuredApplicationId));
       window.localStorage.setItem("fiskalo-atk-application-id:" + organizationId, String(configuredApplicationId));
@@ -208,6 +219,9 @@ export default function WebPosSetupPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "Certifikata nuk u instalua."); }
     finally { setBusy(false); }
   }
+
+  if (!permissionChecked) return <main style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>Po kontrollohet qasja…</main>;
+  if (!canManage) return <main style={{ maxWidth: 650, margin: "0 auto", padding: "30px 16px" }}><h1>Qasje e kufizuar</h1><p style={{ color: "var(--muted)", lineHeight: 1.6 }}>Regjistrimi dhe certifikimi i POS-it menaxhohet vetëm nga pronari ose administratori i biznesit. Punëtorët mund ta përdorin POS-in pasi të jetë konfiguruar.</p><Link href={"/app/" + organizationId + "/pos"} style={{ color: "var(--brand)", fontWeight: 750 }}>Kthehu te Web POS</Link></main>;
 
   return <main style={{ maxWidth: 900, margin: "0 auto", padding: "22px 16px 50px" }}>
     <header style={{ marginBottom: 18 }}>
