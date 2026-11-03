@@ -24,7 +24,10 @@ create policy fiskalo_atk_events_insert_test on public.fiskalo_atk_fiscal_events
       select 1 from public.fiskalo_atk_fiscal_documents d
       where d.id = fiscal_document_id
         and d.organization_id = fiskalo_atk_fiscal_events.organization_id
-        and d.environment = 'test'
+        and exists (
+          select 1 from public.fiskalo_atk_pos_installations p
+          where p.id = d.pos_installation_id and p.organization_id = d.organization_id and p.environment = 'test'
+        )
         and public.fiskalo_has_role(d.organization_id, array['owner','administrator']::public.fiskalo_organization_role[])
     )
   );
