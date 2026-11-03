@@ -32,6 +32,13 @@ function apiErrorMessage(value: unknown, fallback: string): string {
   return fallback;
 }
 
+function createCouponVerificationNo(): string {
+  const alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const random = new Uint8Array(16);
+  crypto.getRandomValues(random);
+  return Array.from(random, (byte) => alphabet[byte % alphabet.length]).join("");
+}
+
 export default function AtkTestPosPage() {
   const params = useParams<{ organizationId: string }>();
   const organizationId = params.organizationId;
@@ -144,22 +151,8 @@ export default function AtkTestPosPage() {
       const { data: auth } = await supabase.auth.getUser();
       if (!auth.user) throw new Error("Sesioni ka skaduar. Hyr përsëri.");
 
-      // ATK verification is performed during POS onboarding, not for every sale.
-      // Reuse the verification code saved for this exact POS installation.
-      const verificationStorageKey = "fiskalo-atk-verification:" + organizationId + ":" + selectedPos.id;
-      let verification: { businessName?: string; verificationCode?: string; applicationId?: number; nui?: string; branchId?: number; posId?: number } | null = null;
-      try {
-        const saved = window.localStorage.getItem(verificationStorageKey);
-        verification = saved ? JSON.parse(saved) : null;
-      } catch { verification = null; }
-      if (!verification?.verificationCode ||
-          verification.applicationId !== Number(applicationId) ||
-          verification.nui !== nui ||
-          verification.branchId !== selectedPos.atk_branch_id ||
-          verification.posId !== selectedPos.pos_id) {
-        throw new Error("Ky POS nuk ka kod verifikimi të ruajtur në këtë shfletues, ose identifikuesit nuk përputhen. Hape Regjistro / certifiko POS, zgjidhe këtë POS dhe kryeje një herë verifikimin ATK TEST. Pastaj kthehu këtu; verifikimi nuk do të përsëritet për çdo kupon.");
-      }
-
+      // ATK POS onboarding verification is used for certificate issuance only.
+      // Coupon VerificationNo is a separate, unique per-coupon value (max 16 chars).
       const { data: couponId, error: couponIdError } = await supabase.rpc("fiskalo_next_atk_coupon_id");
       if (couponIdError || !couponId) throw new Error("Nuk u caktua numri unik i kuponit ATK. Apliko migrimin 0024 dhe rifresko faqen.");
 
@@ -185,7 +178,7 @@ export default function AtkTestPosPage() {
         businessId: nui, couponId, branchId: selectedPos.atk_branch_id,
         location: location.trim() || selectedPos.location || municipality,
         operatorId: auth.user.id, posId: selectedPos.pos_id, applicationId: Number(applicationId),
-        verificationNo: String(verification.verificationCode), type: 1,
+        verificationNo: createCouponVerificationNo(), type: 1,
         unixTime: Math.floor(Date.now() / 1000), items,
         payments: [{ type: 1, amountCents: totalCents }],
         totalCents, taxGroups: Array.from(grouped.entries()).map(([taxRate, values]) => ({ taxRate, ...values })),
