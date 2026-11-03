@@ -227,7 +227,7 @@ export default function App() {
   function androidAtkApiBase(): string {
     const value = process.env.EXPO_PUBLIC_FISKALO_API_URL?.trim();
     if (!value) throw new Error("Konfiguro EXPO_PUBLIC_FISKALO_API_URL me adresën reale të Fiskalo Cloudflare Worker.");
-    return value.replace(/\\/$/, "");
+    return value.endsWith("/") ? value.slice(0, -1) : value;
   }
 
   function createAndroidVerificationNo(): string {
@@ -394,8 +394,7 @@ export default function App() {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
       if (!token) throw new Error("Sesioni ka skaduar. Hyr përsëri.");
-      const apiBase = process.env.EXPO_PUBLIC_FISKALO_API_URL?.trim();
-      if (!apiBase) throw new Error("Konfiguro EXPO_PUBLIC_FISKALO_API_URL me adresën reale të Fiskalo Cloudflare Worker.");
+      const apiBase = androidAtkApiBase();
       const posInstallationId = await getAndroidTestPosInstallationId();
       const response = await fetch(apiBase.replace(/\/$/, "") + "/api/atk/test/sign-csr", {
         method: "POST",
