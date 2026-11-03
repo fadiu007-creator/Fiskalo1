@@ -144,8 +144,8 @@ export default function App() {
 
   async function createAndroidAtkCsr() {
     setError(""); setMessage(""); setAtkCsr(""); setAtkFingerprint("");
-    if (!/^\\d{9}$/.test(organizationNui)) { setError("Biznesi nuk ka NUI valid me 9 shifra."); return; }
-    if (!/^\\d{1,20}$/.test(atkBranchId) || !/^\\d{1,20}$/.test(atkPosId)) {
+    if (!/^\d{9}$/.test(organizationNui)) { setError("Biznesi nuk ka NUI valid me 9 shifra."); return; }
+    if (!/^\d{1,20}$/.test(atkBranchId) || !/^\d{1,20}$/.test(atkPosId)) {
       setError("Vendos ID-në e njësisë dhe numrin e POS-it të konfirmuar nga ATK. Mos shpik identifikues.");
       return;
     }
@@ -177,10 +177,28 @@ export default function App() {
     } finally { setAtkBusy(false); }
   }
 
+  async function getAndroidTestPosInstallationId(): Promise<string> {
+    const { data, error: lookupError } = await supabase
+      .from("fiskalo_atk_pos_installations")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("environment", "test")
+      .eq("atk_branch_id", Number(atkBranchId))
+      .eq("pos_id", Number(atkPosId))
+      .limit(2);
+    if (lookupError) throw new Error("Nuk u lexua instalimi TEST i POS-it: " + lookupError.message);
+    if (!data || data.length !== 1) {
+      throw new Error(data && data.length > 1
+        ? "Ka më shumë se një instalim TEST me këto ID. Zgjidh/korrekto instalimin para verifikimit."
+        : "Nuk u gjet instalimi TEST i këtij POS-i në biznes. Regjistroje një herë te konfigurimi ATK në Web POS.");
+    }
+    return data[0].id;
+  }
+
   async function verifyAndroidAtkPos() {
     setError(""); setMessage("");
-    if (!atkFiscalizationNumber.trim() || !/^\\d{9}$/.test(organizationNui) ||
-        !/^\\d{1,20}$/.test(atkBranchId) || !/^\\d{1,20}$/.test(atkPosId) ||
+    if (!atkFiscalizationNumber.trim() || !/^\d{9}$/.test(organizationNui) ||
+        !/^\d{1,20}$/.test(atkBranchId) || !/^\d{1,20}$/.test(atkPosId) ||
         !/^\\d+$/.test(atkApplicationId)) {
       setError("Plotëso numrin e fiskalizimit për TEST, Application ID, NUI, ID e njësisë dhe POS ID sipas emailit/udhëzimeve të ATK-së.");
       return;
@@ -190,12 +208,14 @@ export default function App() {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
       if (!token) throw new Error("Sesioni ka skaduar. Hyr përsëri.");
-      const apiBase = process.env.EXPO_PUBLIC_FISKALO_API_URL || "https://fiskalo.shqiptare.workers.dev";
-      const response = await fetch(apiBase + "/api/atk/test/verify", {
+      const apiBase = process.env.EXPO_PUBLIC_FISKALO_API_URL?.trim();
+      if (!apiBase) throw new Error("Konfiguro EXPO_PUBLIC_FISKALO_API_URL me adresën reale të Fiskalo Cloudflare Worker.");
+      const posInstallationId = await getAndroidTestPosInstallationId();
+      const response = await fetch(apiBase.replace(/\\/$/, "") + "/api/atk/test/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
         body: JSON.stringify({
-          organizationId, nui: organizationNui, fiscalizationNumber: atkFiscalizationNumber.trim(),
+          organizationId, posInstallationId, nui: organizationNui, fiscalizationNumber: atkFiscalizationNumber.trim(),
           branchId: atkBranchId, posId: atkPosId, applicationId: atkApplicationId,
         }),
       });
@@ -224,12 +244,14 @@ export default function App() {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
       if (!token) throw new Error("Sesioni ka skaduar. Hyr përsëri.");
-      const apiBase = process.env.EXPO_PUBLIC_FISKALO_API_URL || "https://fiskalo.shqiptare.workers.dev";
-      const response = await fetch(apiBase + "/api/atk/test/sign-csr", {
+      const apiBase = process.env.EXPO_PUBLIC_FISKALO_API_URL?.trim();
+      if (!apiBase) throw new Error("Konfiguro EXPO_PUBLIC_FISKALO_API_URL me adresën reale të Fiskalo Cloudflare Worker.");
+      const posInstallationId = await getAndroidTestPosInstallationId();
+      const response = await fetch(apiBase.replace(/\\/$/, "") + "/api/atk/test/sign-csr", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
         body: JSON.stringify({
-          organizationId, nui: organizationNui, businessName: verification.businessName,
+          organizationId, posInstallationId, nui: organizationNui, businessName: verification.businessName,
           verificationCode: verification.verificationCode, branchId: atkBranchId,
           posId: atkPosId, applicationId: atkApplicationId, csrPem: csr.csrPem,
         }),
