@@ -194,7 +194,6 @@ export default function WebPosPage() {
       }
     }
 
-    setBusy(false);
     setIssuedInvoiceId(invoice.id);
     setIssuedNumber(String(invoiceNumber ?? ""));
     let fiscalNotice = "";
@@ -211,6 +210,7 @@ export default function WebPosPage() {
     setNotice(paymentMethod === "credit"
       ? "Fatura u lëshua. Pagesa mbeti e papaguar."
       : "Shitja u regjistrua dhe pagesa u shënua si e pranuar." + fiscalNotice);
+    setBusy(false);
     setCart([]);
     setCustomerId("");
     setPaymentMethod("cash");
