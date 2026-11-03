@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
-  createBrowserPosCsr, getBrowserPosCsr, hasBrowserPosCertificate,
+  createBrowserPosCsr, getBrowserPosCsr, deleteBrowserPosKey, hasBrowserPosCertificate,
   hasBrowserPosKey, installBrowserPosCertificate,
 } from "@/lib/atk/browser-key-vault";
 
@@ -133,7 +133,7 @@ export default function WebPosSetupPage() {
       const id = organizationId + ":" + selected.id;
       const existing = await getBrowserPosCsr(id);
       const result = existing ?? await createBrowserPosCsr(id, {
-        businessName: org.legal_name, nui: org.nui,
+        businessName: verification?.businessName || org.legal_name, nui: org.nui,
         branchId: String(selected.atk_branch_id), posId: String(selected.pos_id),
       });
       const blob = new Blob([result.csrPem], { type: "application/pkcs10" });
@@ -144,6 +144,18 @@ export default function WebPosSetupPage() {
       setKeyReady(true);
       setNotice("CSR u krijua dhe u shkarkua. Çelësi privat mbetet në këtë shfletues. Mos i fshi të dhënat e faqes.");
     } catch (e) { setError(e instanceof Error ? e.message : "CSR nuk u krijua."); }
+    finally { setBusy(false); }
+  }
+
+  async function resetLocalKey() {
+    if (!selected || certificateReady) return;
+    if (!window.confirm("Kjo do ta fshijë çelësin dhe CSR-në lokale për këtë POS. Vazhdo vetëm nëse certifikata nuk është lëshuar ende.")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await deleteBrowserPosKey(organizationId + ":" + selected.id);
+      setKeyReady(false);
+      setNotice("Çelësi lokal u fshi. Verifiko POS-in dhe gjenero CSR të ri me emrin që ktheu ATK.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Çelësi lokal nuk u fshi."); }
     finally { setBusy(false); }
   }
 
@@ -212,6 +224,7 @@ export default function WebPosSetupPage() {
         <button disabled={busy || !profile?.fiscalization_number} onClick={() => void verifyPos()} style={secondary}>1. Verifiko POS-in te ATK</button>
         <button disabled={busy || !verification} onClick={() => void generateCsr()} style={secondary}>2. Gjenero CSR / çelës lokal</button>
         <button disabled={busy || !verification || !keyReady} onClick={() => void requestCertificate()} style={primary}>3. Kërko dhe instalo certifikatën ATK</button>
+        {keyReady && !certificateReady && <button disabled={busy} onClick={() => void resetLocalKey()} style={secondary}>Rifillo çelësin / CSR nëse emri i biznesit është i pasaktë</button>}
       </>}
       <button disabled={busy} onClick={() => void load()} style={secondary}>Rifresko POS-et</button>
     </section>
