@@ -2,7 +2,7 @@ name: Android POS CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/web-pos-checkout]
     paths:
       - "mobile-pos/**"
       - ".github/workflows/android-pos.yml"
