@@ -52,9 +52,10 @@ async function runEnsureATKTestPosReady(
   const savedApplicationId = window.localStorage.getItem(applicationStorageKey);
   // 929645146946 was an old placeholder, not the application ID supplied for this ATK TEST account.
   const applicationId = Number(savedApplicationId && savedApplicationId !== "929645146946" ? savedApplicationId : "457818860373");
-  const orderedPositions = [...positions].sort((a, b) =>
-    Number(a.atk_branch_id) - Number(b.atk_branch_id) || Number(a.pos_id) - Number(b.pos_id)
-  );
+  const orderedPositions = [...positions]
+    .filter((candidate) => candidate.status !== "suspended" && candidate.status !== "revoked")
+    .sort((a, b) => Number(a.atk_branch_id) - Number(b.atk_branch_id) || Number(a.pos_id) - Number(b.pos_id));
+  if (!orderedPositions.length) throw new Error("Nuk ka POS TEST aktiv për këtë biznes. Zgjidh ose regjistro një POS të vlefshëm.");
   const { data: savedVerifications, error: savedError } = await supabase.from("fiskalo_atk_pos_verifications")
     .select("pos_installation_id,business_name,verification_code,nui,atk_branch_id,pos_id,application_id")
     .eq("organization_id", organizationId)
