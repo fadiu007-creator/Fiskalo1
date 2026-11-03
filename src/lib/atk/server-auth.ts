@@ -39,7 +39,7 @@ export async function authorizeAtkOrganization(
 
   const { data: organization, error: organizationError } = await supabase
     .from("fiskalo_organizations")
-    .select("nui,legal_name")
+    .select("nui,legal_name,municipality")
     .eq("id", organizationId)
     .single();
   if (organizationError || !organization || String(organization.nui) !== taxpayerNui) {
