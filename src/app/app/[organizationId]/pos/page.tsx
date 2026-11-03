@@ -267,9 +267,11 @@ export default function WebPosPage() {
         <div style={{ display: "grid", gap: 10, maxHeight: "42vh", overflowY: "auto" }}>
           {lines.map((line) => <div key={line.productId} style={{ borderBottom: "1px solid var(--line)", paddingBottom: 9 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><strong>{line.product!.name}</strong><strong>{money(line.lineTotal)}</strong></div>
-            <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 7 }}>
-              <input aria-label={"Sasia " + line.product!.name} type="number" min="0.001" step="0.001" value={line.quantity} onChange={(event) => updateQuantity(line.productId, event.target.value)} style={{ ...field, width: 105 }} />
-              <button style={secondary} onClick={() => setCart((current) => current.filter((row) => row.productId !== line.productId))}>Hiq</button>
+            <div className="pos-quantity-stepper">
+              <button type="button" aria-label={"Zvogëlo " + line.product!.name} style={secondary} onClick={() => line.quantity <= 1 ? setCart((current) => current.filter((row) => row.productId !== line.productId)) : updateQuantity(line.productId, String(line.quantity - 1))}>−</button>
+              <strong>{line.quantity}</strong>
+              <button type="button" aria-label={"Shto " + line.product!.name} style={secondary} onClick={() => updateQuantity(line.productId, String(line.quantity + 1))}>+</button>
+              <button type="button" style={{ ...secondary, marginLeft: "auto" }} onClick={() => setCart((current) => current.filter((row) => row.productId !== line.productId))}>Hiq</button>
             </div>
           </div>)}
           {!lines.length && <p className="cart-empty" style={{ color: "var(--muted)", textAlign: "center", padding: 20 }}>Shporta është bosh.<br/>Zgjidh produktet për të filluar.</p>}
@@ -309,6 +311,9 @@ export default function WebPosPage() {
       .pos-product-name { font-size:14px; font-weight:800; padding:0 11px; min-height:36px; }
       .pos-product-price { color:var(--brand); font-size:17px; font-weight:900; padding:0 11px; }
       .pos-product-card small { color:var(--muted); padding:0 11px; }
+      .pos-quantity-stepper { display:flex; align-items:center; gap:8px; margin-top:7px; }
+      .pos-quantity-stepper button { min-width:38px; min-height:38px; font-size:18px; padding:6px 10px; }
+      .pos-quantity-stepper strong { min-width:22px; text-align:center; }
       @media (max-width:760px) { .pos-layout { grid-template-columns:minmax(0,1fr) !important; } .pos-layout aside { position:static !important; } .pos-product-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
     `}</style>
   </main>;
