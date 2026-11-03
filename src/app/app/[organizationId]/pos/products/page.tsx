@@ -38,7 +38,7 @@ export default function PosProductsPage() {
   const visible = products.filter((p) => (p.name + " " + (p.sku || "")).toLowerCase().includes(search.trim().toLowerCase()));
   function edit(product: Product) {
     setEditingId(product.id);
-    setForm({ name: product.name, sku: product.sku || "", item_type: product.item_type, unit: product.unit || "copë",
+    setForm({ name: product.name, sku: product.sku || "", item_type: product.item_type, unit: product.unit || "copë", pos_category: product.pos_category || "Tjera", image_url: product.image_url || "",
       unit_price: String(product.unit_price), vat_rate: String(product.vat_rate), stock_quantity: String(product.stock_quantity),
       track_stock: product.track_stock, atk_unit_code: product.atk_unit_code || "", atk_tax_code: product.atk_tax_code || "",
       atk_item_category_code: product.atk_item_category_code || "" });
