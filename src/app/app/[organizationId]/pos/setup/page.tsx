@@ -70,23 +70,28 @@ export default function WebPosSetupPage() {
   }, [positions, form.branch]);
   useEffect(() => {
     let cancelled = false;
-    if (!selected) { setKeyReady(false); setCertificateReady(false); return; }
+    if (!selected) { setKeyReady(false); setCertificateReady(false); setVerification(null); return; }
     void Promise.all([
       hasBrowserPosKey(organizationId + ":" + selected.id).catch(() => false),
       hasBrowserPosCertificate(organizationId + ":" + selected.id).catch(() => false),
-    ]).then(([key, cert]) => { if (!cancelled) { setKeyReady(key); setCertificateReady(cert); } });
-    let cached: Verification | null = null;
-    try {
-      const raw = window.localStorage.getItem("fiskalo-atk-verification:" + organizationId + ":" + selected.id);
-      const parsed = raw ? JSON.parse(raw) as Verification & { nui?: string; branchId?: number; posId?: number; applicationId?: number } : null;
-      const savedAppId = Number(window.localStorage.getItem("fiskalo-atk-application-id:" + organizationId) || applicationId);
-      if (parsed?.verificationCode && parsed.nui === org?.nui &&
-          parsed.branchId === selected.atk_branch_id && parsed.posId === selected.pos_id &&
-          parsed.applicationId === savedAppId) cached = parsed;
-    } catch { cached = null; }
-    setVerification(cached);
+      supabase.from("fiskalo_atk_pos_verifications")
+        .select("business_name,verification_code,nui,atk_branch_id,pos_id,application_id")
+        .eq("organization_id", organizationId).eq("pos_installation_id", selected.id).maybeSingle(),
+    ]).then(([key, cert, saved]) => {
+      if (cancelled) return;
+      setKeyReady(key);
+      setCertificateReady(cert);
+      const row = saved && "data" in saved ? saved.data : null;
+      if (row && !saved.error && row.nui === org?.nui &&
+          Number(row.atk_branch_id) === selected.atk_branch_id &&
+          Number(row.pos_id) === selected.pos_id &&
+          Number(row.application_id) === Number(applicationId) &&
+          row.verification_code) {
+        setVerification({ businessName: row.business_name || org?.legal_name || "", verificationCode: row.verification_code });
+      } else setVerification(null);
+    });
     return () => { cancelled = true; };
-  }, [organizationId, selectedId, selected?.id, org?.nui, applicationId]);
+  }, [organizationId, selectedId, selected?.id, org?.nui, org?.legal_name, applicationId, supabase]);
 
   async function saveProfile() {
     setBusy(true); setError(""); setNotice("");
@@ -134,14 +139,13 @@ export default function WebPosSetupPage() {
       if (!/^\d{9}$/.test(org.nui)) throw new Error("NUI i biznesit duhet të jetë 9 shifra.");
       window.localStorage.setItem("fiskalo-atk-application-id:" + organizationId, String(appId));
       const response = await fetch("/api/atk/test/verify", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ organizationId, nui: org.nui, fiscalizationNumber: profile.fiscalization_number, branchId: selected.atk_branch_id, posId: selected.pos_id, applicationId: appId }) });
+        body: JSON.stringify({ organizationId, posInstallationId: selected.id, nui: org.nui, fiscalizationNumber: profile.fiscalization_number, branchId: selected.atk_branch_id, posId: selected.pos_id, applicationId: appId }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.detail || data.error || "ATK nuk e verifikoi POS-in.");
       const verified = { businessName: data.businessName, verificationCode: data.verificationCode, applicationId: appId,
         nui: org.nui, branchId: selected.atk_branch_id, posId: selected.pos_id, verifiedAt: new Date().toISOString() };
-      window.localStorage.setItem("fiskalo-atk-verification:" + organizationId + ":" + selected.id, JSON.stringify(verified));
       setVerification({ businessName: data.businessName, verificationCode: data.verificationCode });
-      setNotice("ATK e verifikoi POS-in TEST. Kodi i verifikimit u ruajt për këtë POS në këtë shfletues.");
+      setNotice("ATK e verifikoi POS-in TEST. Verifikimi u ruajt në llogarinë e biznesit dhe do të jetë i disponueshëm edhe pas hyrjes nga pajisje tjetër.");
     } catch (e) { setError(e instanceof Error ? e.message : "Verifikimi dështoi."); }
     finally { setBusy(false); }
   }
