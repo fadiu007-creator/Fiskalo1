@@ -130,7 +130,7 @@ async function runEnsureATKTestPosReady(
   const certificateResponse = await fetch("/api/atk/test/sign-csr", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      organizationId, nui: String(org.nui), businessName, verificationCode,
+      organizationId, posInstallationId: pos.id, nui: String(org.nui), businessName, verificationCode,
       branchId: pos.atk_branch_id, posId: pos.pos_id, applicationId, csrPem: csr.csrPem,
     }),
   });
