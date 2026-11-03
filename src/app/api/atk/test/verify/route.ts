@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   const branchId = positiveInteger(body.branchId);
   const posId = positiveInteger(body.posId);
   const applicationId = positiveInteger(body.applicationId);
-  if (!organizationId || !/^\d{9}$/.test(nui) || !fiscalizationNumber || !branchId || !posId || !applicationId) {
+  if (!organizationId || !posInstallationId || !/^\d{9}$/.test(nui) || !fiscalizationNumber || !branchId || !posId || !applicationId) {
     return Response.json({ error: "invalid_test_identifiers", detail: "Organization, 9-digit taxpayer NUI, test fiscalization number, branch ID, POS ID and Application ID are required." }, { status: 400 });
   }
   const authorization = await authorizeAtkOrganization(supabase, user.id, organizationId, nui);
