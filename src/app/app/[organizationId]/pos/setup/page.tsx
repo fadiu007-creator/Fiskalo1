@@ -204,7 +204,7 @@ export default function WebPosSetupPage() {
       const csr = await getBrowserPosCsr(id);
       if (!csr) throw new Error("CSR/çelësi lokal nuk u gjet. Gjeneroje përsëri në këtë shfletues.");
       const response = await fetch("/api/atk/test/sign-csr", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ organizationId, nui: org.nui, businessName: verification.businessName,
+        body: JSON.stringify({ organizationId, posInstallationId: selected.id, nui: org.nui, businessName: verification.businessName,
           verificationCode: verification.verificationCode, branchId: selected.atk_branch_id,
           posId: selected.pos_id, applicationId: Number(applicationId), csrPem: csr.csrPem }) });
       const data = await response.json().catch(() => ({}));
