@@ -65,8 +65,9 @@ export default function PosProductsPage() {
     const values = { organization_id: organizationId, name: form.name.trim(), sku: form.sku.trim() || null,
       item_type: form.item_type, unit: form.unit.trim() || "copë", pos_category: form.pos_category, image_url: form.image_url.trim() || null, unit_price: price, vat_rate: vat,
       stock_quantity: stock, track_stock: form.item_type === "product" && form.track_stock,
-      atk_unit_code: form.atk_unit_code.trim() || null, atk_tax_code: form.atk_tax_code.trim().toUpperCase() || null,
-      atk_item_category_code: form.atk_item_category_code.trim() || null };
+      atk_unit_code: form.atk_unit_code.trim() || (form.unit.trim().toLowerCase() === "copë" ? "cope" : null),
+      atk_tax_code: taxCode || (vat === 8 ? "D" : vat === 18 ? "E" : null),
+      atk_item_category_code: form.atk_item_category_code.trim() || (form.item_type === "product" ? "TT" : null) };
     const result = editingId
       ? await supabase.from("fiskalo_products").update(values).eq("organization_id", organizationId).eq("id", editingId)
       : await supabase.from("fiskalo_products").insert(values);
