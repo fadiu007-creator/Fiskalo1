@@ -88,7 +88,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "invalid_coupon_request", detail: "Organization, invoice, TEST POS, NUI, coupon ID, total and signed Protobuf details are required." }, { status: 400 });
   }
 
-  const authorization = await authorizeAtkOrganization(supabase, user.id, organizationId, nui);
+  const authorization = await authorizeAtkOrganization(supabase, user.id, organizationId, nui, ["owner", "administrator", "manager", "cashier"]);
   if (!authorization.ok) return Response.json({ error: "organization_not_authorized", detail: authorization.detail }, { status: authorization.status });
 
   const [{ data: invoice, error: invoiceError }, { data: pos, error: posError }] = await Promise.all([
