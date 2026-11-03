@@ -5,8 +5,7 @@ import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   Activity, ArrowUpRight, Building2, CheckCircle2, CircleAlert, Cpu,
-  FileCheck2, LayoutDashboard, LogOut, Search, Settings2, ShieldCheck,
-  Store, Users, XCircle,
+  LayoutDashboard, Search, Settings2, ShieldCheck, Store,
 } from "lucide-react";
 
 export type ProviderBusiness = {
@@ -93,12 +92,12 @@ export default function ProviderDashboard({
         <button className="provider-nav-item" onClick={() => setShowSettings((v) => !v)}><Settings2 size={17}/> Konfigurimi ATK</button>
         <div className="provider-sidebar-bottom">
           <div className="provider-account"><span className="provider-avatar">{userEmail.slice(0,1).toUpperCase() || "F"}</span><div><strong>{role === "provider_admin" ? "Administrator" : role === "provider_support" ? "Mbështetje" : "Përputhshmëri"}</strong><small>{userEmail}</small></div></div>
-          <form action="/auth/signout" method="post"><button className="provider-signout"><LogOut size={15}/> Dil nga llogaria</button></form>
+
         </div>
       </aside>
 
       <main className="provider-main" id="overview">
-        <header className="provider-topbar"><div><span className="provider-eyebrow">MENAXHIM I PLATFORMËS</span><h1>Qendra e ofruesit</h1></div><div className="provider-top-actions"><span className="provider-live"><i/> Platforma aktive</span><span className="provider-user-chip">{userEmail}</span></div></header>
+        <header className="provider-topbar"><div><span className="provider-eyebrow">MENAXHIM I PLATFORMËS</span><h1>Qendra e ofruesit</h1></div><div className="provider-top-actions"><span className="provider-live"><i/> Hapësira e ofruesit</span><span className="provider-user-chip">{userEmail}</span></div></header>
         <section className="provider-welcome"><div><span className="provider-eyebrow">PANELI I OFRUESIT</span><h2>Kontrollo Fiskalo nga një vend.</h2><p>Menaxho bizneset kliente, instalimet POS dhe konfigurimin e softuerit fiskal.</p></div><div className="provider-welcome-mark"><ShieldCheck size={42}/><span>Qasje e ndarë</span></div></section>
 
         {loadError && <div className="provider-alert bad"><CircleAlert size={17}/> Nuk u ngarkuan të gjitha të dhënat: {loadError}</div>}
@@ -124,7 +123,7 @@ export default function ProviderDashboard({
           <div className="provider-panel-heading"><div><span className="provider-eyebrow">PAJISJET</span><h3>Instalimet POS</h3><p>Shiko ambientin dhe statusin e secilit instalim pa përzier të dhënat e bizneseve.</p></div><span className="provider-count">{posDevices.length} gjithsej</span></div>
           <div className="provider-device-grid">{posDevices.slice(0,8).map((pos) => {
             const business = businesses.find((item) => item.id === pos.organization_id);
-            return <article key={pos.id}><div className="provider-device-top"><span className="provider-device-icon"><Cpu size={18}/></span><span className={"provider-status " + statusTone(pos.status)}>{statusLabel[pos.status] ?? pos.status}</span></div><strong>{pos.label}</strong><small>{business?.trade_name || business?.legal_name || "Biznes"}</small><div className="provider-device-foot"><span>{pos.environment.toUpperCase()}</span><span>{pos.last_seen_at ? "Pa aktivitet të fundit" : "Pa lidhje të fundit"}</span></div></article>;
+            return <article key={pos.id}><div className="provider-device-top"><span className="provider-device-icon"><Cpu size={18}/></span><span className={"provider-status " + statusTone(pos.status)}>{statusLabel[pos.status] ?? pos.status}</span></div><strong>{pos.label}</strong><small>{business?.trade_name || business?.legal_name || "Biznes"}</small><div className="provider-device-foot"><span>{pos.environment.toUpperCase()}</span><span>{pos.last_seen_at ? "Aktivitet: " + new Date(pos.last_seen_at).toLocaleString("sq-XK") : "Pa aktivitet të regjistruar"}</span></div></article>;
           })}{!posDevices.length && <p className="provider-empty">Nuk ka instalime POS.</p>}</div>
         </section>
 
