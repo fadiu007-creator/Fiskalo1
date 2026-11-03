@@ -286,7 +286,7 @@ export default function WebPosPage() {
               <option value="cash">Para në dorë</option><option value="card">Kartelë (e pranuar manualisht)</option><option value="bank_transfer">Transfer bankar (i konfirmuar)</option><option value="credit">Me afat — pa pagesë</option>
             </select>
           </label>
-          {paymentMethod === "cash" && }
+          
           {paymentMethod !== "credit" && <label style={{ display: "flex", alignItems: "start", gap: 8, fontSize: 12, lineHeight: 1.4 }}>
             <input type="checkbox" checked={confirmedPayment} onChange={(event) => setConfirmedPayment(event.target.checked)} style={{ marginTop: 2 }} />
             Konfirmoj se pagesa është pranuar. Fiskalo nuk proceson pagesa me kartelë.
