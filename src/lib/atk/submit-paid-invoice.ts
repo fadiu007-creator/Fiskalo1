@@ -123,7 +123,7 @@ export async function submitPaidInvoiceToATK(
     return { line, unit, tax, itemType };
   });
 
-  const { data: couponId, error: couponError } = await supabase.rpc("fiskalo_next_atk_coupon_id");
+  const { data: couponId, error: couponError } = await supabase.rpc("fiskalo_next_atk_coupon_id", { target_organization: organizationId });
   if (couponError || !couponId) throw new Error("Nuk u caktua numri unik i kuponit ATK.");
   const totalCents = Math.round(Number(invoice.total) * 100);
   const items = itemRows.map(({ line, unit, tax, itemType }) => ({
