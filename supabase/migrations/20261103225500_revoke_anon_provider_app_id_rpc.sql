@@ -1,0 +1,1 @@
+revoke all on function public.fiskalo_get_business_application_id(uuid) from public, anon; grant execute on function public.fiskalo_get_business_application_id(uuid) to authenticated;
