@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { ArrowRight, CheckCircle2, FileText, Plus, RefreshCw, Search, Settings2, ShoppingCart } from "lucide-react";
+import { ArrowRight, FileText, Plus, RefreshCw, Search, Settings2, ShoppingCart } from "lucide-react";
 
 type Product = { id: string; name: string; sku: string | null; unit_price: number; vat_rate: number; stock_quantity: number; track_stock: boolean; item_type: string; is_active: boolean };
 type Customer = { id: string; name: string; phone: string | null };
