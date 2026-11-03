@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ArrowUpRight, Boxes, FileText, Settings2, ShoppingCart, Users, Wallet } from "lucide-react";
+import { ArrowUpRight, Boxes, FileBarChart2, FileText, Settings2, ShoppingCart, Users, Wallet } from "lucide-react";
 
 type Props = { params: Promise<{ organizationId: string }> };
 
@@ -23,7 +23,7 @@ export default async function BusinessDashboard({ params }: Props) {
   const roleLabel: Record<string,string> = { owner:"Pronari", administrator:"Administrator", manager:"Menaxher", accountant:"Kontabilist", cashier:"Arkëtar" };
   const modules = [
     ...(["owner","administrator","manager","cashier"].includes(role) ? [{ href:`/app/${organizationId}/pos`, title:"Arka / POS", description:"Regjistro shitjet, prano pagesat dhe lësho faturat.", icon:ShoppingCart, tint:"green", action:"Hap arkën" }] : []),
-    { href:`/app/${organizationId}/invoices`, title:"Faturat", description:"Gjej faturat, kontrollo pagesat dhe statusin fiskal.", icon:FileText, tint:"blue", action:"Shiko faturat" },
+    { href:`/app/${organizationId}/invoices`, title:"Faturat", description:"Gjej faturat, kontrollo pagesat dhe statusin fiskal.", icon:FileText, tint:"blue", action:"Shiko faturat" },\n    { href:`/app/${organizationId}/reports`, title:"Raportet", description:"Shitjet, TVSH-ja, pagesat, ndërrimet dhe statusi i ATK-së.", icon:FileBarChart2, tint:"violet", action:"Shiko raportet" },
     ...(["owner","administrator","manager"].includes(role) ? [{ href:`/app/${organizationId}/pos/products`, title:"Produktet", description:"Menaxho artikujt, çmimet, TVSH-në dhe stokun.", icon:Boxes, tint:"violet", action:"Menaxho produktet" }] : []),
     ...(["owner","administrator","manager","cashier"].includes(role) ? [{ href:`/app/${organizationId}/pos/shifts`, title:"Ndërrimet e arkës", description:"Hap arkën, regjistro lëvizjet dhe bëj mbylljen.", icon:Wallet, tint:"amber", action:"Hap ndërrimet" }] : []),
     ...(["owner","administrator"].includes(role) ? [
