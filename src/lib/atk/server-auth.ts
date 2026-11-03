@@ -3,7 +3,7 @@ import { createClient as createCookieClient } from "@/lib/supabase/server";
 
 export async function getAtkRequestContext(request: Request) {
   const authorization = request.headers.get("authorization") ?? "";
-  const bearer = authorization.match(/^Bearer\\s+(.+)$/i)?.[1];
+  const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
   let supabase;
   if (bearer) {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
