@@ -25,6 +25,7 @@ export async function authorizeAtkOrganization(
   userId: string,
   organizationId: string,
   taxpayerNui: string,
+  allowedRoles: string[] = ["owner", "administrator"],
 ) {
   const { data: membership, error: membershipError } = await supabase
     .from("fiskalo_organization_users")
@@ -32,8 +33,8 @@ export async function authorizeAtkOrganization(
     .eq("organization_id", organizationId)
     .eq("user_id", userId)
     .maybeSingle();
-  if (membershipError || !membership || !["owner", "administrator"].includes(membership.role)) {
-    return { ok: false as const, status: 403, detail: "Only a business owner or administrator can run ATK test onboarding." };
+  if (membershipError || !membership || !allowedRoles.includes(membership.role)) {
+    return { ok: false as const, status: 403, detail: "This account does not have permission for this ATK operation." };
   }
 
   const { data: organization, error: organizationError } = await supabase
