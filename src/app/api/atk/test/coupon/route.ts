@@ -33,6 +33,22 @@ function readCouponHeader(details: string): Map<number, bigint> {
   return fields;
 }
 
+function readableProviderMessage(value: unknown, fallback: string): string {
+  if (typeof value === "string" && value.trim()) return value.slice(0, 1200);
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    for (const key of ["message", "detail", "error", "description", "title"]) {
+      if (record[key] !== undefined) {
+        const message = readableProviderMessage(record[key], "");
+        if (message) return message;
+      }
+    }
+    try { return JSON.stringify(value).slice(0, 1200); } catch { return fallback; }
+  }
+  return fallback;
+}
+
 function isBase64(value: string): boolean {
   if (!value || value.length > 2_000_000 || value.length % 4 !== 0) return false;
   return /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value);
@@ -131,7 +147,7 @@ export async function POST(request: Request) {
     let result: Record<string, unknown> = {};
     try { result = JSON.parse(raw) as Record<string, unknown>; } catch { /* checked below */ }
     if (!response.ok) {
-      const detail = String(result.message ?? result.error ?? result.detail ?? raw ?? "ATK rejected the TEST coupon.").slice(0, 1200);
+      const detail = readableProviderMessage(result, readableProviderMessage(raw, "ATK rejected the TEST coupon."));
       await supabase.from("fiskalo_atk_fiscal_documents").update({ status: "rejected", last_error: detail, atk_response: result }).eq("id", fiscalDocument.id);
       await supabase.from("fiskalo_atk_fiscal_events").insert({ organization_id: organizationId, fiscal_document_id: fiscalDocument.id, event_type: "rejected", details: { httpStatus: response.status, detail } });
       return Response.json({ error: "atk_coupon_rejected", detail, atkStatus: response.status, fiscalDocumentId: fiscalDocument.id }, { status: 502 });
