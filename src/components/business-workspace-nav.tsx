@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeftRight, Boxes, Building2, FileText, LayoutDashboard, LogOut, Settings2, ShoppingCart, Users, Wallet } from "lucide-react";
+import { ArrowLeftRight, Boxes, Building2, FileText, LayoutDashboard, Settings2, ShoppingCart, Users, Wallet } from "lucide-react";
 
 const items = [
   { path: "", label: "Përmbledhja", icon: LayoutDashboard, roles: ["owner","administrator","manager","accountant","cashier"] },
@@ -14,8 +14,8 @@ const items = [
   { path: "/pos/setup", label: "ATK", icon: Settings2, roles: ["owner","administrator"] },
 ];
 
-export default function BusinessWorkspaceNav({ organizationId, businessName, role }: {
-  organizationId: string; businessName: string; role: string;
+export default function BusinessWorkspaceNav({ organizationId, businessName, role, isProvider }: {
+  organizationId: string; businessName: string; role: string; isProvider: boolean;
 }) {
   const pathname = usePathname();
   const visible = items.filter((item) => item.roles.includes(role));
@@ -32,7 +32,7 @@ export default function BusinessWorkspaceNav({ organizationId, businessName, rol
           return <Link key={item.path} href={href} className={active ? "active" : ""}><Icon size={16}/><span>{item.label}</span></Link>;
         })}
       </nav>
-      <Link href="/app" className="business-switch-link" title="Ndërro biznesin"><ArrowLeftRight size={16}/><span>Bizneset</span></Link>
+      <div className="business-shell-actions">{isProvider && <Link href="/provider" className="business-provider-link"><Building2 size={15}/><span>Ofruesi</span></Link>}<Link href="/app" className="business-switch-link" title="Ndërro biznesin"><ArrowLeftRight size={16}/><span>Bizneset</span></Link></div>
     </div>
   </header>;
 }
