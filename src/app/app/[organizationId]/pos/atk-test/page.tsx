@@ -39,6 +39,7 @@ export default function AtkTestPosPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
+  const [testDataConfirmed, setTestDataConfirmed] = useState(false);
 
   const selectedPos = positions.find((p) => p.id === posId);
   const selectedInvoice = invoices.find((i) => i.id === invoiceId);
@@ -63,6 +64,14 @@ export default function AtkTestPosPage() {
   }, [organizationId, supabase]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const requestedInvoiceId = new URLSearchParams(window.location.search).get("invoiceId");
+    if (requestedInvoiceId && invoices.some((invoice) => invoice.id === requestedInvoiceId)) {
+      setInvoiceId((current) => current || requestedInvoiceId);
+    }
+  }, [invoices]);
 
   useEffect(() => {
     if (!invoiceId) { setLines([]); setMappings({}); return; }
@@ -96,6 +105,7 @@ export default function AtkTestPosPage() {
     setBusy(true); setError(""); setNotice(""); setResult(null);
     try {
       if (!selectedPos || !selectedInvoice) throw new Error("Zgjidh një POS TEST dhe një faturë të lëshuar e të paguar me para në dorë.");
+      if (!testDataConfirmed) throw new Error("Konfirmo që kjo është faturë me të dhëna testuese, jo shitje reale e klientit.");
       if (!/^\d{9}$/.test(nui) || !fiscalizationNumber.trim() || !/^\d+$/.test(applicationId) || Number(applicationId) <= 0) {
         throw new Error("NUI, numri i fiskalizimit dhe Application ID duhet të jenë të plotësuara.");
       }
@@ -191,7 +201,7 @@ export default function AtkTestPosPage() {
       <label>POS TEST<select value={posId} onChange={(e) => setPosId(e.target.value)} style={field}><option value="">Zgjidh POS</option>{positions.map((p) => <option key={p.id} value={p.id}>{p.label} · Njësia {p.atk_branch_id} · POS {p.pos_id}</option>)}</select></label>
       <label>Application ID<input value={applicationId} onChange={(e) => setApplicationId(e.target.value)} inputMode="numeric" style={field} /></label>
       <label>Lokacioni për kupon<input value={location} onChange={(e) => setLocation(e.target.value)} placeholder={selectedPos?.location || municipality || "Lokacioni i biznesit"} style={field} /></label>
-      <div><strong>2. Zgjidh faturën</strong><select value={invoiceId} onChange={(e) => setInvoiceId(e.target.value)} style={field}><option value="">Zgjidh faturë të paguar me para në dorë</option>{invoices.map((i) => <option key={i.id} value={i.id}>{i.invoice_number || i.id} · {i.issue_date} · {Number(i.total).toFixed(2)} €</option>)}</select>{!invoices.length && <small style={{ color: "var(--muted)" }}>Nuk ka fatura të lëshuara dhe të paguara me para në dorë.</small>}</div>
+      <div><strong>2. Zgjidh faturën</strong><select value={invoiceId} onChange={(e) => { setInvoiceId(e.target.value); setTestDataConfirmed(false); setResult(null); setNotice(""); }} style={field}><option value="">Zgjidh faturë të paguar me para në dorë</option>{invoices.map((i) => <option key={i.id} value={i.id}>{i.invoice_number || i.id} · {i.issue_date} · {Number(i.total).toFixed(2)} €</option>)}</select>{!invoices.length && <small style={{ color: "var(--muted)" }}>Nuk ka fatura të lëshuara dhe të paguara me para në dorë.</small>}</div>
     </section>
     {selectedInvoice && <section style={{ ...panel, marginTop: 12 }}>
       <strong>3. Kodet e artikujve sipas katalogut ATK</strong>
@@ -205,7 +215,8 @@ export default function AtkTestPosPage() {
         </div>
       </div>)}</div>
       <div style={{ borderTop: "1px solid var(--line)", marginTop: 12, paddingTop: 12, display: "flex", justifyContent: "space-between" }}><strong>Totali i faturës</strong><strong>{Number(selectedInvoice.total).toFixed(2)} €</strong></div>
-      <button disabled={busy || !selectedPos || !invoiceId} onClick={() => void submitTestSale()} style={{ ...button, width: "100%", opacity: busy || !selectedPos || !invoiceId ? 0.55 : 1 }}>{busy ? "Duke verifikuar, nënshkruar dhe dërguar..." : "Dërgo shitjen në ATK TEST"}</button>
+      <label style={{ display: "flex", alignItems: "start", gap: 9, padding: 12, borderRadius: 10, background: "#fff8e8", color: "#76520c", fontSize: 12, lineHeight: 1.5 }}><input type="checkbox" checked={testDataConfirmed} onChange={(e) => setTestDataConfirmed(e.target.checked)} style={{ marginTop: 2 }} /> Konfirmoj se kjo faturë përmban vetëm të dhëna testuese dhe nuk është shitje reale e klientit.</label>
+      <button disabled={busy || !selectedPos || !invoiceId || !testDataConfirmed} onClick={() => void submitTestSale()} style={{ ...button, width: "100%", opacity: busy || !selectedPos || !invoiceId || !testDataConfirmed ? 0.55 : 1 }}>{busy ? "Duke verifikuar, nënshkruar dhe dërguar..." : "Dërgo kuponin testues në ATK"}</button>
     </section>}
     <section style={{ ...panel, marginTop: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
