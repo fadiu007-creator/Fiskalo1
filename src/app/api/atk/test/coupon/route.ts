@@ -207,13 +207,15 @@ export async function POST(request: Request) {
     return Response.json({ error: "fiscal_document_save_failed", detail: insertError?.message ?? "Could not save the ATK TEST document." }, { status: 500 });
   }
 
-  await supabase.from("fiskalo_atk_fiscal_events").insert({
+  const { error: startedEventError } = await supabase.from("fiskalo_atk_fiscal_events").insert({
     organization_id: organizationId, fiscal_document_id: fiscalDocument.id,
     event_type: "submission_started", details: { environment: "TEST", invoiceNumber: invoice.invoice_number },
   });
-  await supabase.from("fiskalo_atk_fiscal_documents").update({
+  if (startedEventError) return Response.json({ error: "fiscal_event_save_failed", fiscalDocumentId: fiscalDocument.id }, { status: 500 });
+  const { error: submittedStateError } = await supabase.from("fiskalo_atk_fiscal_documents").update({
     status: "submitted", submission_attempts: 1, last_submitted_at: new Date().toISOString(),
   }).eq("id", fiscalDocument.id).eq("organization_id", organizationId);
+  if (submittedStateError) return Response.json({ error: "fiscal_state_save_failed", fiscalDocumentId: fiscalDocument.id }, { status: 500 });
 
   try {
     const response = await fetch("https://fiskalizimi-test.atk-ks.org/pos/coupon", {
