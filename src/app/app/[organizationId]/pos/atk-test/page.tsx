@@ -141,7 +141,7 @@ export default function AtkTestPosPage() {
       const signature = await signAtkBase64Payload(keyId, details);
       const response = await fetch("/api/atk/test/coupon", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ organizationId, nui, invoiceId, posInstallationId: selectedPos.id, couponId: String(couponId), totalCents, details, signature }),
+        body: JSON.stringify({ organizationId, nui, invoiceId, posInstallationId: selectedPos.id, couponId: String(couponId), applicationId: Number(applicationId), totalCents, details, signature }),
       });
       const submission = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(submission.detail || submission.error || "Dërgimi i kuponit në ATK TEST dështoi. Kontrollo statusin e dokumentit para se të provosh sërish.");
