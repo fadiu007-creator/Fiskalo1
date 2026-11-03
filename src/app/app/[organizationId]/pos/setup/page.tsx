@@ -51,17 +51,17 @@ export default function WebPosSetupPage() {
     setCanManage(allowed);
     setPermissionChecked(true);
     if (!allowed) return;
-    const [orgRes, profileRes, posRes, providerSettingsRes] = await Promise.all([
+    const [orgRes, profileRes, posRes, providerApplicationIdRes] = await Promise.all([
       supabase.from("fiskalo_organizations").select("nui,legal_name,municipality").eq("id", organizationId).single(),
       supabase.from("fiskalo_atk_taxpayer_profiles").select("fiscalization_number").eq("organization_id", organizationId).maybeSingle(),
       supabase.from("fiskalo_atk_pos_installations").select("id,atk_branch_id,pos_id,label,location,environment,status,certificate_serial").eq("organization_id", organizationId).eq("environment", "test").order("atk_branch_id", { ascending: true }).order("pos_id", { ascending: true }),
-      supabase.from("fiskalo_atk_provider_settings").select("application_id").eq("singleton", true).maybeSingle(),
+      supabase.rpc("fiskalo_get_business_application_id", { target_org: organizationId }),
     ]);
     if (orgRes.error || !orgRes.data) setError("Nuk u lexuan të dhënat e biznesit.");
     else setOrg(orgRes.data as Organization);
     setProfile((profileRes.data as Profile | null) ?? null);
-    const configuredApplicationId = providerSettingsRes.data?.application_id;
-    if (providerSettingsRes.error) setError("Konfigurimi i Application ID mund të shihet vetëm nga pronari ose administratori.");
+    const configuredApplicationId = providerApplicationIdRes.data;
+    if (providerApplicationIdRes.error) setError("Application ID i ofruesit nuk u lexua: " + providerApplicationIdRes.error.message);
     if (configuredApplicationId) {
       setApplicationId(String(configuredApplicationId));
       window.localStorage.setItem("fiskalo-atk-application-id:" + organizationId, String(configuredApplicationId));
