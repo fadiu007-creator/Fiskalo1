@@ -1,45 +1,35 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { ArrowUpRight, Building2, Store } from "lucide-react";
 
 export default async function BusinessHome() {
   const supabase = await createClient();
-  const { data: claimsData } = await supabase.auth.getClaims();
-  const userId = claimsData?.claims?.sub;
-  if (!userId) redirect("/login");
-
-  // Accept any pending team invitations matching the authenticated account email.
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) redirect("/login");
   await supabase.rpc("fiskalo_accept_pending_team_invitations");
 
-  const { data: memberships, error } = await supabase
-    .from("fiskalo_organization_users")
-    .select("organization_id, role, fiskalo_organizations(legal_name, municipality)")
-    .eq("user_id", userId);
-
+  const [{ data: memberships, error }, { data: providerAccess }] = await Promise.all([
+    supabase.from("fiskalo_organization_users")
+      .select("organization_id,role,fiskalo_organizations(legal_name,trade_name,municipality)")
+      .eq("user_id", auth.user.id),
+    supabase.from("fiskalo_provider_users").select("role").eq("user_id", auth.user.id).maybeSingle(),
+  ]);
   if (error) throw new Error("Nuk u ngarkuan bizneset. Provo përsëri.");
-  if (!memberships?.length) redirect("/onboarding");
-  if (memberships.length === 1) redirect(`/app/${memberships[0].organization_id}`);
+  const isProvider = Boolean(providerAccess);
+  if (!memberships?.length && !isProvider) redirect("/onboarding");
+  if (memberships?.length === 1 && !isProvider) redirect(`/app/${memberships[0].organization_id}`);
 
-  return (
-    <main style={{ maxWidth: 980, margin: "0 auto", padding: "40px 24px" }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 42 }}>
-        <Link href="/" style={{ fontSize: 23, fontWeight: 800 }}>fiskalo</Link>
-        <span style={{ color: "var(--muted)", fontSize: 13 }}>{claimsData?.claims?.email as string}</span>
-      </header>
-      <h1 style={{ fontSize: 34, marginBottom: 8 }}>Bizneset e mia</h1>
-      <p style={{ color: "var(--muted)", marginTop: 0 }}>Zgjidh biznesin për të hapur panelin e menaxhimit.</p>
-      <section style={{ display: "grid", gap: 12, marginTop: 28 }}>
-        {memberships.map((membership) => {
-          const org = membership.fiskalo_organizations as { legal_name?: string; municipality?: string } | null;
-          return (
-            <Link key={membership.organization_id} href={`/app/${membership.organization_id}`} style={{ display: "block", background: "white", border: "1px solid var(--line)", borderRadius: 14, padding: 20 }}>
-              <strong>{org?.legal_name ?? "Biznes"}</strong>
-              <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 0 }}>{org?.municipality ?? ""} · Roli: {membership.role}</p>
-            </Link>
-          );
-        })}
-      </section>
-      <Link href="/onboarding" style={{ display: "inline-block", marginTop: 20, color: "var(--brand)", fontWeight: 700 }}>+ Shto biznes tjetër</Link>
-    </main>
-  );
+  return <main className="workspace-picker">
+    <header><Link href="/" className="workspace-picker-brand"><span>F</span><strong>fiskalo</strong></Link><span>{auth.user.email}</span></header>
+    <section className="workspace-picker-intro"><span>HAPËSIRAT E PUNËS</span><h1>Ku dëshiron të vazhdosh?</h1><p>Hap panelin e ofruesit ose zgjidh një biznes për të menaxhuar shitjet dhe faturat.</p></section>
+    <section className="workspace-picker-grid">
+      {isProvider && <Link href="/provider" className="workspace-picker-card provider"><span className="workspace-picker-icon"><Building2 size={23}/></span><strong>Paneli i ofruesit</strong><p>Menaxho softuerin Fiskalo, konfigurimin ATK dhe bizneset kliente.</p><span>Hap hapësirën <ArrowUpRight size={16}/></span></Link>}
+      {(memberships ?? []).map((membership) => {
+        const org = membership.fiskalo_organizations as {legal_name?:string;trade_name?:string;municipality?:string}|null;
+        return <Link key={membership.organization_id} href={`/app/${membership.organization_id}`} className="workspace-picker-card"><span className="workspace-picker-icon"><Store size={23}/></span><strong>{org?.trade_name || org?.legal_name || "Biznes"}</strong><p>{org?.municipality ?? ""} · Roli: {membership.role}</p><span>Hap panelin e biznesit <ArrowUpRight size={16}/></span></Link>;
+      })}
+    </section>
+    <Link href="/onboarding" className="workspace-picker-add">+ Shto biznes tjetër</Link>
+  </main>;
 }
