@@ -65,9 +65,9 @@ class FiskaloAtkCryptoModule : Module() {
         .getKeySpec(pair.private, KeyInfo::class.java)
       val fingerprint = MessageDigest.getInstance("SHA-256").digest(pair.public.encoded)
         .joinToString(":") { "%02x".format(it) }
-      val pem = "-----BEGIN CERTIFICATE REQUEST-----\\n" +
-        Base64.encodeToString(csr, Base64.NO_WRAP).chunked(64).joinToString("\\n") +
-        "\\n-----END CERTIFICATE REQUEST-----"
+      val pem = "-----BEGIN CERTIFICATE REQUEST-----\n" +
+        Base64.encodeToString(csr, Base64.NO_WRAP).chunked(64).joinToString("\n") +
+        "\n-----END CERTIFICATE REQUEST-----"
       mapOf(
         "alias" to keyAlias,
         "csrPem" to pem,
