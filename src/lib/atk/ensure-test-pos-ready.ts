@@ -48,7 +48,7 @@ async function runEnsureATKTestPosReady(
   }
   if (!/^\d{9}$/.test(String(org.nui))) throw new Error("NUI i biznesit duhet të ketë 9 shifra.");
 
-  const pos = positions.find((item) => item.status === "active") ?? positions[0];
+  const pos = [...positions].sort((a, b) => Number(a.atk_branch_id) - Number(b.atk_branch_id) || Number(a.pos_id) - Number(b.pos_id))[0];
   const keyId = organizationId + ":" + pos.id;
   const { data: saved, error: savedError } = await supabase.from("fiskalo_atk_pos_verifications")
     .select("business_name,verification_code,nui,atk_branch_id,pos_id,application_id")
