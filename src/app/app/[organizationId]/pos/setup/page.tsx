@@ -62,8 +62,10 @@ export default function WebPosSetupPage() {
   }, [organizationId]);
   useEffect(() => {
     const used = positions.filter((pos) => pos.atk_branch_id === Number(form.branch)).map((pos) => pos.pos_id);
-    if (used.includes(Number(form.pos))) {
-      setForm((current) => current.pos === form.pos ? { ...current, pos: String(Math.max(0, ...used) + 1) } : current);
+    if (used.length) {
+      setForm((current) => used.includes(Number(current.pos))
+        ? { ...current, pos: String(Math.max(0, ...used) + 1) }
+        : current);
     }
   }, [positions, form.branch]);
   useEffect(() => {
