@@ -54,30 +54,37 @@ export async function submitPaidInvoiceToATK(
       message: existing.status === "accepted" ? "Fatura është pranuar tashmë nga ATK." : "Kjo faturë tashmë ka një dërgesë ATK (" + existing.status + "). Nuk u krijua kupon i dytë." };
   }
 
-  const [{ data: org, error: orgError }, { data: pos, error: posError }, { data: lines, error: linesError }] = await Promise.all([
+  const [{ data: org, error: orgError }, { data: positions, error: posError }, { data: lines, error: linesError }] = await Promise.all([
     supabase.from("fiskalo_organizations").select("nui,municipality").eq("id", organizationId).single(),
     supabase.from("fiskalo_atk_pos_installations").select("id,atk_branch_id,pos_id,label,location,environment,status")
       .eq("organization_id", organizationId).eq("environment", "test").eq("status", "active")
-      .order("created_at", { ascending: false }).limit(1).maybeSingle(),
+      .order("created_at", { ascending: false }),
     supabase.from("fiskalo_invoice_items").select("id,product_id,description,quantity,unit_price,line_subtotal,line_vat,vat_rate")
       .eq("invoice_id", invoiceId),
   ]);
-  if (orgError || !org || !/^\d{9}$/.test(String(org.nui))) throw new Error("NUI i biznesit mungon ose nuk është valid.");
-  if (posError || !pos) throw new Error("Nuk ka POS TEST aktiv. Përfundo konfigurimin dhe certifikimin një herë.");
+  if (orgError || !org || !/^\\d{9}$/.test(String(org.nui))) throw new Error("NUI i biznesit mungon ose nuk është valid.");
+  if (posError || !positions?.length) throw new Error("Nuk ka POS TEST aktiv. Përfundo konfigurimin dhe certifikimin një herë.");
   if (linesError || !lines?.length) throw new Error("Fatura nuk ka artikuj të lexueshëm.");
 
-  const { data: verification, error: verificationError } = await supabase.from("fiskalo_atk_pos_verifications")
-    .select("nui,atk_branch_id,pos_id,application_id,verified_at")
-    .eq("organization_id", organizationId).eq("pos_installation_id", pos.id).maybeSingle();
-  if (verificationError || !verification || verification.nui !== org.nui ||
-      Number(verification.atk_branch_id) !== Number(pos.atk_branch_id) ||
-      Number(verification.pos_id) !== Number(pos.pos_id)) {
-    throw new Error("POS-i nuk ka verifikim ATK TEST të ruajtur për këtë biznes. Konfigurimi fillestar duhet përfunduar një herë.");
+  let pos: (typeof positions)[number] | null = null;
+  let verification: { nui: string; atk_branch_id: number; pos_id: number; application_id: number } | null = null;
+  let keyId = "";
+  for (const candidate of positions) {
+    const candidateKey = organizationId + ":" + candidate.id;
+    if (!await hasBrowserPosCertificate(candidateKey)) continue;
+    const saved = await supabase.from("fiskalo_atk_pos_verifications")
+      .select("nui,atk_branch_id,pos_id,application_id")
+      .eq("organization_id", organizationId).eq("pos_installation_id", candidate.id).maybeSingle();
+    if (saved.error || !saved.data || saved.data.nui !== org.nui ||
+        Number(saved.data.atk_branch_id) !== Number(candidate.atk_branch_id) ||
+        Number(saved.data.pos_id) !== Number(candidate.pos_id)) continue;
+    pos = candidate;
+    verification = saved.data;
+    keyId = candidateKey;
+    break;
   }
-
-  const keyId = organizationId + ":" + pos.id;
-  if (!await hasBrowserPosCertificate(keyId)) {
-    throw new Error("Certifikata e POS-it nuk gjendet në këtë pajisje/shfletues. Hyr nga pajisja ku është instaluar certifikata ose instaloje një herë.");
+  if (!pos || !verification) {
+    throw new Error("Nuk u gjet POS TEST me verifikim të ruajtur dhe certifikatë në këtë pajisje. Hyr në pajisjen ku u instalua certifikata ose përfundo konfigurimin fillestar një herë.");
   }
 
   const productIds = Array.from(new Set(lines.map((line) => line.product_id).filter((id): id is string => Boolean(id))));
