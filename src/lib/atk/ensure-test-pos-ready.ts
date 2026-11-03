@@ -57,7 +57,10 @@ async function runEnsureATKTestPosReady(
 
   let businessName = "";
   let verificationCode = "";
-  let applicationId = Number(window.localStorage.getItem("fiskalo-atk-application-id:" + organizationId) || "457818860373");
+  const applicationStorageKey = "fiskalo-atk-application-id:" + organizationId;
+  const savedApplicationId = window.localStorage.getItem(applicationStorageKey);
+  // 929645146946 was an old placeholder, not the application ID supplied for this ATK TEST account.
+  let applicationId = Number(savedApplicationId && savedApplicationId !== "929645146946" ? savedApplicationId : "457818860373");
   if (saved && saved.nui === String(org.nui) &&
       Number(saved.atk_branch_id) === Number(pos.atk_branch_id) &&
       Number(saved.pos_id) === Number(pos.pos_id) &&
