@@ -1,4 +1,5 @@
 import { authorizeAtkOrganization, getAtkRequestContext, positiveInteger } from "@/lib/atk/server-auth";
+import { validateAtkCouponPayload } from "@/lib/atk/validate-coupon-payload";
 
 export const runtime = "nodejs";
 
@@ -92,13 +93,13 @@ export async function POST(request: Request) {
   if (!authorization.ok) return Response.json({ error: "organization_not_authorized", detail: authorization.detail }, { status: authorization.status });
 
   const [{ data: invoice, error: invoiceError }, { data: pos, error: posError }] = await Promise.all([
-    supabase.from("fiskalo_invoices").select("id,organization_id,status,total,invoice_number,payment_status,payment_method").eq("id", invoiceId).eq("organization_id", organizationId).single(),
-    supabase.from("fiskalo_atk_pos_installations").select("id,organization_id,atk_branch_id,pos_id,environment").eq("id", posInstallationId).eq("organization_id", organizationId).single(),
+    supabase.from("fiskalo_invoices").select("id,organization_id,status,total,subtotal,vat_total,invoice_number,payment_status,payment_method").eq("id", invoiceId).eq("organization_id", organizationId).single(),
+    supabase.from("fiskalo_atk_pos_installations").select("id,organization_id,atk_branch_id,pos_id,environment,status,location").eq("id", posInstallationId).eq("organization_id", organizationId).single(),
   ]);
   if (invoiceError || !invoice || invoice.status !== "issued" || invoice.payment_status !== "paid") {
     return Response.json({ error: "invoice_not_eligible", detail: "Only a fully paid and issued Fiskalo invoice can be submitted as an ATK TEST sale." }, { status: 409 });
   }
-  if (posError || !pos || pos.environment !== "test") {
+  if (posError || !pos || pos.environment !== "test" || pos.status !== "active") {
     return Response.json({ error: "test_pos_not_ready", detail: "The selected POS installation is not configured for the ATK TEST environment." }, { status: 409 });
   }
   const { data: verification, error: verificationError } = await supabase.from("fiskalo_atk_pos_verifications")
@@ -120,6 +121,47 @@ export async function POST(request: Request) {
   }
   if (Math.round(Number(invoice.total) * 100) !== totalCents) {
     return Response.json({ error: "invoice_total_mismatch", detail: "The signed coupon total does not match the issued Fiskalo invoice." }, { status: 409 });
+  }
+
+  const [{ data: invoiceLines, error: invoiceLinesError }, { data: payments, error: paymentsError }] = await Promise.all([
+    supabase.from("fiskalo_invoice_items")
+      .select("product_id,description,quantity,unit_price,line_subtotal,line_vat,vat_rate")
+      .eq("invoice_id", invoiceId),
+    supabase.from("fiskalo_invoice_payments")
+      .select("amount,payment_method")
+      .eq("invoice_id", invoiceId)
+      .order("created_at"),
+  ]);
+  if (invoiceLinesError || !invoiceLines?.length || paymentsError || !payments?.length) {
+    return Response.json({ error: "invoice_ledger_unavailable", detail: "Fiskalo could not read the complete invoice lines and payment ledger. No coupon was sent." }, { status: 500 });
+  }
+  const productIds = Array.from(new Set(invoiceLines.map((line) => line.product_id).filter((id): id is string => Boolean(id))));
+  const { data: products, error: productsError } = productIds.length
+    ? await supabase.from("fiskalo_products")
+      .select("id,atk_unit_code,atk_tax_code,atk_item_category_code")
+      .eq("organization_id", organizationId)
+      .in("id", productIds)
+    : { data: [], error: null };
+  if (productsError) {
+    return Response.json({ error: "product_mapping_unavailable", detail: "Fiskalo could not read the ATK product mappings. No coupon was sent." }, { status: 500 });
+  }
+  const payloadValidation = validateAtkCouponPayload(details, {
+    nui,
+    couponId,
+    branchId: Number(pos.atk_branch_id),
+    posId: Number(pos.pos_id),
+    applicationId,
+    operatorId: user.id,
+    location: pos.location || authorization.organization.municipality || "",
+    total: Number(invoice.total),
+    subtotal: Number(invoice.subtotal),
+    vatTotal: Number(invoice.vat_total),
+    lines: invoiceLines,
+    products: products ?? [],
+    payments,
+  });
+  if (!payloadValidation.ok) {
+    return Response.json({ error: "coupon_invoice_mismatch", detail: payloadValidation.detail }, { status: 409 });
   }
 
   const { data: existing, error: existingLookupError } = await supabase.from("fiskalo_atk_fiscal_documents")
