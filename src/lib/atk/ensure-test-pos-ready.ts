@@ -3,7 +3,7 @@
 import type { createClient } from "@/lib/supabase/client";
 import {
   createBrowserPosCsr, getBrowserPosCsr, hasBrowserPosCertificate,
-  hasBrowserPosKey, installBrowserPosCertificate,
+  installBrowserPosCertificate,
 } from "@/lib/atk/browser-key-vault";
 
 type Client = ReturnType<typeof createClient>;
