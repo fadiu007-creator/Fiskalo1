@@ -24,7 +24,7 @@ function responseMessage(data: unknown, fallback: string): string {
  * requests the TEST certificate and installs it in this browser's IndexedDB.
  * The private key never gets uploaded to Fiskalo.
  */
-export async function ensureATKTestPosReady(
+async function runEnsureATKTestPosReady(
   supabase: Client,
   organizationId: string,
 ): Promise<{ ready: boolean; message: string }> {
@@ -124,4 +124,18 @@ export async function ensureATKTestPosReady(
     .update({ status: "active" }).eq("id", pos.id).eq("organization_id", organizationId);
   if (updateError) throw new Error("Certifikata u instalua në këtë pajisje, por statusi i POS-it nuk u ruajt: " + updateError.message);
   return { ready: true, message: "POS-i u verifikua dhe certifikata ATK TEST u instalua automatikisht në këtë pajisje." };
+}
+
+
+const inFlight = new Map<string, Promise<{ ready: boolean; message: string }>>();
+
+export function ensureATKTestPosReady(
+  supabase: Client,
+  organizationId: string,
+): Promise<{ ready: boolean; message: string }> {
+  const current = inFlight.get(organizationId);
+  if (current) return current;
+  const pending = runEnsureATKTestPosReady(supabase, organizationId).finally(() => inFlight.delete(organizationId));
+  inFlight.set(organizationId, pending);
+  return pending;
 }
