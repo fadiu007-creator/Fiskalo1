@@ -111,8 +111,14 @@ export async function submitPaidInvoiceToATK(
     const unit = product?.atk_unit_code?.trim() ?? "";
     const tax = product?.atk_tax_code?.trim() ?? "";
     const itemType = product?.atk_item_category_code?.trim() ?? "";
-    if (!unit || !/^[A-Z]$/.test(tax) || !itemType) {
-      throw new Error("Plotëso kodet ATK (njësia, TVSH dhe kategoria) te produktet para shitjes së parë.");
+    const vatRate = Number(line.vat_rate);
+    const taxMatchesVat = vatRate === 8 ? tax === "D"
+      : vatRate === 18 ? tax === "E"
+      : vatRate === 0 ? tax === "A" || tax === "C"
+      : false;
+    if (!unit || !/^[A-Z]$/.test(tax) || !taxMatchesVat || !itemType) {
+      throw new Error("Kodet ATK të produktit " + line.description +
+        " mungojnë ose nuk përputhen me TVSH-në. Përdor A/C për 0%, D për 8% dhe E për 18%, sipas trajtimit tatimor.");
     }
     return { line, unit, tax, itemType };
   });
