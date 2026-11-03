@@ -31,15 +31,17 @@ async function runEnsureATKTestPosReady(
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) throw new Error("Sesioni ka skaduar. Hyr përsëri.");
 
-  const [{ data: org, error: orgError }, { data: profile, error: profileError }, { data: positions, error: posError }] = await Promise.all([
+  const [{ data: org, error: orgError }, { data: profile, error: profileError }, { data: positions, error: posError }, { data: providerSettings, error: providerSettingsError }] = await Promise.all([
     supabase.from("fiskalo_organizations").select("nui,legal_name,municipality").eq("id", organizationId).single(),
     supabase.from("fiskalo_atk_taxpayer_profiles").select("fiscalization_number").eq("organization_id", organizationId).maybeSingle(),
     supabase.from("fiskalo_atk_pos_installations")
       .select("id,atk_branch_id,pos_id,label,location,environment,status")
       .eq("organization_id", organizationId).eq("environment", "test")
       .order("created_at", { ascending: false }),
+    supabase.from("fiskalo_atk_provider_settings").select("application_id").eq("singleton", true).maybeSingle(),
   ]);
   if (orgError || !org) throw new Error("Nuk u lexuan të dhënat e biznesit.");
+  if (providerSettingsError) throw new Error("Konfigurimi ATK i ofruesit nuk u lexua: " + providerSettingsError.message);
   if (profileError || !profile?.fiscalization_number) {
     return { ready: false, message: "Ruaje numrin e fiskalizimit TEST një herë te konfigurimi i ATK-së." };
   }
@@ -51,7 +53,8 @@ async function runEnsureATKTestPosReady(
   const applicationStorageKey = "fiskalo-atk-application-id:" + organizationId;
   const savedApplicationId = window.localStorage.getItem(applicationStorageKey);
   // 929645146946 was an old placeholder, not the application ID supplied for this ATK TEST account.
-  let applicationId = Number(savedApplicationId && savedApplicationId !== "929645146946" ? savedApplicationId : "457818860373");
+  const configuredApplicationId = Number(providerSettings?.application_id ?? 0);
+  let applicationId = configuredApplicationId > 0 ? configuredApplicationId : Number(savedApplicationId && savedApplicationId !== "929645146946" ? savedApplicationId : "457818860373");
   const orderedPositions = [...positions]
     .filter((candidate) => candidate.status !== "suspended" && candidate.status !== "revoked")
     .sort((a, b) => Number(a.atk_branch_id) - Number(b.atk_branch_id) || Number(a.pos_id) - Number(b.pos_id));
