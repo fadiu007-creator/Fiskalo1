@@ -170,9 +170,22 @@ export async function POST(request: Request) {
     try { result = JSON.parse(raw) as Record<string, unknown>; } catch { /* checked below */ }
     if (!response.ok) {
       const detail = readableProviderMessage(result, readableProviderMessage(raw, "ATK rejected the TEST coupon."));
-      await supabase.from("fiskalo_atk_fiscal_documents").update({ status: "rejected", last_error: detail, atk_response: result }).eq("id", fiscalDocument.id);
-      await supabase.from("fiskalo_atk_fiscal_events").insert({ organization_id: organizationId, fiscal_document_id: fiscalDocument.id, event_type: "rejected", details: { httpStatus: response.status, detail } });
-      return Response.json({ error: "atk_coupon_rejected", detail, atkStatus: response.status, fiscalDocumentId: fiscalDocument.id }, { status: 502 });
+      // A 4xx is a definitive rejection. A 5xx is ambiguous: ATK may have persisted
+      // the coupon before failing to produce the response, so never label it rejected.
+      const definitiveRejection = response.status >= 400 && response.status < 500;
+      const fiscalStatus = definitiveRejection ? "rejected" : "offline_pending";
+      const eventType = definitiveRejection ? "rejected" : "response_unconfirmed";
+      await supabase.from("fiskalo_atk_fiscal_documents").update({
+        status: fiscalStatus, last_error: detail, atk_response: result,
+      }).eq("id", fiscalDocument.id);
+      await supabase.from("fiskalo_atk_fiscal_events").insert({
+        organization_id: organizationId, fiscal_document_id: fiscalDocument.id, event_type: eventType,
+        details: { httpStatus: response.status, detail, requiresReconciliation: !definitiveRejection },
+      });
+      return Response.json({
+        error: definitiveRejection ? "atk_coupon_rejected" : "atk_response_unconfirmed",
+        detail, atkStatus: response.status, fiscalDocumentId: fiscalDocument.id,
+      }, { status: 502 });
     }
     const transactionId = parseATKTransactionId(raw);
     if (!transactionId) {
