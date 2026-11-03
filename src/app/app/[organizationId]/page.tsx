@@ -118,7 +118,7 @@ export default function BusinessDashboard() {
       if (productResult.error || customerResult.error || invoiceResult.error || expenseResult.error || supplierResult.error || purchaseResult.error || atkProfileResult.error || atkPosResult.error) setError("Disa të dhëna nuk u ngarkuan. Rifresko faqen.");
     }
     setLoading(false);
-  }, [organizationId, supabase]);
+  }, [organizationId, router, supabase]);
 
   useEffect(() => { void load(); }, [load]);
 
