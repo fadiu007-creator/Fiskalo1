@@ -60,7 +60,7 @@ revoke all on sequence public.fiskalo_atk_coupon_id_seq from public, anon;
 grant usage, select on sequence public.fiskalo_atk_coupon_id_seq to authenticated;
 
 create or replace function public.fiskalo_next_atk_coupon_id()
-returns bigint language plpgsql security definer set search_path = public, pg_temp
+returns bigint language plpgsql security invoker set search_path = public, pg_temp
 as $$
 begin
   if auth.uid() is null then raise exception 'Authentication required'; end if;
