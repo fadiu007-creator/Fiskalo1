@@ -350,7 +350,7 @@ export default function App() {
     setError(""); setMessage("");
     if (!atkFiscalizationNumber.trim() || !/^\d{9}$/.test(organizationNui) ||
         !/^\d{1,20}$/.test(atkBranchId) || !/^\d{1,20}$/.test(atkPosId) ||
-        !/^\\d+$/.test(atkApplicationId)) {
+        !/^\d+$/.test(atkApplicationId)) {
       setError("Plotëso numrin e fiskalizimit për TEST, Application ID, NUI, ID e njësisë dhe POS ID sipas emailit/udhëzimeve të ATK-së.");
       return;
     }
@@ -360,7 +360,7 @@ export default function App() {
       const token = sessionData.session?.access_token;
       if (!token) throw new Error("Sesioni ka skaduar. Hyr përsëri.");
       const apiBase = androidAtkApiBase();
-      const posInstallationId = await getAndroidTestPosInstallationId();
+      const posInstallationId = await getAndroidTestPosInstallation().then((pos) => pos.id);
       const response = await fetch(apiBase.replace(/\/$/, "") + "/api/atk/test/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
@@ -395,7 +395,7 @@ export default function App() {
       const token = sessionData.session?.access_token;
       if (!token) throw new Error("Sesioni ka skaduar. Hyr përsëri.");
       const apiBase = androidAtkApiBase();
-      const posInstallationId = await getAndroidTestPosInstallationId();
+      const posInstallationId = await getAndroidTestPosInstallation().then((pos) => pos.id);
       const response = await fetch(apiBase.replace(/\/$/, "") + "/api/atk/test/sign-csr", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
