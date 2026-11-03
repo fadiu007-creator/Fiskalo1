@@ -30,3 +30,84 @@ button:disabled { opacity: .6; cursor: not-allowed !important; }
   main { max-width: none !important; padding: 0 !important; }
   section, article { break-inside: avoid; box-shadow: none !important; }
 }
+
+
+/* Fiskalo POS design refresh */
+:root {
+  --canvas: #f6f8f7;
+  --surface: #ffffff;
+  --line: #e7ece9;
+  --brand: #137a55;
+  --brand-dark: #0c5d40;
+  --muted: #66736d;
+  --ink: #17231f;
+}
+body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+button, a, input, select { -webkit-tap-highlight-color: transparent; }
+button { transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 3px solid rgba(19,122,85,.18); outline-offset: 2px;
+}
+.fiskalo-pos, .fiskalo-atk { max-width: 1440px; }
+.fiskalo-pos > header, .fiskalo-atk > header { padding: 4px 0 18px; }
+.fiskalo-pos h1, .fiskalo-atk h1 { letter-spacing: -.035em; font-weight: 780; }
+.fiskalo-pos > header a, .fiskalo-atk > header a { font-size: 13px; }
+.fiskalo-pos button, .fiskalo-atk button {
+  border-radius: 11px !important;
+  font-weight: 650 !important;
+}
+.fiskalo-pos button:hover:not(:disabled), .fiskalo-atk button:hover:not(:disabled) {
+  filter: brightness(.985); box-shadow: 0 3px 12px rgba(22,44,34,.08);
+}
+.fiskalo-pos button:active:not(:disabled), .fiskalo-atk button:active:not(:disabled) { transform: translateY(1px); }
+.fiskalo-pos input, .fiskalo-pos select, .fiskalo-atk input, .fiskalo-atk select {
+  min-height: 42px; border-radius: 10px !important; border-color: #dfe7e2 !important;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.fiskalo-pos input:focus, .fiskalo-pos select:focus, .fiskalo-atk input:focus, .fiskalo-atk select:focus {
+  border-color: var(--brand) !important; box-shadow: 0 0 0 3px rgba(19,122,85,.10); outline: 0;
+}
+.fiskalo-pos .pos-layout > section, .fiskalo-pos .pos-layout > aside,
+.fiskalo-pos > section, .fiskalo-atk > section {
+  border: 1px solid #e7ece9 !important; border-radius: 16px !important;
+  box-shadow: 0 5px 24px rgba(24,44,34,.045);
+}
+.fiskalo-pos .pos-layout > section > div[style*="grid-template-columns"] > button {
+  min-height: 112px !important; padding: 14px !important; border-radius: 13px !important;
+  background: #fff !important; border-color: #e5ebe7 !important;
+}
+.fiskalo-pos .pos-layout > section > div[style*="grid-template-columns"] > button:hover {
+  border-color: rgba(19,122,85,.55) !important; background: #f8fcfa !important;
+}
+.fiskalo-pos nav { gap: 6px !important; border-bottom-color: #e7ece9 !important; }
+.fiskalo-pos nav button { min-width: 112px; }
+.fiskalo-pos table, .fiskalo-atk table { border-collapse: separate !important; border-spacing: 0; }
+.fiskalo-pos th, .fiskalo-atk th {
+  color: #718078; font-size: 11px; text-transform: uppercase; letter-spacing: .045em;
+  background: #f8faf9;
+}
+.fiskalo-pos td, .fiskalo-atk td { border-bottom: 1px solid #edf1ee; }
+.fiskalo-pos tr:last-child td, .fiskalo-atk tr:last-child td { border-bottom: 0; }
+.fiskalo-pos .invoice-search { max-width: 360px; }
+.fiskalo-pos .status-pill, .fiskalo-atk .status-pill {
+  display: inline-flex; align-items: center; border-radius: 999px; padding: 5px 9px;
+  font-size: 11px; font-weight: 700; white-space: nowrap; background: #f0f3f1; color: #58665f;
+}
+.fiskalo-pos .status-pill.paid, .fiskalo-atk .status-pill.accepted { background: #e8f6ee; color: #17633f; }
+.fiskalo-pos .status-pill.unpaid, .fiskalo-atk .status-pill.queued { background: #fff5df; color: #875b0a; }
+.fiskalo-atk .status-pill.rejected { background: #fff0ee; color: #a23b31; }
+.fiskalo-pos .alert, .fiskalo-atk .alert { border-radius: 12px !important; border: 1px solid transparent; }
+.fiskalo-pos .pos-layout aside { box-shadow: 0 8px 30px rgba(24,44,34,.07); }
+.fiskalo-pos .cart-empty { border: 1px dashed #dce5df; border-radius: 12px; background: #fafcfb; }
+@media (max-width: 760px) {
+  .fiskalo-pos, .fiskalo-atk { padding-left: 12px !important; padding-right: 12px !important; }
+  .fiskalo-pos h1, .fiskalo-atk h1 { font-size: 23px !important; }
+  .fiskalo-pos .pos-layout aside { position: static !important; }
+  .fiskalo-pos .pos-layout > section, .fiskalo-pos .pos-layout > aside,
+  .fiskalo-pos > section, .fiskalo-atk > section { padding: 13px !important; }
+  .fiskalo-pos .invoice-search { max-width: none; width: 100%; }
+  .fiskalo-pos table, .fiskalo-atk table { min-width: 620px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  button, a, input, select { transition: none !important; }
+}
