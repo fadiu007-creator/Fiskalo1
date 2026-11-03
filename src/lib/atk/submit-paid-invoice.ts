@@ -41,10 +41,7 @@ export async function submitPaidInvoiceToATK(
   if (invoice.status !== "issued" || invoice.payment_status !== "paid") {
     return { status: "not_due", message: "Fatura nuk është ende plotësisht e paguar." };
   }
-  if (invoice.payment_method !== "cash") {
-    return { status: "payment_method_not_configured", message: "Dërgimi automatik në ATK për këtë mënyrë pagese nuk është konfiguruar ende. MVP aktualisht mbështet para në dorë." };
-  }
-
+  
   const { data: existing, error: existingError } = await supabase.from("fiskalo_atk_fiscal_documents")
     .select("id,status,atk_transaction_id").eq("organization_id", organizationId)
     .eq("source_invoice_id", invoiceId).maybeSingle();
@@ -54,17 +51,28 @@ export async function submitPaidInvoiceToATK(
       message: existing.status === "accepted" ? "Fatura është pranuar tashmë nga ATK." : "Kjo faturë tashmë ka një dërgesë ATK (" + existing.status + "). Nuk u krijua kupon i dytë." };
   }
 
-  const [{ data: org, error: orgError }, { data: positions, error: posError }, { data: lines, error: linesError }] = await Promise.all([
+  const [{ data: org, error: orgError }, { data: positions, error: posError }, { data: lines, error: linesError }, { data: paymentRows, error: paymentsError }] = await Promise.all([
     supabase.from("fiskalo_organizations").select("nui,municipality").eq("id", organizationId).single(),
     supabase.from("fiskalo_atk_pos_installations").select("id,atk_branch_id,pos_id,label,location,environment,status")
       .eq("organization_id", organizationId).eq("environment", "test").eq("status", "active")
       .order("created_at", { ascending: false }),
     supabase.from("fiskalo_invoice_items").select("id,product_id,description,quantity,unit_price,line_subtotal,line_vat,vat_rate")
       .eq("invoice_id", invoiceId),
+    supabase.from("fiskalo_invoice_payments").select("amount,payment_method").eq("invoice_id", invoiceId).order("created_at"),
   ]);
   if (orgError || !org || !/^\\d{9}$/.test(String(org.nui))) throw new Error("NUI i biznesit mungon ose nuk është valid.");
   if (posError || !positions?.length) throw new Error("Nuk ka POS TEST aktiv. Përfundo konfigurimin dhe certifikimin një herë.");
   if (linesError || !lines?.length) throw new Error("Fatura nuk ka artikuj të lexueshëm.");
+  if (paymentsError || !paymentRows?.length) throw new Error("Nuk u lexua evidenca e pagesave të faturës.");
+  const paymentType: Record<string, number> = { cash: 1, card: 2, bank_transfer: 6 };
+  const paymentTotals = new Map<number, number>();
+  for (const payment of paymentRows) {
+    const type = paymentType[payment.payment_method];
+    if (!type) throw new Error("Mënyra e pagesës " + payment.payment_method + " nuk ka kod të konfiguruar për ATK.");
+    paymentTotals.set(type, (paymentTotals.get(type) ?? 0) + Math.round(Number(payment.amount) * 100));
+  }
+  const paymentCents = Array.from(paymentTotals.values()).reduce((sum, amount) => sum + amount, 0);
+  if (paymentCents !== Math.round(Number(invoice.total) * 100)) throw new Error("Totali i pagesave nuk përputhet me totalin e faturës.");
 
   let pos: (typeof positions)[number] | null = null;
   let verification: { nui: string; atk_branch_id: number; pos_id: number; application_id: number } | null = null;
@@ -93,7 +101,7 @@ export async function submitPaidInvoiceToATK(
       .eq("organization_id", organizationId).in("id", productIds)
     : { data: [], error: null };
   if (productsError) throw new Error("Kodet ATK të produkteve nuk u lexuan: " + productsError.message);
-  const productMap = new Map((products ?? []).map((product) => [product.id, product]));
+  const productMap = new Map<string, { id: string; atk_unit_code: string | null; atk_tax_code: string | null; atk_item_category_code: string | null }>((products ?? []).map((product) => [product.id, product] as const));
   const itemRows = lines.map((line) => {
     const product = line.product_id ? productMap.get(line.product_id) : null;
     const unit = product?.atk_unit_code?.trim() ?? "";
@@ -125,7 +133,7 @@ export async function submitPaidInvoiceToATK(
     location: pos.location || org.municipality || "",
     operatorId: auth.user.id, posId: pos.pos_id, applicationId: Number(verification.application_id),
     verificationNo: createCouponVerificationNo(), type: 1, unixTime: Math.floor(Date.now() / 1000),
-    items, payments: [{ type: 1, amountCents: totalCents }], totalCents,
+    items, payments: Array.from(paymentTotals.entries()).map(([type, amountCents]) => ({ type, amountCents })), totalCents,
     taxGroups: Array.from(grouped.entries()).map(([taxRate, values]) => ({ taxRate, ...values })),
     totalTaxCents: Math.round(Number(invoice.vat_total) * 100),
     totalNoTaxCents: Math.round(Number(invoice.subtotal) * 100),
