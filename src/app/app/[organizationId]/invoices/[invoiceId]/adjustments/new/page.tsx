@@ -37,10 +37,10 @@ export default async function NewInvoiceAdjustmentPage({params,searchParams}:Pro
       <p style={{fontSize:13,color:"var(--muted)"}}>Kërkohet faturë e lëshuar dhe plotësisht e paguar, me kupon origjinal të pranuar nga ATK.</p>
     </section> : <section style={{padding:18,border:"1px solid var(--line)",borderRadius:12,background:"white"}}>
       {prior?.length ? <div style={{padding:12,background:"#f5f7fa",borderRadius:9,marginBottom:14,fontSize:12}}>
-        **Kërkesat paraprake**<br/>{prior.map(row=><div key={row.id} style={{paddingTop:6}}>{row.adjustment_type==="cancel"?"Anulim":"Kthim"} · {Number(row.amount).toFixed(2)} € · {row.status}</div>)}<br/>
+        <strong>Kërkesat paraprake</strong><br/>{prior.map(row=><div key={row.id} style={{paddingTop:6}}>{row.adjustment_type==="cancel"?"Anulim":"Kthim"} · {Number(row.amount).toFixed(2)} € · {row.status}</div>)}<br/>
         Shuma e regjistruar: {priorAmount.toFixed(2)} € / {Number(invoice.total).toFixed(2)} €
       </div>:null}
-      <AdjustmentRequestForm organizationId={organizationId} invoiceId={invoiceId} total={Number(invoice.total)}
+      <AdjustmentRequestForm invoiceId={invoiceId} total={Number(invoice.total)}
         kind={kind} invoiceNumber={invoice.invoice_number||invoice.id} couponId={String(fiscalDoc.coupon_id)}
         transactionId={String(fiscalDoc.atk_transaction_id)}/>
     </section>}
