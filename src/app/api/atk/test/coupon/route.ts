@@ -49,6 +49,18 @@ function readableProviderMessage(value: unknown, fallback: string): string {
   return fallback;
 }
 
+function parseATKTransactionId(raw: string): string | null {
+  // Preserve the exact uint64 decimal digits: JavaScript Number loses precision above 2^53-1.
+  const match = raw.match(/"transaction_id"\\s*:\\s*(?:"([0-9]+)"|([0-9]+))/);
+  const value = match?.[1] ?? match?.[2];
+  if (!value) return null;
+  try {
+    const parsed = BigInt(value);
+    if (parsed <= BigInt(0) || parsed > BigInt("18446744073709551615")) return null;
+    return parsed.toString();
+  } catch { return null; }
+}
+
 function isBase64(value: string): boolean {
   if (!value || value.length > 2_000_000 || value.length % 4 !== 0) return false;
   return /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value);
@@ -162,17 +174,22 @@ export async function POST(request: Request) {
       await supabase.from("fiskalo_atk_fiscal_events").insert({ organization_id: organizationId, fiscal_document_id: fiscalDocument.id, event_type: "rejected", details: { httpStatus: response.status, detail } });
       return Response.json({ error: "atk_coupon_rejected", detail, atkStatus: response.status, fiscalDocumentId: fiscalDocument.id }, { status: 502 });
     }
-    const transactionId = positiveInteger(result.transaction_id);
+    const transactionId = parseATKTransactionId(raw);
     if (!transactionId) {
-      const detail = "ATK returned a successful HTTP status but no valid transaction_id. The coupon is not marked accepted.";
-      await supabase.from("fiskalo_atk_fiscal_documents").update({ status: "rejected", last_error: detail, atk_response: result }).eq("id", fiscalDocument.id);
-      await supabase.from("fiskalo_atk_fiscal_events").insert({ organization_id: organizationId, fiscal_document_id: fiscalDocument.id, event_type: "rejected", details: { detail } });
-      return Response.json({ error: "atk_unexpected_response", detail, fiscalDocumentId: fiscalDocument.id }, { status: 502 });
+      const detail = "ATK returned HTTP success but its response did not contain a valid uint64 transaction_id. Check ATK before retrying.";
+      await supabase.from("fiskalo_atk_fiscal_documents").update({ status: "offline_pending", last_error: detail, atk_response: result }).eq("id", fiscalDocument.id);
+      await supabase.from("fiskalo_atk_fiscal_events").insert({ organization_id: organizationId, fiscal_document_id: fiscalDocument.id, event_type: "response_unconfirmed", details: { detail, httpStatus: response.status } });
+      return Response.json({ error: "atk_response_unconfirmed", detail, fiscalDocumentId: fiscalDocument.id }, { status: 502 });
     }
-    await supabase.from("fiskalo_atk_fiscal_documents").update({
+    // Persist the exact decimal digits as a string so neither JS nor JSON serialization rounds the uint64.
+    result.transaction_id = transactionId;
+    const { error: acceptedUpdateError } = await supabase.from("fiskalo_atk_fiscal_documents").update({
       status: "accepted", atk_transaction_id: transactionId, atk_response: result,
       accepted_at: new Date().toISOString(), last_error: null,
     }).eq("id", fiscalDocument.id).eq("organization_id", organizationId);
+    if (acceptedUpdateError) {
+      return Response.json({ error: "accepted_status_save_failed", detail: "ATK accepted the coupon, but Fiskalo could not save the acceptance status. Do not resubmit this invoice.", fiscalDocumentId: fiscalDocument.id, transactionId }, { status: 500 });
+    }
     await supabase.from("fiskalo_atk_fiscal_events").insert({
       organization_id: organizationId, fiscal_document_id: fiscalDocument.id,
       event_type: "accepted", details: { transactionId, environment: "TEST" },
