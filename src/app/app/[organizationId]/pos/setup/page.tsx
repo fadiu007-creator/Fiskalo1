@@ -61,6 +61,12 @@ export default function WebPosSetupPage() {
     if (saved) setApplicationId(saved);
   }, [organizationId]);
   useEffect(() => {
+    const used = positions.filter((pos) => pos.atk_branch_id === Number(form.branch)).map((pos) => pos.pos_id);
+    if (used.includes(Number(form.pos))) {
+      setForm((current) => current.pos === form.pos ? { ...current, pos: String(Math.max(0, ...used) + 1) } : current);
+    }
+  }, [positions, form.branch]);
+  useEffect(() => {
     let cancelled = false;
     if (!selected) { setKeyReady(false); setCertificateReady(false); return; }
     void Promise.all([
