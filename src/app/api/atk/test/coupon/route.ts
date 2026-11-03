@@ -122,8 +122,11 @@ export async function POST(request: Request) {
     return Response.json({ error: "invoice_total_mismatch", detail: "The signed coupon total does not match the issued Fiskalo invoice." }, { status: 409 });
   }
 
-  const { data: existing } = await supabase.from("fiskalo_atk_fiscal_documents")
+  const { data: existing, error: existingLookupError } = await supabase.from("fiskalo_atk_fiscal_documents")
     .select("id,status,atk_transaction_id").eq("organization_id", organizationId).eq("source_invoice_id", invoiceId).maybeSingle();
+  if (existingLookupError) {
+    return Response.json({ error: "fiscal_document_lookup_failed", detail: "Could not check whether this invoice already has an ATK document. No new coupon was sent." }, { status: 500 });
+  }
   if (existing) {
     return Response.json({ error: "invoice_already_submitted", fiscalDocumentId: existing.id, status: existing.status, transactionId: existing.atk_transaction_id }, { status: 409 });
   }
@@ -146,6 +149,19 @@ export async function POST(request: Request) {
   }).select("id").single();
 
   if (insertError || !fiscalDocument) {
+    // A concurrent checkout/retry may have won the unique invoice constraint.
+    // Return its ledger state instead of exposing a generic failure or submitting twice.
+    if (insertError?.code === "23505") {
+      const { data: racedDocument } = await supabase.from("fiskalo_atk_fiscal_documents")
+        .select("id,status,atk_transaction_id").eq("organization_id", organizationId)
+        .eq("source_invoice_id", invoiceId).maybeSingle();
+      if (racedDocument) {
+        return Response.json({
+          error: "invoice_already_submitted", fiscalDocumentId: racedDocument.id,
+          status: racedDocument.status, transactionId: racedDocument.atk_transaction_id,
+        }, { status: 409 });
+      }
+    }
     return Response.json({ error: "fiscal_document_save_failed", detail: insertError?.message ?? "Could not save the ATK TEST document." }, { status: 500 });
   }
 
