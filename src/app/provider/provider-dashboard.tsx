@@ -72,7 +72,7 @@ export default function ProviderDashboard({
 
   async function saveSettings(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!config) return;
+    if (!config || role !== "provider_admin") return;
     setSaving(true); setError(""); setMessage("");
     const { error: saveError } = await supabase.from("fiskalo_atk_provider_settings").update({
       provider_nui: config.provider_nui?.trim() || null,
@@ -96,7 +96,7 @@ export default function ProviderDashboard({
         <a className="provider-nav-item active" href="#overview"><LayoutDashboard size={17}/> Përmbledhja</a>
         <a className="provider-nav-item" href="#businesses"><Building2 size={17}/> Bizneset <span>{businesses.length}</span></a>
         <a className="provider-nav-item" href="#devices"><Cpu size={17}/> POS instalimet <span>{posDevices.length}</span></a>
-        <button className="provider-nav-item" onClick={() => setShowSettings((v) => !v)}><Settings2 size={17}/> Konfigurimi ATK</button>
+        {role !== "provider_support" && <button className="provider-nav-item" onClick={() => setShowSettings((v) => !v)}><Settings2 size={17}/> Konfigurimi ATK</button>}
         <div className="provider-sidebar-bottom">
           <div className="provider-account"><span className="provider-avatar">{userEmail.slice(0,1).toUpperCase() || "F"}</span><div><strong>{role === "provider_admin" ? "Administrator" : role === "provider_support" ? "Mbështetje" : "Përputhshmëri"}</strong><small>{userEmail}</small></div></div>
           <button type="button" className="provider-signout" onClick={signOut}>Dil nga llogaria</button>
