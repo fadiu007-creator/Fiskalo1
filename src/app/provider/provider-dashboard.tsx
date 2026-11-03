@@ -73,7 +73,6 @@ export default function ProviderDashboard({
       solution_name: config.solution_name.trim(),
       solution_version: config.solution_version.trim(),
       certification_status: config.certification_status,
-      production_enabled: config.production_enabled && config.certification_status === "certified",
       updated_at: new Date().toISOString(),
     }).eq("singleton", true);
     setSaving(false);
@@ -134,8 +133,8 @@ export default function ProviderDashboard({
             <label>Kodi i zgjidhjes (SEF)<input style={inputStyle} value={config.sef_code ?? ""} onChange={(e) => setConfig({...config,sef_code:e.target.value})} disabled={role !== "provider_admin"}/></label>
             <label>Emri i softuerit<input style={inputStyle} value={config.solution_name} onChange={(e) => setConfig({...config,solution_name:e.target.value})} disabled={role !== "provider_admin"}/></label>
             <label>Versioni<input style={inputStyle} value={config.solution_version} onChange={(e) => setConfig({...config,solution_version:e.target.value})} disabled={role !== "provider_admin"}/></label>
-            <label>Statusi i certifikimit<select style={inputStyle} value={config.certification_status} onChange={(e) => setConfig({...config,certification_status:e.target.value,production_enabled:e.target.value === "certified" ? config.production_enabled : false})} disabled={role !== "provider_admin"}><option value="not_applied">Nuk është aplikuar</option><option value="testing">Në testim</option><option value="submitted">Dërguar për certifikim</option><option value="certified">E certifikuar</option><option value="suspended">Pezulluar</option></select></label>
-            <label className="provider-toggle"><input type="checkbox" checked={config.production_enabled} onChange={(e) => setConfig({...config,production_enabled:e.target.checked})} disabled={role !== "provider_admin" || config.certification_status !== "certified"}/> Aktivizo ambientin PRODUCTION (vetëm pas certifikimit)</label>
+            <label>Statusi i certifikimit<select style={inputStyle} value={config.certification_status} onChange={(e) => setConfig({...config,certification_status:e.target.value})} disabled={role !== "provider_admin"}><option value="not_applied">Nuk është aplikuar</option><option value="testing">Në testim</option><option value="submitted">Dërguar për certifikim</option><option value="certified">E certifikuar</option><option value="suspended">Pezulluar</option></select></label>
+            <div className="provider-toggle" role="note"><ShieldCheck size={16}/> Prodhimi mbetet i çaktivizuar në këtë version. Aktivizimi kërkon integrim dhe certifikim zyrtar të veçantë nga ATK.</div>
             {role === "provider_admin" && <button className="provider-primary" disabled={saving}>{saving ? "Duke ruajtur…" : "Ruaj konfigurimin"}</button>}
           </form> : <div className="provider-alert">Nuk ke qasje për të lexuar konfigurimin e ofruesit.</div>}
           {(error || message) && <p className={"provider-feedback " + (error ? "bad" : "good")}>{error || message}</p>}
