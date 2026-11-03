@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { encodeAtkBase64, encodeAtkPosCoupon } from "@/lib/atk/protobuf";
 import { hasBrowserPosCertificate, signAtkBase64Payload } from "@/lib/atk/browser-key-vault";
-import { ArrowLeft, CheckCircle2, RefreshCw, Send, ShieldCheck } from "lucide-react";
+import { ArrowLeft, CheckCircle2, RefreshCw, ShieldCheck } from "lucide-react";
 
 type Invoice = { id: string; invoice_number: string | null; issue_date: string; status: string; payment_status: string; payment_method: string; subtotal: number; vat_total: number; total: number };
 type Line = { id: string; product_id: string | null; description: string; quantity: number; unit_price: number; line_subtotal: number; line_vat: number };
@@ -218,7 +218,7 @@ export default function AtkTestPosPage() {
           <tbody>{documents.map((doc) => <tr key={doc.id} style={{ borderTop: "1px solid var(--line)" }}>
             <td style={{ padding: 8 }}>{new Date(doc.created_at).toLocaleString("sq-XK")}</td>
             <td style={{ padding: 8 }}>{doc.coupon_id}</td>
-            <td style={{ padding: 8 }}>{({ queued: "Në radhë", submitted: "Dërguar", accepted: "Pranuar", rejected: "Refuzuar", offline_pending: "Në pritje – kontrollo ATK", draft: "Draft" } as Record<string,string>)[doc.status] || doc.status}</td>
+            <td style={{ padding: 8 }}><span className={"status-pill " + (doc.status === "accepted" ? "accepted" : doc.status === "rejected" ? "rejected" : doc.status === "queued" || doc.status === "offline_pending" ? "queued" : "")}>{({ queued: "Në radhë", submitted: "Dërguar", accepted: "Pranuar", rejected: "Refuzuar", offline_pending: "Në pritje – kontrollo ATK", draft: "Draft" } as Record<string,string>)[doc.status] || doc.status}</span></td>
             <td style={{ padding: 8, textAlign: "right" }}>{Number(doc.total).toFixed(2)} €</td>
             <td style={{ padding: 8, maxWidth: 280, overflowWrap: "anywhere" }}>{doc.atk_transaction_id || doc.last_error || "—"}</td>
           </tr>)}{!documents.length && <tr><td colSpan={5} style={{ padding: 10, color: "var(--muted)" }}>Nuk ka kupona të dërguar nga ky POS TEST.</td></tr>}</tbody>
