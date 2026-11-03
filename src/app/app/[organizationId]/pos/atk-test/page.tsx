@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { encodeAtkBase64, encodeAtkPosCoupon } from "@/lib/atk/protobuf";
 import { hasBrowserPosCertificate, signAtkBase64Payload } from "@/lib/atk/browser-key-vault";
+import { ArrowLeft, CheckCircle2, RefreshCw, Send, ShieldCheck } from "lucide-react";
 
 type Invoice = { id: string; invoice_number: string | null; issue_date: string; status: string; payment_status: string; payment_method: string; subtotal: number; vat_total: number; total: number };
 type Line = { id: string; product_id: string | null; description: string; quantity: number; unit_price: number; line_subtotal: number; line_vat: number };
@@ -176,24 +177,24 @@ export default function AtkTestPosPage() {
 
   if (loading) return <main style={{ maxWidth: 1000, margin: "0 auto", padding: 24 }}>Duke ngarkuar POS TEST...</main>;
 
-  return <main style={{ maxWidth: 1000, margin: "0 auto", padding: "22px 16px 50px" }}>
+  return <main className="fiskalo-atk" style={{ maxWidth: 1000, margin: "0 auto", padding: "22px 16px 50px" }}>
     <header style={{ marginBottom: 18 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}><Link href={`/app/${organizationId}/pos`} style={{ color: "var(--brand)", fontWeight: 750 }}>← Kthehu te POS</Link><Link href={`/app/${organizationId}/pos/setup`} style={{ color: "var(--brand)", fontWeight: 750 }}>Regjistro / certifiko POS →</Link></div>
-      <h1 style={{ margin: "10px 0 4px", fontSize: 26 }}>Dërgo kupon në ATK TEST</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}><Link href={`/app/${organizationId}/pos`} style={{ color: "var(--brand)", fontWeight: 750 }}><ArrowLeft size={15} /> Kthehu te arka</Link><Link href={`/app/${organizationId}/pos/setup`} style={{ color: "var(--brand)", fontWeight: 750 }}>Regjistro / certifiko POS →</Link></div>
+      <h1 style={{ margin: "10px 0 4px", fontSize: 27 }}>Kuponët testues</h1>
       <p style={{ color: "var(--muted)", fontSize: 13 }}>Ky ekran dërgon një shitje testuese të paguar me para në dorë nga një faturë e lëshuar në mjedisin TEST të ATK-së. Përdor vetëm artikuj dhe shuma testuese, jo shitje reale të klientëve. Nuk prek prodhimin.</p>
     </header>
     {error && <div role="alert" style={{ background: "#fff0ef", color: "#982d25", borderRadius: 9, padding: 12, marginBottom: 12 }}>{error}</div>}
     {notice && <div role="status" style={{ background: "#edf7f1", color: "#155c3c", borderRadius: 9, padding: 12, marginBottom: 12 }}>{notice}</div>}
-    {result && <section style={{ ...panel, marginBottom: 14 }}><strong>Kuponi u pranua në ATK TEST</strong><p>Transaction ID: <strong>{String(result.transactionId)}</strong></p><small>Dokumenti Fiskalo: {String(result.fiscalDocumentId)}</small></section>}
+    {result && <section style={{ ...panel, marginBottom: 14 }}><strong><CheckCircle2 size={17} /> Kuponi u pranua në ATK TEST</strong><p>Transaction ID: <strong>{String(result.transactionId)}</strong></p><small>Dokumenti Fiskalo: {String(result.fiscalDocumentId)}</small></section>}
     <section style={{ ...panel, display: "grid", gap: 12 }}>
-      <div><strong>1. Identifikimi i POS-it</strong><div style={{ color: "var(--muted)", fontSize: 12 }}>NUI: {nui || "—"} · Numri i fiskalizimit: {fiscalizationNumber || "Nuk është ruajtur"}</div></div>
+      <div><strong><ShieldCheck size={17} /> 1. POS-i testues</strong><div style={{ color: "var(--muted)", fontSize: 12 }}>NUI: {nui || "—"} · Numri i fiskalizimit: {fiscalizationNumber || "Nuk është ruajtur"}</div></div>
       <label>POS TEST<select value={posId} onChange={(e) => setPosId(e.target.value)} style={field}><option value="">Zgjidh POS</option>{positions.map((p) => <option key={p.id} value={p.id}>{p.label} · Njësia {p.atk_branch_id} · POS {p.pos_id}</option>)}</select></label>
       <label>Application ID<input value={applicationId} onChange={(e) => setApplicationId(e.target.value)} inputMode="numeric" style={field} /></label>
       <label>Lokacioni për kupon<input value={location} onChange={(e) => setLocation(e.target.value)} placeholder={selectedPos?.location || municipality || "Lokacioni i biznesit"} style={field} /></label>
-      <div><strong>2. Fatura e shitjes</strong><select value={invoiceId} onChange={(e) => setInvoiceId(e.target.value)} style={field}><option value="">Zgjidh faturë të paguar me para në dorë</option>{invoices.map((i) => <option key={i.id} value={i.id}>{i.invoice_number || i.id} · {i.issue_date} · {Number(i.total).toFixed(2)} €</option>)}</select>{!invoices.length && <small style={{ color: "var(--muted)" }}>Nuk ka fatura të lëshuara dhe të paguara me para në dorë.</small>}</div>
+      <div><strong>2. Zgjidh faturën</strong><select value={invoiceId} onChange={(e) => setInvoiceId(e.target.value)} style={field}><option value="">Zgjidh faturë të paguar me para në dorë</option>{invoices.map((i) => <option key={i.id} value={i.id}>{i.invoice_number || i.id} · {i.issue_date} · {Number(i.total).toFixed(2)} €</option>)}</select>{!invoices.length && <small style={{ color: "var(--muted)" }}>Nuk ka fatura të lëshuara dhe të paguara me para në dorë.</small>}</div>
     </section>
     {selectedInvoice && <section style={{ ...panel, marginTop: 12 }}>
-      <strong>3. Kodet e katalogut ATK për artikujt</strong>
+      <strong>3. Kodet e artikujve sipas katalogut ATK</strong>
       <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>Këto kode nuk hamendësohen nga përqindja e TVSH-së. Vendosi sipas katalogut zyrtar ATK. Për produktet e ruajtura, kodet ruhen në kartelën e produktit dhe plotësohen automatikisht në testet e ardhshme.</p>
       <div style={{ display: "grid", gap: 12 }}>{lines.map((line) => <div key={line.id} style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
         <strong>{line.description}</strong><small style={{ display: "block", color: "var(--muted)" }}>{line.quantity} × {Number(line.unit_price).toFixed(2)} € · Neto {Number(line.line_subtotal).toFixed(2)} € · TVSH {Number(line.line_vat).toFixed(2)} €</small>
@@ -209,7 +210,7 @@ export default function AtkTestPosPage() {
     <section style={{ ...panel, marginTop: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <strong>Kuponët e fundit ATK TEST</strong>
-        <div style={{ display: "flex", gap: 10 }}><button type="button" onClick={() => void load()} style={{ ...button, padding: "7px 10px" }}>Rifresko</button><a href="https://apps.atk-ks.org/sefaplikimi/PreApplication/VerifyTests" target="_blank" rel="noreferrer" style={{ color: "var(--brand)", fontWeight: 700, fontSize: 12, alignSelf: "center" }}>Verifiko në ATK ↗</a></div>
+        <div style={{ display: "flex", gap: 10 }}><button type="button" onClick={() => void load()} style={{ ...button, padding: "7px 10px" }}><RefreshCw size={14} /> Rifresko</button><a href="https://apps.atk-ks.org/sefaplikimi/PreApplication/VerifyTests" target="_blank" rel="noreferrer" style={{ color: "var(--brand)", fontWeight: 700, fontSize: 12, alignSelf: "center" }}>Verifiko në ATK ↗</a></div>
       </div>
       <div style={{ overflowX: "auto", marginTop: 10 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
