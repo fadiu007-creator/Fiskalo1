@@ -41,14 +41,20 @@ export default function WebPosSetupPage() {
 
   const load = useCallback(async () => {
     setError("");
-    const [orgRes, profileRes, posRes] = await Promise.all([
+    const [orgRes, profileRes, posRes, providerSettingsRes] = await Promise.all([
       supabase.from("fiskalo_organizations").select("nui,legal_name,municipality").eq("id", organizationId).single(),
       supabase.from("fiskalo_atk_taxpayer_profiles").select("fiscalization_number").eq("organization_id", organizationId).maybeSingle(),
       supabase.from("fiskalo_atk_pos_installations").select("id,atk_branch_id,pos_id,label,location,environment,status,certificate_serial").eq("organization_id", organizationId).eq("environment", "test").order("atk_branch_id", { ascending: true }).order("pos_id", { ascending: true }),
+      supabase.from("fiskalo_atk_provider_settings").select("application_id").eq("singleton", true).maybeSingle(),
     ]);
     if (orgRes.error || !orgRes.data) setError("Nuk u lexuan të dhënat e biznesit.");
     else setOrg(orgRes.data as Organization);
     setProfile((profileRes.data as Profile | null) ?? null);
+    const configuredApplicationId = providerSettingsRes.data?.application_id;
+    if (configuredApplicationId) {
+      setApplicationId(String(configuredApplicationId));
+      window.localStorage.setItem("fiskalo-atk-application-id:" + organizationId, String(configuredApplicationId));
+    }
     setFiscalizationNumber(profileRes.data?.fiscalization_number ?? "");
     const list = (posRes.data ?? []) as Pos[];
     setPositions(list);
@@ -56,17 +62,6 @@ export default function WebPosSetupPage() {
   }, [organizationId, supabase]);
 
   useEffect(() => { void load(); }, [load]);
-  useEffect(() => {
-    const storageKey = "fiskalo-atk-application-id:" + organizationId;
-    const saved = window.localStorage.getItem(storageKey);
-    // Replace the obsolete placeholder with the real ATK TEST application ID supplied for this account.
-    if (!saved || saved === "929645146946") {
-      window.localStorage.setItem(storageKey, "457818860373");
-      setApplicationId("457818860373");
-    } else {
-      setApplicationId(saved);
-    }
-  }, [organizationId]);
   useEffect(() => {
     const used = positions.filter((pos) => pos.atk_branch_id === Number(form.branch)).map((pos) => pos.pos_id);
     if (used.length) {
