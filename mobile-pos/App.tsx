@@ -308,7 +308,7 @@ export default function App() {
     const totalCents = Math.round(Number(invoice.total) * 100);
     if (paymentCents !== totalCents) throw new Error("Totali i pagesave nuk përputhet me totalin e faturës.");
 
-    const { data: couponId, error: couponError } = await supabase.rpc("fiskalo_next_atk_coupon_id");
+    const { data: couponId, error: couponError } = await supabase.rpc("fiskalo_next_atk_coupon_id", { target_organization: organizationId });
     if (couponError || !couponId) throw new Error("Nuk u caktua numri unik i kuponit ATK: " + (couponError?.message ?? ""));
     const grouped = new Map<string, { totalForTaxCents: number; totalTaxCents: number }>();
     itemRows.forEach(({ line, tax }) => {
