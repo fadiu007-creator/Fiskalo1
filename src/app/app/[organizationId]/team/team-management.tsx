@@ -18,6 +18,7 @@ const field: React.CSSProperties = { width:"100%", border:"1px solid var(--line)
 export default function TeamManagement({ organizationId }: { organizationId: string }) {
   const supabase = useMemo(() => createClient(), []);
   const [members,setMembers] = useState<Member[]>([]);
+  const [canManageAdministrators,setCanManageAdministrators] = useState(false);
   const [email,setEmail] = useState("");
   const [role,setRole] = useState("cashier");
   const [busy,setBusy] = useState(false);
@@ -25,9 +26,16 @@ export default function TeamManagement({ organizationId }: { organizationId: str
   const [notice,setNotice] = useState("");
   const load = useCallback(async () => {
     setBusy(true); setError("");
-    const { data,error } = await supabase.rpc("fiskalo_list_members",{target_org:organizationId});
+    const [{ data,error }, { data: auth }] = await Promise.all([
+      supabase.rpc("fiskalo_list_members",{target_org:organizationId}),
+      supabase.auth.getUser(),
+    ]);
     if(error) setError(error.message);
-    else setMembers((data ?? []) as Member[]);
+    else {
+      const rows = (data ?? []) as Member[];
+      setMembers(rows);
+      setCanManageAdministrators(Boolean(auth.user && rows.some((member) => member.member_user_id === auth.user?.id && member.member_role === "owner")));
+    }
     setBusy(false);
   },[organizationId,supabase]);
   useEffect(()=>{void load()},[load]);
@@ -63,7 +71,7 @@ export default function TeamManagement({ organizationId }: { organizationId: str
         <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:16}}><Users color="var(--brand)"/><h2 style={{fontSize:17,margin:0}}>Ekipi ({members.length})</h2></div>
         {members.map(member=><div key={member.member_user_id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"13px 0",borderTop:"1px solid var(--line)"}}>
           <div style={{minWidth:0}}><strong style={{display:"block",fontSize:13,overflowWrap:"anywhere"}}>{member.member_email}</strong><span style={{fontSize:12,color:"var(--muted)"}}>{labels[member.member_role] ?? member.member_role}</span></div>
-          {member.member_role!=="owner" && <button aria-label={`Hiq qasjen e ${member.member_email}`} title="Hiq qasjen" onClick={()=>void removeMember(member)} disabled={busy} style={{border:"1px solid #f0d9d6",background:"#fff8f7",color:"#a4473e",borderRadius:9,padding:9,cursor:"pointer"}}><Trash2 size={16}/></button>}
+          {member.member_role!=="owner" && (member.member_role!=="administrator" || canManageAdministrators) && <button aria-label={`Hiq qasjen e ${member.member_email}`} title="Hiq qasjen" onClick={()=>void removeMember(member)} disabled={busy} style={{border:"1px solid #f0d9d6",background:"#fff8f7",color:"#a4473e",borderRadius:9,padding:9,cursor:"pointer"}}><Trash2 size={16}/></button>}
         </div>)}
         {!members.length && !busy && <p style={{color:"var(--muted)",fontSize:13}}>Nuk ka anëtarë të listuar.</p>}
       </div>
@@ -71,8 +79,8 @@ export default function TeamManagement({ organizationId }: { organizationId: str
         <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:15}}><UserPlus color="var(--brand)"/><h2 style={{fontSize:17,margin:0}}>Shto punëtor</h2></div>
         <form onSubmit={addMember} style={{display:"grid",gap:12}}>
           <label style={{fontSize:12,fontWeight:700}}>Email i llogarisë<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="punetori@email.com" style={{...field,display:"block",marginTop:6}}/></label>
-          <label style={{fontSize:12,fontWeight:700}}>Roli<select value={role} onChange={e=>setRole(e.target.value)} style={{...field,display:"block",marginTop:6}}>{roles.map(r=><option key={r.value} value={r.value}>{r.label}</option>)}</select></label>
-          <p style={{fontSize:12,color:"var(--muted)",lineHeight:1.5,margin:0}}>{roles.find(r=>r.value===role)?.description}. Punëtori duhet të ketë krijuar paraprakisht llogari Fiskalo.</p>
+          <label style={{fontSize:12,fontWeight:700}}>Roli<select value={role} onChange={e=>setRole(e.target.value)} style={{...field,display:"block",marginTop:6}}>{roles.filter(r=>r.value!=="administrator" || canManageAdministrators).map(r=><option key={r.value} value={r.value}>{r.label}</option>)}</select></label>
+          <p style={{fontSize:12,color:"var(--muted)",lineHeight:1.5,margin:0}}>{roles.find(r=>r.value===role)?.description}. Nëse emaili ka llogari, anëtari shtohet menjëherë; përndryshe ftesa ruhet dhe aktivizohet kur ai regjistrohet ose hyn në Fiskalo.</p>
           <button disabled={busy} style={{border:0,borderRadius:10,padding:13,background:"var(--brand)",color:"white",fontWeight:800,cursor:"pointer"}}>{busy?"Duke ruajtur…":"Shto në ekip"}</button>
         </form>
       </div>
