@@ -57,7 +57,7 @@ async function runEnsureATKTestPosReady(
 
   let businessName = "";
   let verificationCode = "";
-  let applicationId = Number(window.localStorage.getItem("fiskalo-atk-application-id:" + organizationId) || "929645146946");
+  let applicationId = Number(window.localStorage.getItem("fiskalo-atk-application-id:" + organizationId) || "457818860373");
   if (saved && saved.nui === String(org.nui) &&
       Number(saved.atk_branch_id) === Number(pos.atk_branch_id) &&
       Number(saved.pos_id) === Number(pos.pos_id) &&
