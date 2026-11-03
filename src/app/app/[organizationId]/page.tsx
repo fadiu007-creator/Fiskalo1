@@ -27,6 +27,7 @@ export default async function BusinessDashboard({ params }: Props) {
     { href: `/app/${organizationId}/pos/shifts`, title: "Ndërrimi i arkës", description: "Hap ndërrimin, regjistro hyrje/dalje dhe mbylle arkën.", icon: "◷" },
     ...(!isCashier && role !== "accountant" ? [{ href: `/app/${organizationId}/pos/products`, title: "Produktet", description: "Shto artikuj, ndrysho çmimet, TVSH-në dhe stokun.", icon: "▤" }] : []),
     ...(isAdmin ? [{ href: `/app/${organizationId}/pos/setup`, title: "Konfigurimi ATK", description: "Regjistrimi i POS-it, certifikatat dhe konfigurimi fiskal.", icon: "⚙" }] : []),
+    ...(isAdmin ? [{ href: `/app/${organizationId}/team`, title: "Punëtorët", description: "Shto punëtorë dhe cakto rolet e qasjen në biznes.", icon: "♙" }] : []),
   ];
 
   return (
