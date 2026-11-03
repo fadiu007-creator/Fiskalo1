@@ -283,6 +283,7 @@ export default function WebPosPage() {
   }
 
   if (loading) return <main style={{ maxWidth: 1200, margin: "0 auto", padding: 24 }}>Duke hapur POS...</main>;
+  if (userRole === "accountant") return <main style={{ maxWidth: 720, margin: "40px auto", padding: 24 }}><h1>Qasje vetëm për lexim financiar</h1><p style={{ color: "var(--muted)", lineHeight: 1.6 }}>Roli Kontabilist mund t’i kontrollojë faturat dhe të dhënat financiare, por nuk mund të përdorë arkën e shitjeve.</p><Link href={`/app/${organizationId}/invoices`} style={{ color: "var(--brand)", fontWeight: 750 }}>Hap faturat</Link></main>;
 
   return <main className="fiskalo-pos" style={{ maxWidth: 1440, margin: "0 auto", padding: "22px clamp(12px,3vw,28px) 50px" }}>
     <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
