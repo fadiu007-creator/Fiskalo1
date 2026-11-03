@@ -552,9 +552,20 @@ export default function BusinessDashboard() {
           <Stat label="Produkte / shërbime" value={String(products.length)} />
         </section>
         <section style={{ ...panel, marginBottom: 14 }}>
-          <h2 style={{ fontSize: 18, marginTop: 0 }}>Gjendja e biznesit</h2>
-          <p style={{ color: "var(--muted)", lineHeight: 1.6, fontSize: 13 }}>Regjistro artikujt, klientët, faturat dhe shpenzimet. Faturat e lëshuara ruhen me numër unik dhe nuk mund të ndryshohen. Ky version nuk kryen fiskalizim zyrtar dhe nuk zëvendëson pajisjen ose softuerin e certifikuar nga ATK.</p>
-          <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}><button style={primary} onClick={() => setTab("invoices")}>+ Krijo faturë</button><button style={secondary} onClick={() => setTab("products")}>+ Shto produkt</button><button style={secondary} onClick={() => setTab("expenses")}>+ Regjistro shpenzim</button></div>
+          <h2 style={{ fontSize: 18, marginTop: 0 }}>Shërbimet e Fiskalo-s</h2>
+          <p style={{ color: "var(--muted)", lineHeight: 1.6, fontSize: 13 }}>Hap shërbimin që të duhet. Modulet hapen brenda këtij biznesi dhe përdorin të njëjtat të dhëna.</p>
+          <div className="service-launcher">
+            <Link href={`/app/${organizationId}/pos`} className="service-tile service-tile-primary"><strong>POS / Arka</strong><span>Regjistro shitje, prano pagesa, llogarit kusurin dhe dërgo kuponë në ATK TEST.</span><b>Hap POS →</b></Link>
+            <button className="service-tile" onClick={() => setTab("invoices")}><strong>Faturat</strong><span>Krijo, lësho dhe menaxho faturat e klientëve.</span><b>Hap faturat →</b></button>
+            <button className="service-tile" onClick={() => setTab("products")}><strong>Produktet dhe shërbimet</strong><span>Çmime, TVSH, SKU dhe menaxhim stoku.</span><b>Menaxho artikujt →</b></button>
+            <button className="service-tile" onClick={() => setTab("customers")}><strong>Klientët</strong><span>Ruaj të dhënat dhe kontaktet e klientëve.</span><b>Hap klientët →</b></button>
+            <button className="service-tile" onClick={() => setTab("purchases")}><strong>Furnitorët dhe blerjet</strong><span>Regjistro furnitorë, blerje, pranim malli dhe pagesa.</span><b>Hap blerjet →</b></button>
+            <button className="service-tile" onClick={() => setTab("expenses")}><strong>Shpenzimet</strong><span>Regjistro shpenzime sipas kategorisë dhe TVSH-së.</span><b>Hap shpenzimet →</b></button>
+            <button className="service-tile" onClick={() => setTab("reports")}><strong>Raportet</strong><span>Shiko qarkullimin, TVSH-në, shpenzimet dhe eksportet CSV.</span><b>Hap raportet →</b></button>
+            <button className="service-tile" onClick={() => { setTab("atk"); setNotice(""); setError(""); }}><strong>ATK / Fiskalizimi</strong><span>Konfiguro profilin, POS-in dhe proceset e testimit.</span><b>Hap ATK / POS →</b></button>
+            <button className="service-tile" onClick={() => { setTab("team"); void loadMembers(); }}><strong>Ekipi dhe qasjet</strong><span>Fto arkëtarë, menaxherë dhe kontabilistë.</span><b>Menaxho ekipin →</b></button>
+          </div>
+          <div style={{ display: "flex", gap: 9, flexWrap: "wrap", marginTop: 14 }}><button style={primary} onClick={() => setTab("invoices")}>+ Krijo faturë</button><button style={secondary} onClick={() => setTab("products")}>+ Shto produkt</button><button style={secondary} onClick={() => setTab("expenses")}>+ Regjistro shpenzim</button></div>
         </section>
         <section style={panel}><h2 style={{ fontSize: 18, marginTop: 0 }}>Faturat e fundit</h2><InvoiceTable invoices={invoices.slice(0, 5)} fmt={fmt} customers={customers} organizationId={organizationId} /></section>
       </>}
@@ -744,6 +755,15 @@ export default function BusinessDashboard() {
           <div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Email</th><th>Roli</th><th>Statusi</th></tr></thead><tbody>{pendingInvitations.map((invite) => <tr key={invite.invitation_id}><td>{invite.invite_email}</td><td>{({ administrator: "Administrator", accountant: "Kontabilist", manager: "Menaxher", cashier: "Arkëtar" } as Record<string,string>)[invite.invite_role] || invite.invite_role}</td><td>Në pritje të regjistrimit / hyrjes</td></tr>)}{!pendingInvitations.length && <tr><td colSpan={3}>Nuk ka ftesa në pritje.</td></tr>}</tbody></table></div>
         </section>
       </section>}
+      <style jsx>{`
+        .service-launcher { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:10px; }
+        .service-tile { display:flex; flex-direction:column; align-items:flex-start; gap:8px; min-height:142px; padding:15px; border:1px solid var(--line); border-radius:12px; background:white; color:var(--ink); text-align:left; text-decoration:none; cursor:pointer; font:inherit; }
+        .service-tile strong { font-size:15px; }
+        .service-tile span { color:var(--muted); font-size:12px; line-height:1.5; flex:1; }
+        .service-tile b { color:var(--brand); font-size:12px; }
+        .service-tile-primary { border-color:var(--brand); background:color-mix(in srgb,var(--brand) 5%,white); }
+        @media(max-width:560px) { .service-launcher { grid-template-columns:repeat(2,minmax(0,1fr)); } .service-tile { min-height:155px; padding:12px; } }
+      `}</style>
       <footer style={{ marginTop: 24, color: "var(--muted)", fontSize: 11 }}>Të dhënat ruhen në hapësirën e këtij biznesi. Fiskalizimi zyrtar dhe certifikimi ATK nuk janë aktivizuar.</footer>
     </main>
   );
