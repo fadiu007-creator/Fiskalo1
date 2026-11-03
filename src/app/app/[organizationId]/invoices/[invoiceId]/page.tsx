@@ -33,6 +33,7 @@ export default function InvoiceDetailPage() {
   const [paymentMessage, setPaymentMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [printMode, setPrintMode] = useState<"invoice" | "receipt">("invoice");
   const fmt = (n: number) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR" }).format(n);
   const fmtUnit = (n: number) => new Intl.NumberFormat("sq-XK", { minimumFractionDigits: 4, maximumFractionDigits: 4 }).format(n) + " €";
   const totalPaid = payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
@@ -145,8 +146,33 @@ export default function InvoiceDetailPage() {
   return <main style={{ maxWidth: 850, margin: "0 auto", padding: "28px 20px 60px" }}>
     <div className="no-print" style={{ display: "flex", justifyContent: "space-between", marginBottom: 18 }}>
       <Link href={`/app/${params.organizationId}`} style={{ color: "var(--brand)", fontWeight: 700 }}>← Kthehu te paneli</Link>
-      <button onClick={() => window.print()} style={{ border: 0, borderRadius: 8, background: "var(--brand)", color: "white", padding: "10px 15px", fontWeight: 700 }}>Printo faturën</button>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button onClick={() => { setPrintMode("invoice"); window.setTimeout(() => window.print(), 0); }} style={{ border: 0, borderRadius: 8, background: "var(--brand)", color: "white", padding: "10px 15px", fontWeight: 700 }}>Printo faturën A4</button><button onClick={() => { setPrintMode("receipt"); window.setTimeout(() => window.print(), 0); }} style={{ border: "1px solid var(--brand)", borderRadius: 8, background: "white", color: "var(--brand)", padding: "10px 15px", fontWeight: 700 }}>Printo kuponin 80mm</button></div>
     </div>
+    {printMode === "receipt" && <article className="thermal-receipt" aria-label="Kupon i brendshëm për printer termik">
+      <header style={{ textAlign: "center", marginBottom: 12 }}>
+        <strong style={{ fontSize: 18 }}>{org.trade_name || org.legal_name}</strong>
+        <div>{org.address || ""}{org.address ? ", " : ""}{org.municipality}</div>
+        <div>NUI: {org.nui}</div>
+        {org.phone && <div>Tel: {org.phone}</div>}
+        <hr />
+        <strong>FATURË E BRENDSHME</strong>
+        <div>{invoice.invoice_number || "DRAFT"}</div>
+        <div>{new Date(invoice.issue_date + "T00:00:00").toLocaleDateString("sq-XK")} · {invoice.payment_method === "cash" ? "Para në dorë" : invoice.payment_method === "card" ? "Kartelë" : invoice.payment_method === "bank_transfer" ? "Transfer bankar" : "Me afat"}</div>
+        <div>Klienti: {customer?.name || "Klient pa emër"}</div>
+      </header>
+      <div className="thermal-lines">{lines.map((line, i) => <div key={line.id} style={{ marginBottom: 8 }}>
+        <div>{i + 1}. {line.description}</div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}><span>{line.quantity} × {fmtUnit(Number(line.unit_price))} ({line.vat_rate}% TVSH)</span><strong>{fmt(Number(line.line_subtotal) + Number(line.line_vat))}</strong></div>
+      </div>)}</div>
+      <hr />
+      <div style={{ display: "flex", justifyContent: "space-between" }}><span>Nëntotali</span><strong>{fmt(Number(invoice.subtotal))}</strong></div>
+      <div style={{ display: "flex", justifyContent: "space-between" }}><span>TVSH</span><strong>{fmt(Number(invoice.vat_total))}</strong></div>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 17, marginTop: 5 }}><strong>TOTALI</strong><strong>{fmt(Number(invoice.total))}</strong></div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}><span>Paguar</span><strong>{fmt(totalPaid)}</strong></div>
+      <div style={{ display: "flex", justifyContent: "space-between" }}><span>Bilanci</span><strong>{fmt(remainingBalance)}</strong></div>
+      <hr />
+      <footer style={{ textAlign: "center", fontSize: 10, lineHeight: 1.4 }}>Faleminderit!<br />Dokument i brendshëm Fiskalo — JO KUPON FISKAL ATK.<br />Nuk është fiskalizuar zyrtarisht.</footer>
+    </article>}
     <article style={{ background: "white", border: "1px solid var(--line)", borderRadius: 14, padding: "clamp(20px,5vw,42px)" }}>
       <header style={{ display: "flex", justifyContent: "space-between", gap: 20, flexWrap: "wrap", borderBottom: "2px solid var(--ink)", paddingBottom: 22 }}>
         <div><div style={{ color: "var(--brand)", fontSize: 24, fontWeight: 800 }}>fiskalo</div><h1 style={{ margin: "12px 0 4px", fontSize: 27 }}>FATURË</h1><strong>{invoice.invoice_number || "DRAFT"}</strong></div>
@@ -205,5 +231,5 @@ export default function InvoiceDetailPage() {
       {invoice.notes && <p style={{ marginTop: 24, fontSize: 12 }}>Shënim: {invoice.notes}</p>}
       <footer style={{ borderTop: "1px solid var(--line)", marginTop: 30, paddingTop: 16, color: "var(--muted)", fontSize: 11, lineHeight: 1.6 }}>Dokument i krijuar në Fiskalo. Ky dokument nuk është fiskalizuar zyrtarisht dhe nuk përbën kupon fiskal të certifikuar nga ATK.</footer>
     </article>
-  </main>;
+    <style jsx global>{`@media print { @page { size: 80mm auto; margin: 3mm; } body { background: #fff !important; } body:has(.thermal-receipt) main > .no-print, body:has(.thermal-receipt) main > article:not(.thermal-receipt) { display: none !important; } .thermal-receipt { display: block !important; width: 74mm; max-width: 74mm; margin: 0 auto; padding: 0 !important; border: 0 !important; border-radius: 0 !important; color: #000 !important; background: #fff !important; font: 11px/1.35 Arial, sans-serif; } .thermal-receipt hr { border: 0; border-top: 1px dashed #000; margin: 8px 0; } } @media screen { .thermal-receipt { display: none; } }`}</style>\n  </main>;
 }
