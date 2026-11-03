@@ -156,6 +156,7 @@ export async function POST(request: Request) {
   await supabase.from("fiskalo_atk_fiscal_documents").update({
     status: "submitted", submission_attempts: 1, last_submitted_at: new Date().toISOString(),
   }).eq("id", fiscalDocument.id).eq("organization_id", organizationId);
+  await supabase.from("fiskalo_invoices").update({ fiscalization_status: "submitted" }).eq("id", invoiceId).eq("organization_id", organizationId);
 
   try {
     const response = await fetch("https://fiskalizimi-test.atk-ks.org/pos/coupon", {
@@ -171,6 +172,7 @@ export async function POST(request: Request) {
     if (!response.ok) {
       const detail = readableProviderMessage(result, readableProviderMessage(raw, "ATK rejected the TEST coupon."));
       await supabase.from("fiskalo_atk_fiscal_documents").update({ status: "rejected", last_error: detail, atk_response: result }).eq("id", fiscalDocument.id);
+      await supabase.from("fiskalo_invoices").update({ fiscalization_status: "rejected" }).eq("id", invoiceId).eq("organization_id", organizationId);
       await supabase.from("fiskalo_atk_fiscal_events").insert({ organization_id: organizationId, fiscal_document_id: fiscalDocument.id, event_type: "rejected", details: { httpStatus: response.status, detail } });
       return Response.json({ error: "atk_coupon_rejected", detail, atkStatus: response.status, fiscalDocumentId: fiscalDocument.id }, { status: 502 });
     }
@@ -178,6 +180,7 @@ export async function POST(request: Request) {
     if (!transactionId) {
       const detail = "ATK returned HTTP success but its response did not contain a valid uint64 transaction_id. Check ATK before retrying.";
       await supabase.from("fiskalo_atk_fiscal_documents").update({ status: "offline_pending", last_error: detail, atk_response: result }).eq("id", fiscalDocument.id);
+      await supabase.from("fiskalo_invoices").update({ fiscalization_status: "queued" }).eq("id", invoiceId).eq("organization_id", organizationId);
       await supabase.from("fiskalo_atk_fiscal_events").insert({ organization_id: organizationId, fiscal_document_id: fiscalDocument.id, event_type: "response_unconfirmed", details: { detail, httpStatus: response.status } });
       return Response.json({ error: "atk_response_unconfirmed", detail, fiscalDocumentId: fiscalDocument.id }, { status: 502 });
     }
@@ -190,6 +193,7 @@ export async function POST(request: Request) {
     if (acceptedUpdateError) {
       return Response.json({ error: "accepted_status_save_failed", detail: "ATK accepted the coupon, but Fiskalo could not save the acceptance status. Do not resubmit this invoice.", fiscalDocumentId: fiscalDocument.id, transactionId }, { status: 500 });
     }
+    await supabase.from("fiskalo_invoices").update({ fiscalization_status: "accepted" }).eq("id", invoiceId).eq("organization_id", organizationId);
     await supabase.from("fiskalo_atk_fiscal_events").insert({
       organization_id: organizationId, fiscal_document_id: fiscalDocument.id,
       event_type: "accepted", details: { transactionId, environment: "TEST" },
@@ -198,6 +202,7 @@ export async function POST(request: Request) {
   } catch (error) {
     const detail = error instanceof Error && error.name === "TimeoutError" ? "ATK TEST request timed out; check ATK before retrying to avoid a duplicate." : "Could not reach ATK TEST. Check the fiscal document before retrying.";
     await supabase.from("fiskalo_atk_fiscal_documents").update({ status: "offline_pending", last_error: detail }).eq("id", fiscalDocument.id);
+    await supabase.from("fiskalo_invoices").update({ fiscalization_status: "queued" }).eq("id", invoiceId).eq("organization_id", organizationId);
     await supabase.from("fiskalo_atk_fiscal_events").insert({ organization_id: organizationId, fiscal_document_id: fiscalDocument.id, event_type: "offline_saved", details: { detail } });
     return Response.json({ error: "atk_unreachable", detail, fiscalDocumentId: fiscalDocument.id }, { status: 502 });
   }
