@@ -113,7 +113,7 @@ export default function AtkTestPosPage() {
       });
       const mappingResults = await Promise.all(mappingWrites);
       const failedMapping = mappingResults.find((write) => write.error);
-      if (failedMapping?.error) throw new Error("Kodet u lexuan, por nuk u ruajtën te produktet: " + failedMapping.error.message);
+      if (failedMapping?.error) { const detail = failedMapping.error as unknown as Record<string, unknown>; const reason = typeof detail.message === "string" ? detail.message : JSON.stringify(detail); throw new Error("Kodet u lexuan, por nuk u ruajtën te produktet: " + reason); }
       const keyId = organizationId + ":" + selectedPos.id;
       if (!await hasBrowserPosCertificate(keyId)) throw new Error("Nuk u gjet certifikata TEST për këtë POS në këtë shfletues. Hape lidhjen Regjistro / certifiko POS më sipër dhe përfundo të tre hapat në këtë profil të shfletuesit.");
       const { data: auth } = await supabase.auth.getUser();
