@@ -75,9 +75,18 @@ export default function WebPosSetupPage() {
       hasBrowserPosKey(organizationId + ":" + selected.id).catch(() => false),
       hasBrowserPosCertificate(organizationId + ":" + selected.id).catch(() => false),
     ]).then(([key, cert]) => { if (!cancelled) { setKeyReady(key); setCertificateReady(cert); } });
-    setVerification(null);
+    let cached: Verification | null = null;
+    try {
+      const raw = window.localStorage.getItem("fiskalo-atk-verification:" + organizationId + ":" + selected.id);
+      const parsed = raw ? JSON.parse(raw) as Verification & { nui?: string; branchId?: number; posId?: number; applicationId?: number } : null;
+      const savedAppId = Number(window.localStorage.getItem("fiskalo-atk-application-id:" + organizationId) || applicationId);
+      if (parsed?.verificationCode && parsed.nui === org?.nui &&
+          parsed.branchId === selected.atk_branch_id && parsed.posId === selected.pos_id &&
+          parsed.applicationId === savedAppId) cached = parsed;
+    } catch { cached = null; }
+    setVerification(cached);
     return () => { cancelled = true; };
-  }, [organizationId, selectedId, selected?.id]);
+  }, [organizationId, selectedId, selected?.id, org?.nui, applicationId]);
 
   async function saveProfile() {
     setBusy(true); setError(""); setNotice("");
