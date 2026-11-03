@@ -40,6 +40,7 @@ export default function WebPosPage() {
   const [activeCategory, setActiveCategory] = useState("Të gjitha");
   const searchRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -48,12 +49,14 @@ export default function WebPosPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [productResult, customerResult, invoiceResult] = await Promise.all([
+    const [productResult, customerResult, invoiceResult, membershipResult] = await Promise.all([
       supabase.from("fiskalo_products").select("id,name,sku,pos_category,image_url,unit_price,vat_rate,stock_quantity,track_stock,item_type,is_active").eq("organization_id", organizationId).eq("is_active", true).order("name"),
       supabase.from("fiskalo_customers").select("id,name,phone").eq("organization_id", organizationId).order("name"),
       supabase.from("fiskalo_invoices").select("id,invoice_number,issue_date,status,payment_status,payment_method,total,customer_id").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
+      supabase.from("fiskalo_organization_users").select("role").eq("organization_id", organizationId).maybeSingle(),
     ]);
     if (productResult.error || customerResult.error || invoiceResult.error) setError("Nuk u ngarkuan të gjitha të dhënat. Rifresko faqen ose kontrollo qasjen në biznes.");
+    setUserRole(membershipResult.data?.role ?? "");
     setProducts((productResult.data ?? []) as Product[]);
     setCustomers((customerResult.data ?? []) as Customer[]);
     const invoiceRows = (invoiceResult.data ?? []) as InvoiceRow[];
@@ -72,7 +75,7 @@ export default function WebPosPage() {
   useEffect(() => { void load(); }, [load]);
 
   useEffect(() => {
-    if (atkAutoInitRef.current) return;
+    if (!userRole || !["owner", "administrator"].includes(userRole) || atkAutoInitRef.current) return;
     atkAutoInitRef.current = true;
     let cancelled = false;
     void (async () => {
@@ -105,7 +108,7 @@ export default function WebPosPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [organizationId, supabase]);
+  }, [organizationId, supabase, userRole]);
 
   const visibleInvoices = invoices.filter((invoice) => `${invoice.invoice_number ?? ""} ${invoice.status} ${invoice.payment_status} ${invoice.issue_date}`.toLocaleLowerCase().includes(invoiceSearch.trim().toLocaleLowerCase()));
   const categories = ["Të gjitha", "Burgerë", "Menu", "Pije", "Shtesa", "Ëmbëlsira", "Tjera"];
@@ -260,9 +263,10 @@ export default function WebPosPage() {
   return <main className="fiskalo-pos" style={{ maxWidth: 1440, margin: "0 auto", padding: "22px clamp(12px,3vw,28px) 50px" }}>
     <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
       <div><Link href={`/app/${organizationId}`} style={{ color: "var(--brand)", fontWeight: 750 }}>← Paneli i biznesit</Link><h1 style={{ margin: "8px 0 0", fontSize: 28 }}>Arka</h1><div style={{ color: "var(--muted)", fontSize: 13 }}>Zgjedh produktet, shto në porosi dhe prano pagesën. Totali llogaritet vetë.</div></div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Link href={`/app/${organizationId}/pos/shifts`} style={{ ...secondary, textDecoration: "none" }}>Ndërrimi i arkës</Link><Link href={`/app/${organizationId}/pos/products`} style={{ ...secondary, textDecoration: "none" }}>Produktet</Link>{isManagement && <Link href={`/app/${organizationId}/pos/setup`} style={{ ...secondary, textDecoration: "none" }}><Settings2 size={15} /> Konfiguro ATK</Link>}<button style={secondary} onClick={() => void load()}><RefreshCw size={15} /> Rifresko</button></div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Link href={`/app/${organizationId}/pos/shifts`} style={{ ...secondary, textDecoration: "none" }}>Ndërrimi i arkës</Link><Link href={`/app/${organizationId}/pos/products`} style={{ ...secondary, textDecoration: "none" }}>Produktet</Link>{isManagement && {["owner", "administrator"].includes(userRole) && <Link href={`/app/${organizationId}/pos/setup`} style={{ ...secondary, textDecoration: "none" }}><Settings2 size={15} /> Konfiguro ATK</Link>}
+        <Link href={`/app/${organizationId}`} style={{ ...secondary, textDecoration: "none" }}>Paneli i biznesit</Link>}<button style={secondary} onClick={() => void load()}><RefreshCw size={15} /> Rifresko</button></div>
     </header>
-    <div role="status" style={{ marginBottom: 12, border: "1px solid var(--line)", borderRadius: 10, padding: "10px 12px", color: "var(--muted)", fontSize: 13 }}>{atkSetupNotice}</div>
+    <div role="status" style={{ marginBottom: 12, border: "1px solid var(--line)", borderRadius: 10, padding: "10px 12px", color: "var(--muted)", fontSize: 13 }}>{["owner", "administrator"].includes(userRole) ? atkSetupNotice : "Arka është gati për përdorim. Konfigurimi dhe certifikata ATK TEST menaxhohen nga pronari ose administratori."}</div>
     <nav aria-label="POS dhe faturat" style={{ display: "flex", gap: 8, marginBottom: 14, borderBottom: "1px solid var(--line)", paddingBottom: 10 }}><button aria-pressed={activeView === "pos"} onClick={() => setActiveView("pos")} style={{ ...(activeView === "pos" ? button : secondary) }}><ShoppingCart size={15} /> Shitje</button><button aria-pressed={activeView === "invoices"} onClick={() => setActiveView("invoices")} style={{ ...(activeView === "invoices" ? button : secondary) }}><FileText size={15} /> Faturat <span className="status-pill">{invoices.length}</span></button></nav>
     {error && <div role="alert" style={{ background: "#fff0ef", color: "#982d25", padding: 12, borderRadius: 9, marginBottom: 12 }}>{error}</div>}
     {notice && <div role="status" style={{ background: "#edf7f1", color: "#155c3c", padding: 12, borderRadius: 9, marginBottom: 12 }}>{notice}</div>}
