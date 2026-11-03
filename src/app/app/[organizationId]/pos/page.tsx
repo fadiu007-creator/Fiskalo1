@@ -195,7 +195,7 @@ export default function WebPosPage() {
   return <main style={{ maxWidth: 1440, margin: "0 auto", padding: "18px clamp(12px,3vw,28px) 50px" }}>
     <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
       <div><Link href={`/app/${organizationId}`} style={{ color: "var(--brand)", fontWeight: 750 }}>← Paneli i biznesit</Link><h1 style={{ margin: "8px 0 0", fontSize: 27 }}>Pika e shitjes</h1><div style={{ color: "var(--muted)", fontSize: 12 }}>POS për shitje dhe fatura të brendshme</div></div>
-      <button style={secondary} onClick={() => void load()}>Rifresko produktet</button>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Link href={`/app/${organizationId}/pos/shifts`} style={{ ...secondary, textDecoration: "none" }}>Ndërrimi i arkës</Link><button style={secondary} onClick={() => void load()}>Rifresko produktet</button></div>
     </header>
     {error && <div role="alert" style={{ background: "#fff0ef", color: "#982d25", padding: 12, borderRadius: 9, marginBottom: 12 }}>{error}</div>}
     {notice && <div role="status" style={{ background: "#edf7f1", color: "#155c3c", padding: 12, borderRadius: 9, marginBottom: 12 }}>{notice}</div>}
