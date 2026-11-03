@@ -44,7 +44,7 @@ export default function WebPosSetupPage() {
     const [orgRes, profileRes, posRes] = await Promise.all([
       supabase.from("fiskalo_organizations").select("nui,legal_name,municipality").eq("id", organizationId).single(),
       supabase.from("fiskalo_atk_taxpayer_profiles").select("fiscalization_number").eq("organization_id", organizationId).maybeSingle(),
-      supabase.from("fiskalo_atk_pos_installations").select("id,atk_branch_id,pos_id,label,location,environment,status,certificate_serial").eq("organization_id", organizationId).eq("environment", "test").order("created_at", { ascending: false }),
+      supabase.from("fiskalo_atk_pos_installations").select("id,atk_branch_id,pos_id,label,location,environment,status,certificate_serial").eq("organization_id", organizationId).eq("environment", "test").order("atk_branch_id", { ascending: true }).order("pos_id", { ascending: true }),
     ]);
     if (orgRes.error || !orgRes.data) setError("Nuk u lexuan të dhënat e biznesit.");
     else setOrg(orgRes.data as Organization);
