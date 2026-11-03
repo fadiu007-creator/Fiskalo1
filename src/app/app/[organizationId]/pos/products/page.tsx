@@ -25,8 +25,16 @@ export default function PosProductsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [permissionChecked, setPermissionChecked] = useState(false);
+  const [canManage, setCanManage] = useState(false);
 
   const load = useCallback(async () => {
+    const { data: auth } = await supabase.auth.getUser();
+    const { data: membership } = auth.user ? await supabase.from("fiskalo_organization_users").select("role").eq("organization_id", organizationId).eq("user_id", auth.user.id).maybeSingle() : { data: null };
+    const allowed = Boolean(membership && ["owner", "administrator", "manager"].includes(membership.role));
+    setCanManage(allowed);
+    setPermissionChecked(true);
+    if (!allowed) return;
     const { data, error: loadError } = await supabase.from("fiskalo_products")
       .select("id,name,sku,item_type,unit,pos_category,image_url,unit_price,vat_rate,stock_quantity,track_stock,is_active,atk_unit_code,atk_tax_code,atk_item_category_code")
       .eq("organization_id", organizationId).order("name");
@@ -84,6 +92,9 @@ export default function PosProductsPage() {
     setBusy(false);
     if (updateError) setError(updateError.message); else { setNotice(product.is_active ? "Produkti u çaktivizua." : "Produkti u aktivizua."); await load(); }
   }
+
+  if (!permissionChecked) return <main style={{ maxWidth: 1050, margin: "0 auto", padding: 24 }}>Po kontrollohet qasja…</main>;
+  if (!canManage) return <main style={{ maxWidth: 650, margin: "40px auto", padding: 24 }}><h1>Qasje e kufizuar</h1><p style={{ color: "var(--muted)" }}>Produktet dhe çmimet menaxhohen nga pronari, administratori ose menaxheri.</p><Link href={"/app/" + organizationId} style={{ color: "var(--brand)", fontWeight: 750 }}>Kthehu te paneli</Link></main>;
 
   return <main style={{ maxWidth: 1050, margin: "0 auto", padding: "22px 16px 50px" }}>
     <Link href={"/app/" + organizationId + "/pos"} style={{ color: "var(--brand)", fontWeight: 750 }}>← Kthehu te arka</Link>
