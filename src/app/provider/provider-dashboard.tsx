@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
-  Activity, ArrowUpRight, Building2, CheckCircle2, CircleAlert, Cpu,
+  Activity, CheckCircle2, CircleAlert, Cpu,
   LayoutDashboard, Search, Settings2, ShieldCheck, Store,
 } from "lucide-react";
 
