@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   const branchId = positiveInteger(body.branchId);
   const posId = positiveInteger(body.posId);
   const applicationId = positiveInteger(body.applicationId);
-  if (!organizationId || !/^\\d{9}$/.test(nui) || !businessName || !verificationCode ||
+  if (!organizationId || !/^\d{9}$/.test(nui) || !businessName || !verificationCode ||
       !csrPem.startsWith("-----BEGIN CERTIFICATE REQUEST-----") || !branchId || !posId || !applicationId) {
     return Response.json({ error: "invalid_certificate_request", detail: "Verified business identity, NUI, verification code, CSR, branch ID, POS ID and Application ID are required." }, { status: 400 });
   }
