@@ -72,6 +72,14 @@ Administrative Instruction (MF) 01/2026, Article 34(3), requires the taxpayer to
 References: [ATK Administrative Instruction 01/2026, Article 34](https://apps.atk-ks.org/sefaplikimi/) and [official ATK C# POS integration](https://github.com/fiskalizimi/pos-csharp).
 
 
+## Web ATK onboarding update — 3 November 2026
+
+- The business dashboard exposes a direct **ATK / POS** action in its top header, in addition to the module tab, so the onboarding screen is easier to find on narrow/mobile layouts.
+- The Web flow can call the authenticated Fiskalo server routes for ATK TEST taxpayer/POS verification and CSR signing. The CSR private key remains in the browser's IndexedDB as a non-extractable Web Crypto key; the signed certificate is accepted only after the browser checks its public key against the locally stored key.
+- This remains an experimental browser-key workflow. It is not ATK-approved hardware-backed storage and must not be used for production fiscalization.
+- The latest code is on the feature branch and is not visible on the live deployment until the PR is reviewed, merged and deployed.
+- ATK test endpoint calls still require an ATK-authorized test identity and successful network access. No successful live ATK response or test coupon is claimed by this update.
+
 ## Current implementation milestone — 2 November 2026
 
 - Dashboard labels now explain that the ATK unit number comes from the taxpayer's registered unit/location records, and that the POS number is unique per register. Fiskalo's internal branch UUID is explicitly not the ATK unit number.
