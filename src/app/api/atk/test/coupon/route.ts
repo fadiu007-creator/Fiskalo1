@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { authorizeAtkOrganization, getAtkRequestContext, positiveInteger } from "@/lib/atk/server-auth";
 
 export const runtime = "nodejs";
@@ -52,7 +51,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "invoice_already_submitted", fiscalDocumentId: existing.id, status: existing.status, transactionId: existing.atk_transaction_id }, { status: 409 });
   }
 
-  const payloadHash = createHash("sha256").update(details, "utf8").digest("hex");
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(details));
+  const payloadHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
   const { data: fiscalDocument, error: insertError } = await supabase.from("fiskalo_atk_fiscal_documents").insert({
     organization_id: organizationId,
     pos_installation_id: posInstallationId,
