@@ -94,7 +94,7 @@ export default function AtkTestPosPage() {
         }
       }
       const keyId = organizationId + ":" + selectedPos.id;
-      if (!await hasBrowserPosCertificate(keyId)) throw new Error("Në këtë shfletues nuk gjendet certifikata TEST e instaluar për këtë POS. Hape Paneli → ATK / POS dhe përfundo verifikimin, CSR-në dhe certifikatën në të njëjtin shfletues.");
+      if (!await hasBrowserPosCertificate(keyId)) throw new Error("Nuk u gjet certifikata TEST për këtë POS në këtë shfletues. Hape lidhjen Regjistro / certifiko POS më sipër dhe përfundo të tre hapat në këtë profil të shfletuesit.");
       const { data: auth } = await supabase.auth.getUser();
       if (!auth.user) throw new Error("Sesioni ka skaduar. Hyr përsëri.");
 
@@ -156,7 +156,7 @@ export default function AtkTestPosPage() {
 
   return <main style={{ maxWidth: 1000, margin: "0 auto", padding: "22px 16px 50px" }}>
     <header style={{ marginBottom: 18 }}>
-      <Link href={`/app/${organizationId}/pos`} style={{ color: "var(--brand)", fontWeight: 750 }}>← Kthehu te POS</Link>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}><Link href={`/app/${organizationId}/pos`} style={{ color: "var(--brand)", fontWeight: 750 }}>← Kthehu te POS</Link><Link href={`/app/${organizationId}/pos/setup`} style={{ color: "var(--brand)", fontWeight: 750 }}>Regjistro / certifiko POS →</Link></div>
       <h1 style={{ margin: "10px 0 4px", fontSize: 26 }}>Dërgo kupon në ATK TEST</h1>
       <p style={{ color: "var(--muted)", fontSize: 13 }}>Ky ekran dërgon një shitje testuese të paguar me para në dorë nga një faturë e lëshuar në mjedisin TEST të ATK-së. Përdor vetëm artikuj dhe shuma testuese, jo shitje reale të klientëve. Nuk prek prodhimin.</p>
     </header>
