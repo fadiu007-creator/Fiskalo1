@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 
 type Product = { id: string; name: string; sku: string | null; unit_price: number; vat_rate: number; stock_quantity: number; track_stock: boolean; item_type: string; is_active: boolean };
 type Customer = { id: string; name: string; phone: string | null };
+type InvoiceRow = { id: string; invoice_number: string | null; issue_date: string; status: string; payment_status: string; total: number; customer_id: string | null };
 type CartLine = { productId: string; quantity: string };
 
 const panel: React.CSSProperties = { background: "white", border: "1px solid var(--line)", borderRadius: 14, padding: 16 };
@@ -21,6 +22,8 @@ export default function WebPosPage() {
   const organizationId = params.organizationId;
   const supabase = useMemo(() => createClient(), []);
   const [products, setProducts] = useState<Product[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
+  const [activeView, setActiveView] = useState<"pos" | "invoices">("pos");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [customerId, setCustomerId] = useState("");
@@ -38,13 +41,15 @@ export default function WebPosPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [productResult, customerResult] = await Promise.all([
+    const [productResult, customerResult, invoiceResult] = await Promise.all([
       supabase.from("fiskalo_products").select("id,name,sku,unit_price,vat_rate,stock_quantity,track_stock,item_type,is_active").eq("organization_id", organizationId).eq("is_active", true).order("name"),
       supabase.from("fiskalo_customers").select("id,name,phone").eq("organization_id", organizationId).order("name"),
+      supabase.from("fiskalo_invoices").select("id,invoice_number,issue_date,status,payment_status,total,customer_id").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
     ]);
-    if (productResult.error || customerResult.error) setError("Nuk u ngarkuan produktet ose klientët. Kontrollo qasjen në biznes.");
+    if (productResult.error || customerResult.error || invoiceResult.error) setError("Nuk u ngarkuan të gjitha të dhënat. Rifresko faqen ose kontrollo qasjen në biznes.");
     setProducts((productResult.data ?? []) as Product[]);
     setCustomers((customerResult.data ?? []) as Customer[]);
+    setInvoices((invoiceResult.data ?? []) as InvoiceRow[]);
     setLoading(false);
   }, [organizationId, supabase]);
 
@@ -195,15 +200,16 @@ export default function WebPosPage() {
   return <main style={{ maxWidth: 1440, margin: "0 auto", padding: "18px clamp(12px,3vw,28px) 50px" }}>
     <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
       <div><Link href={`/app/${organizationId}`} style={{ color: "var(--brand)", fontWeight: 750 }}>← Paneli i biznesit</Link><h1 style={{ margin: "8px 0 0", fontSize: 27 }}>Pika e shitjes</h1><div style={{ color: "var(--muted)", fontSize: 12 }}>POS për shitje dhe fatura të brendshme</div></div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Link href={`/app/${organizationId}/pos/setup`} style={{ ...secondary, textDecoration: "none" }}>Regjistro / certifiko POS</Link><Link href={`/app/${organizationId}/pos/atk-test`} style={{ ...button, textDecoration: "none" }}>Dërgo kupon në ATK TEST</Link><Link href={`/app/${organizationId}/pos/shifts`} style={{ ...secondary, textDecoration: "none" }}>Ndërrimi i arkës</Link><button style={secondary} onClick={() => void load()}>Rifresko produktet</button></div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Link href={`/app/${organizationId}/pos/setup`} style={{ ...secondary, textDecoration: "none" }}>Konfiguro ATK</Link><Link href={`/app/${organizationId}/pos/atk-test`} style={{ ...secondary, textDecoration: "none" }}>Testo ATK</Link><Link href={`/app/${organizationId}/pos/shifts`} style={{ ...secondary, textDecoration: "none" }}>Ndërrimet</Link><button style={secondary} onClick={() => void load()}>Rifresko</button></div>
     </header>
+    <nav aria-label="POS dhe faturat" style={{ display: "flex", gap: 8, marginBottom: 14, borderBottom: "1px solid var(--line)", paddingBottom: 10 }}><button onClick={() => setActiveView("pos")} style={{ ...(activeView === "pos" ? button : secondary) }}>Arka / POS</button><button onClick={() => setActiveView("invoices")} style={{ ...(activeView === "invoices" ? button : secondary) }}>Faturat ({invoices.length})</button></nav>
     {error && <div role="alert" style={{ background: "#fff0ef", color: "#982d25", padding: 12, borderRadius: 9, marginBottom: 12 }}>{error}</div>}
     {notice && <div role="status" style={{ background: "#edf7f1", color: "#155c3c", padding: 12, borderRadius: 9, marginBottom: 12 }}>{notice}</div>}
     {issuedInvoiceId && <div style={{ ...panel, marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
       <strong>{issuedNumber ? "Fatura " + issuedNumber : "Draft i ruajtur"}</strong>
       <Link href={`/app/${organizationId}/invoices/${issuedInvoiceId}`} style={{ color: "var(--brand)", fontWeight: 750 }}>Hap faturën dhe pagesën →</Link>
     </div>}
-    <div className="pos-layout" style={{ display: "grid", gridTemplateColumns: "minmax(0,1.55fr) minmax(310px,0.85fr)", gap: 14, alignItems: "start" }}>
+    <div className="pos-layout" style={{ display: activeView === "pos" ? "grid" : "none", gridTemplateColumns: "minmax(0,1.55fr) minmax(310px,0.85fr)", gap: 14, alignItems: "start" }}>
       <section style={panel}>
         <input ref={searchRef} aria-label="Kërko produkt ose skano barkod" placeholder="Kërko produkt ose skano barkod / SKU dhe shtyp Enter..." value={search} onChange={(event) => { setSearch(event.target.value); setError(""); }} onKeyDown={handleProductSearchKeyDown} style={{ ...field, marginBottom: 12 }} />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(145px,1fr))", gap: 9 }}>
@@ -251,7 +257,8 @@ export default function WebPosPage() {
         </div>
       </aside>
     </div>
-    <p style={{ color: "var(--muted)", fontSize: 11, lineHeight: 1.5, marginTop: 14 }}>Ky POS regjistron shitjen në Fiskalo. Për testim, përdor “Dërgo kupon në ATK TEST” pasi fatura të jetë lëshuar dhe paguar me para në dorë. Testimi nuk e bën Fiskalo të certifikuar dhe nuk aktivizon prodhimin. Barkodet skanohen përmes lexuesit që shkruan SKU-në në fushën e kërkimit. Pagesat me kartelë nuk procesohen nga aplikacioni.</p>
+    <p style={{ display: activeView === "pos" ? "block" : "none", color: "var(--muted)", fontSize: 11, lineHeight: 1.5, marginTop: 14 }}>Shitjet dhe faturat regjistrohen nga e njëjta arkë. Fiskalizimi ATK TEST është hap i veçantë derisa Fiskalo të certifikohet. Pagesat me kartelë nuk procesohen nga aplikacioni.</p>
+    <section style={{ display: activeView === "invoices" ? "block" : "none", ...panel }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}><h2 style={{ margin: 0, fontSize: 19 }}>Faturat</h2><button onClick={() => setActiveView("pos")} style={button}>+ Shitje e re</button></div><div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}><thead><tr><th style={{ textAlign: "left", padding: 9 }}>Numri</th><th style={{ textAlign: "left", padding: 9 }}>Data</th><th style={{ textAlign: "left", padding: 9 }}>Statusi</th><th style={{ textAlign: "right", padding: 9 }}>Totali</th><th style={{ textAlign: "right", padding: 9 }}> </th></tr></thead><tbody>{invoices.map((invoice) => <tr key={invoice.id} style={{ borderTop: "1px solid var(--line)" }}><td style={{ padding: 9 }}>{invoice.invoice_number || "Draft"}</td><td style={{ padding: 9 }}>{invoice.issue_date}</td><td style={{ padding: 9 }}>{invoice.status === "draft" ? "Draft" : invoice.payment_status === "paid" ? "Paguar" : "E papaguar"}</td><td style={{ padding: 9, textAlign: "right", fontWeight: 700 }}>{money(Number(invoice.total))}</td><td style={{ padding: 9, textAlign: "right" }}><Link href={`/app/${organizationId}/invoices/${invoice.id}`} style={{ color: "var(--brand)", fontWeight: 700 }}>Hap →</Link></td></tr>)}{!invoices.length && <tr><td colSpan={5} style={{ padding: 18, color: "var(--muted)", textAlign: "center" }}>Nuk ka fatura ende. Krijo shitjen e parë nga POS.</td></tr>}</tbody></table></div></section>
     <style jsx>{`.pos-layout { grid-template-columns: minmax(0,1.55fr) minmax(310px,0.85fr); } @media (max-width: 760px) { .pos-layout { grid-template-columns: minmax(0,1fr) !important; } .pos-layout aside { position: static !important; } }`}</style>
   </main>;
 }
