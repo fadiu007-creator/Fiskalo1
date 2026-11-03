@@ -58,9 +58,21 @@ export async function POST(request: Request) {
       const detail = readableProviderMessage(result, readableProviderMessage(text, "ATK test verification was rejected."));
       return Response.json({ error: "atk_verification_rejected", detail, atkStatus: response.status }, { status: 502, headers: { "Cache-Control": "no-store" } });
     }
-    const businessName = typeof result.business_name === "string" ? result.business_name : "";
-    const verificationCode = typeof result.verification_code === "string" ? result.verification_code : "";
-    if (!businessName || !verificationCode) return Response.json({ error: "atk_unexpected_response" }, { status: 502 });
+    const nested = result.data && typeof result.data === "object" ? result.data as Record<string, unknown> : result;
+    const businessName = typeof nested.business_name === "string" ? nested.business_name
+      : typeof nested.businessName === "string" ? nested.businessName : "";
+    const verificationCode = typeof nested.verification_code === "string" ? nested.verification_code
+      : typeof nested.verificationCode === "string" ? nested.verificationCode : "";
+    if (!businessName || !verificationCode) {
+      const providerMessage = readableProviderMessage(result, "");
+      return Response.json({
+        error: "atk_unexpected_response",
+        detail: "ATK returned HTTP " + response.status + " but its verification response did not contain the required business name and verification code." +
+          (providerMessage ? " ATK message: " + providerMessage : ""),
+        responseKeys: Object.keys(result),
+        atkStatus: response.status,
+      }, { status: 502, headers: { "Cache-Control": "no-store" } });
+    }
     const { error: saveError } = await supabase.from("fiskalo_atk_pos_verifications").upsert({
       organization_id: organizationId, pos_installation_id: posInstallationId, nui,
       atk_branch_id: branchId, pos_id: posId, application_id: applicationId,
