@@ -4,7 +4,6 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 type Props = {
-  organizationId: string;
   invoiceId: string;
   total: number;
   kind: "cancel" | "return";
