@@ -89,6 +89,16 @@ export async function POST(request: Request) {
   if (posError || !pos || pos.environment !== "test") {
     return Response.json({ error: "test_pos_not_ready", detail: "The selected POS installation is not configured for the ATK TEST environment." }, { status: 409 });
   }
+  const { data: verification, error: verificationError } = await supabase.from("fiskalo_atk_pos_verifications")
+    .select("nui,atk_branch_id,pos_id,application_id,verified_at")
+    .eq("organization_id", organizationId).eq("pos_installation_id", posInstallationId).maybeSingle();
+  if (verificationError || !verification ||
+      verification.nui !== nui ||
+      Number(verification.atk_branch_id) !== Number(pos.atk_branch_id) ||
+      Number(verification.pos_id) !== Number(pos.pos_id) ||
+      Number(verification.application_id) !== applicationId) {
+    return Response.json({ error: "pos_verification_missing", detail: "This POS has no matching ATK TEST verification saved to the business account. Verify this exact POS once in Regjistro / certifiko POS, then retry." }, { status: 409 });
+  }
   let header: Map<number, bigint>;
   try { header = readCouponHeader(details); }
   catch { return Response.json({ error: "invalid_protobuf", detail: "The signed details are not a valid ATK Protobuf coupon." }, { status: 400 }); }
