@@ -158,7 +158,7 @@ export default function AtkTestPosPage() {
     <header style={{ marginBottom: 18 }}>
       <Link href={`/app/${organizationId}/pos`} style={{ color: "var(--brand)", fontWeight: 750 }}>← Kthehu te POS</Link>
       <h1 style={{ margin: "10px 0 4px", fontSize: 26 }}>Dërgo kupon në ATK TEST</h1>
-      <p style={{ color: "var(--muted)", fontSize: 13 }}>Ky ekran dërgon një shitje të paguar me para në dorë nga një faturë e lëshuar në mjedisin TEST të ATK-së. Nuk prek prodhimin.</p>
+      <p style={{ color: "var(--muted)", fontSize: 13 }}>Ky ekran dërgon një shitje testuese të paguar me para në dorë nga një faturë e lëshuar në mjedisin TEST të ATK-së. Përdor vetëm artikuj dhe shuma testuese, jo shitje reale të klientëve. Nuk prek prodhimin.</p>
     </header>
     {error && <div role="alert" style={{ background: "#fff0ef", color: "#982d25", borderRadius: 9, padding: 12, marginBottom: 12 }}>{error}</div>}
     {notice && <div role="status" style={{ background: "#edf7f1", color: "#155c3c", borderRadius: 9, padding: 12, marginBottom: 12 }}>{notice}</div>}
