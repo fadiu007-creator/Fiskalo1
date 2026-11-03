@@ -2,7 +2,7 @@ import { authorizeAtkOrganization, getAtkRequestContext, positiveInteger } from 
 
 export const runtime = "nodejs";
 
-function isBase64(value: string): boolean {
+function readVarint(bytes: Uint8Array, start: number): { value: bigint; next: number } {\n  let value = 0n; let shift = 0n; let cursor = start;\n  while (cursor < bytes.length && shift < 70n) {\n    const byte = bytes[cursor++]; value |= BigInt(byte & 0x7f) << shift;\n    if ((byte & 0x80) === 0) return { value, next: cursor };\n    shift += 7n;\n  }\n  throw new Error("Malformed ATK Protobuf varint.");\n}\n\nfunction readCouponHeader(details: string): Map<number, bigint> {\n  const binary = atob(details);\n  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));\n  const fields = new Map<number, bigint>();\n  let cursor = 0;\n  while (cursor < bytes.length) {\n    const tag = readVarint(bytes, cursor); cursor = tag.next;\n    const field = Number(tag.value >> 3n); const wire = Number(tag.value & 7n);\n    if (field <= 0) throw new Error("Invalid ATK Protobuf field.");\n    if (wire === 0) {\n      const parsed = readVarint(bytes, cursor); cursor = parsed.next;\n      if ([1, 2, 3, 6, 7, 9, 13].includes(field)) fields.set(field, parsed.value);\n    } else if (wire === 1) cursor += 8;\n    else if (wire === 2) { const length = readVarint(bytes, cursor); cursor = length.next; cursor += Number(length.value); }\n    else if (wire === 5) cursor += 4;\n    else throw new Error("Unsupported ATK Protobuf wire type.");\n    if (cursor > bytes.length) throw new Error("Truncated ATK Protobuf payload.");\n  }\n  return fields;\n}\n\nfunction isBase64(value: string): boolean {
   if (!value || value.length > 2_000_000 || value.length % 4 !== 0) return false;
   return /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value);
 }
@@ -22,9 +22,9 @@ export async function POST(request: Request) {
   const details = typeof body.details === "string" ? body.details : "";
   const signature = typeof body.signature === "string" ? body.signature : "";
   const couponId = positiveInteger(body.couponId);
-  const totalCents = positiveInteger(body.totalCents);
+  const totalCents = positiveInteger(body.totalCents);\n  const applicationId = positiveInteger(body.applicationId);
   if (!organizationId || !invoiceId || !posInstallationId || !/^\d{9}$/.test(nui) ||
-      !couponId || totalCents === null || !isBase64(details) || !isBase64(signature)) {
+      !couponId || totalCents === null || !applicationId || !isBase64(details) || !isBase64(signature)) {
     return Response.json({ error: "invalid_coupon_request", detail: "Organization, invoice, TEST POS, NUI, coupon ID, total and signed Protobuf details are required." }, { status: 400 });
   }
 
@@ -32,16 +32,16 @@ export async function POST(request: Request) {
   if (!authorization.ok) return Response.json({ error: "organization_not_authorized", detail: authorization.detail }, { status: authorization.status });
 
   const [{ data: invoice, error: invoiceError }, { data: pos, error: posError }] = await Promise.all([
-    supabase.from("fiskalo_invoices").select("id,organization_id,status,total,invoice_number").eq("id", invoiceId).eq("organization_id", organizationId).single(),
+    supabase.from("fiskalo_invoices").select("id,organization_id,status,total,invoice_number,payment_status,payment_method").eq("id", invoiceId).eq("organization_id", organizationId).single(),
     supabase.from("fiskalo_atk_pos_installations").select("id,organization_id,atk_branch_id,pos_id,environment").eq("id", posInstallationId).eq("organization_id", organizationId).single(),
   ]);
-  if (invoiceError || !invoice || invoice.status !== "issued") {
+  if (invoiceError || !invoice || invoice.status !== "issued" || invoice.payment_status !== "paid" || invoice.payment_method !== "cash") {
     return Response.json({ error: "invoice_not_eligible", detail: "Only an issued Fiskalo invoice can be submitted as an ATK TEST sale." }, { status: 409 });
   }
   if (posError || !pos || pos.environment !== "test") {
     return Response.json({ error: "test_pos_not_ready", detail: "The selected POS installation is not configured for the ATK TEST environment." }, { status: 409 });
   }
-  if (Math.round(Number(invoice.total) * 100) !== totalCents) {
+  let header: Map<number, bigint>;\n  try { header = readCouponHeader(details); }\n  catch { return Response.json({ error: "invalid_protobuf", detail: "The signed details are not a valid ATK Protobuf coupon." }, { status: 400 }); }\n  const expectedHeader = new Map<number, bigint>([[1, BigInt(nui)], [2, BigInt(couponId)], [3, BigInt(pos.atk_branch_id)], [6, BigInt(pos.pos_id)], [7, BigInt(applicationId)], [9, 1n], [13, BigInt(totalCents)]]);\n  for (const [field, expected] of expectedHeader) {\n    if (header.get(field) !== expected) return Response.json({ error: "coupon_header_mismatch", detail: "The signed coupon identifiers or totals do not match the selected Fiskalo business, TEST POS and invoice." }, { status: 409 });\n  }\n  if (Math.round(Number(invoice.total) * 100) !== totalCents) {
     return Response.json({ error: "invoice_total_mismatch", detail: "The signed coupon total does not match the issued Fiskalo invoice." }, { status: 409 });
   }
 
