@@ -4,9 +4,14 @@ import FiskaloAtkCrypto from "fiskalo-atk-crypto";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import * as SecureStore from "expo-secure-store";
 import { supabase } from "./src/supabase";
+import { encodeAtkBase64, encodeAtkPosCoupon } from "../src/lib/atk/protobuf";
 
 type Org = { organization_id: string; role: string; fiskalo_organizations: { legal_name: string; municipality: string; nui: string } | null };
-type Product = { id: string; name: string; sku: string | null; unit_price: number; vat_rate: number; stock_quantity: number; track_stock: boolean; item_type: string; is_active: boolean };
+type Product = {
+  id: string; name: string; sku: string | null; unit_price: number; vat_rate: number;
+  stock_quantity: number; track_stock: boolean; item_type: string; is_active: boolean;
+  atk_unit_code: string | null; atk_tax_code: string | null; atk_item_category_code: string | null;
+};
 type Customer = { id: string; name: string };
 type CartLine = { product: Product; quantity: number };
 const ink = "#17212b";
@@ -80,7 +85,7 @@ export default function App() {
   async function selectOrganization(org: Org) {
     setBusy(true); setError(""); setMessage("");
     const { data: p, error: pError } = await supabase.from("fiskalo_products")
-      .select("id,name,sku,unit_price,vat_rate,stock_quantity,track_stock,item_type,is_active")
+      .select("id,name,sku,unit_price,vat_rate,stock_quantity,track_stock,item_type,is_active,atk_unit_code,atk_tax_code,atk_item_category_code")
       .eq("organization_id", org.organization_id).eq("is_active", true).order("name");
     const { data: c, error: cError } = await supabase.from("fiskalo_customers")
       .select("id,name").eq("organization_id", org.organization_id).order("name");
@@ -107,6 +112,18 @@ export default function App() {
     setError(""); setMessage("");
     if (!cart.length) { setError("Shporta është bosh."); return; }
     if (paymentMethod !== "credit" && !paymentConfirmed) { setError("Konfirmo se pagesa është pranuar."); return; }
+    if (paymentMethod !== "credit") {
+      const unmapped = cart.filter(({ product }) => {
+        const vat = Number(product.vat_rate);
+        const tax = product.atk_tax_code?.trim() ?? "";
+        const taxMatches = vat === 8 ? tax === "D" : vat === 18 ? tax === "E" : vat === 0 ? ["A", "C"].includes(tax) : false;
+        return !product.atk_unit_code?.trim() || !product.atk_item_category_code?.trim() || !taxMatches;
+      });
+      if (unmapped.length) {
+        setError("Plotëso kodet zyrtare ATK për: " + unmapped.map((row) => row.product.name).join(", ") + ". Shitja nuk u krijua.");
+        return;
+      }
+    }
     const invalidStock = cart.find((row) => row.product.track_stock && row.quantity > Number(row.product.stock_quantity));
     if (invalidStock) { setError("Stok i pamjaftueshëm: " + invalidStock.product.name); return; }
 
@@ -137,8 +154,18 @@ export default function App() {
       });
       if (payError) { setBusy(false); setError("Fatura " + invoiceNumber + " u lëshua, por pagesa nuk u regjistrua: " + payError.message); return; }
     }
+    let fiscalMessage = "";
+    if (paymentMethod !== "credit") {
+      try {
+        fiscalMessage = " " + await submitAndroidPaidInvoiceToATK(invoice.id);
+      } catch (fiscalError) {
+        fiscalMessage = " Pagesa u regjistrua, por fiskalizimi automatik nuk u konfirmua: " +
+          (fiscalError instanceof Error ? fiscalError.message : "Gabim i panjohur.") +
+          " Kontrollo statusin ATK para çdo prove tjetër.";
+      }
+    }
     setBusy(false); setCart([]); setCustomerId(""); setPaymentConfirmed(false); setPaymentMethod("cash");
-    setMessage("Fatura " + invoiceNumber + " u lëshua. " + (paymentMethod === "credit" ? "Mbeti e papaguar." : "Pagesa u regjistrua."));
+    setMessage("Fatura " + invoiceNumber + " u lëshua. " + (paymentMethod === "credit" ? "Mbeti e papaguar." : "Pagesa u regjistrua." + fiscalMessage));
     await selectOrganization({ organization_id: organizationId, role: "", fiskalo_organizations: { legal_name: organizationName, municipality: "", nui: organizationNui } });
   }
 
@@ -177,10 +204,12 @@ export default function App() {
     } finally { setAtkBusy(false); }
   }
 
-  async function getAndroidTestPosInstallationId(): Promise<string> {
+  async function getAndroidTestPosInstallation(): Promise<{
+    id: string; atk_branch_id: number; pos_id: number; location: string | null; status: string;
+  }> {
     const { data, error: lookupError } = await supabase
       .from("fiskalo_atk_pos_installations")
-      .select("id")
+      .select("id,atk_branch_id,pos_id,location,status")
       .eq("organization_id", organizationId)
       .eq("environment", "test")
       .eq("atk_branch_id", Number(atkBranchId))
@@ -192,7 +221,129 @@ export default function App() {
         ? "Ka më shumë se një instalim TEST me këto ID. Zgjidh/korrekto instalimin para verifikimit."
         : "Nuk u gjet instalimi TEST i këtij POS-i në biznes. Regjistroje një herë te konfigurimi ATK në Web POS.");
     }
-    return data[0].id;
+    return data[0] as { id: string; atk_branch_id: number; pos_id: number; location: string | null; status: string };
+  }
+
+  function androidAtkApiBase(): string {
+    const value = process.env.EXPO_PUBLIC_FISKALO_API_URL?.trim();
+    if (!value) throw new Error("Konfiguro EXPO_PUBLIC_FISKALO_API_URL me adresën reale të Fiskalo Cloudflare Worker.");
+    return value.replace(/\\/$/, "");
+  }
+
+  function createAndroidVerificationNo(): string {
+    const alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    let value = "";
+    for (let i = 0; i < 16; i++) value += alphabet[Math.floor(Math.random() * alphabet.length)];
+    return value;
+  }
+
+  async function submitAndroidPaidInvoiceToATK(invoiceId: string): Promise<string> {
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth.user) throw new Error("Sesioni ka skaduar. Hyr përsëri.");
+    const { data: invoice, error: invoiceError } = await supabase.from("fiskalo_invoices")
+      .select("id,organization_id,status,total,invoice_number,payment_status,subtotal,vat_total")
+      .eq("id", invoiceId).eq("organization_id", organizationId).single();
+    if (invoiceError || !invoice) throw new Error("Fatura nuk u gjet për fiskalizim.");
+    if (invoice.status !== "issued" || invoice.payment_status !== "paid") return "Fatura nuk është plotësisht e paguar; nuk u dërgua në ATK.";
+
+    const { data: existing, error: existingError } = await supabase.from("fiskalo_atk_fiscal_documents")
+      .select("status,atk_transaction_id").eq("organization_id", organizationId).eq("source_invoice_id", invoiceId).maybeSingle();
+    if (existingError) throw new Error("Nuk u kontrollua statusi ekzistues ATK: " + existingError.message);
+    if (existing) return existing.status === "accepted"
+      ? "ATK e ka pranuar tashmë këtë faturë (ID " + String(existing.atk_transaction_id ?? "") + ")."
+      : "Kjo faturë ka tashmë një dërgesë ATK (" + existing.status + "). Nuk u krijua kupon i dytë.";
+
+    const pos = await getAndroidTestPosInstallation();
+    if (pos.status !== "active") throw new Error("Ky POS Android nuk është aktivizuar pas instalimit të certifikatës ATK TEST.");
+    const alias = organizationId + "." + atkBranchId + "." + atkPosId;
+    if (!await FiskaloAtkCrypto.hasKey(alias)) throw new Error("Mungon çelësi privat i këtij POS-i në Android Keystore.");
+    const certificate = await SecureStore.getItemAsync("fiskalo-atk-certificate:" + alias);
+    if (!certificate || !await FiskaloAtkCrypto.matchesCertificate(alias, certificate)) {
+      throw new Error("Certifikata ATK TEST mungon ose nuk përputhet me çelësin lokal të Android-it.");
+    }
+    const { data: verification, error: verificationError } = await supabase.from("fiskalo_atk_pos_verifications")
+      .select("nui,atk_branch_id,pos_id,application_id").eq("organization_id", organizationId)
+      .eq("pos_installation_id", pos.id).maybeSingle();
+    if (verificationError || !verification || verification.nui !== organizationNui ||
+        Number(verification.atk_branch_id) !== Number(pos.atk_branch_id) ||
+        Number(verification.pos_id) !== Number(pos.pos_id)) {
+      throw new Error("Ky POS Android nuk ka verifikim ATK TEST që përputhet me NUI, degën dhe POS ID.");
+    }
+
+    const [{ data: org, error: orgError }, { data: lines, error: linesError }, { data: payments, error: paymentsError }] = await Promise.all([
+      supabase.from("fiskalo_organizations").select("nui,municipality").eq("id", organizationId).single(),
+      supabase.from("fiskalo_invoice_items").select("product_id,description,quantity,unit_price,line_subtotal,line_vat,vat_rate").eq("invoice_id", invoiceId),
+      supabase.from("fiskalo_invoice_payments").select("amount,payment_method").eq("invoice_id", invoiceId).order("created_at"),
+    ]);
+    if (orgError || !org || String(org.nui) !== organizationNui) throw new Error("NUI i biznesit nuk përputhet me profilin fiskal.");
+    if (linesError || !lines?.length) throw new Error("Fatura nuk ka artikuj të lexueshëm.");
+    if (paymentsError || !payments?.length) throw new Error("Nuk u lexua evidenca e pagesave.");
+
+    const productIds = Array.from(new Set(lines.map((line) => line.product_id).filter((id): id is string => Boolean(id))));
+    const { data: mappedProducts, error: productsError } = productIds.length
+      ? await supabase.from("fiskalo_products").select("id,atk_unit_code,atk_tax_code,atk_item_category_code")
+        .eq("organization_id", organizationId).in("id", productIds)
+      : { data: [], error: null };
+    if (productsError) throw new Error("Kodet fiskale nuk u lexuan: " + productsError.message);
+    const productMap = new Map((mappedProducts ?? []).map((product) => [product.id, product]));
+    const itemRows = lines.map((line) => {
+      const product = line.product_id ? productMap.get(line.product_id) : null;
+      const unit = product?.atk_unit_code?.trim() ?? "";
+      const tax = product?.atk_tax_code?.trim() ?? "";
+      const itemType = product?.atk_item_category_code?.trim() ?? "";
+      const vat = Number(line.vat_rate);
+      const matches = vat === 8 ? tax === "D" : vat === 18 ? tax === "E" : vat === 0 ? ["A", "C"].includes(tax) : false;
+      if (!unit || !itemType || !matches) throw new Error("Artikulli " + line.description + " nuk ka kode ATK të plota ose kodi i TVSH-së nuk përputhet.");
+      return { line, unit, tax, itemType };
+    });
+
+    const paymentTypes: Record<string, number> = { cash: 1, card: 2, bank_transfer: 6 };
+    const paymentTotals = new Map<number, number>();
+    for (const payment of payments) {
+      const type = paymentTypes[payment.payment_method];
+      if (!type) throw new Error("Mënyra e pagesës " + payment.payment_method + " nuk ka kod ATK të konfiguruar.");
+      paymentTotals.set(type, (paymentTotals.get(type) ?? 0) + Math.round(Number(payment.amount) * 100));
+    }
+    const paymentCents = Array.from(paymentTotals.values()).reduce((sum, value) => sum + value, 0);
+    const totalCents = Math.round(Number(invoice.total) * 100);
+    if (paymentCents !== totalCents) throw new Error("Totali i pagesave nuk përputhet me totalin e faturës.");
+
+    const { data: couponId, error: couponError } = await supabase.rpc("fiskalo_next_atk_coupon_id");
+    if (couponError || !couponId) throw new Error("Nuk u caktua numri unik i kuponit ATK: " + (couponError?.message ?? ""));
+    const grouped = new Map<string, { totalForTaxCents: number; totalTaxCents: number }>();
+    itemRows.forEach(({ line, tax }) => {
+      const current = grouped.get(tax) || { totalForTaxCents: 0, totalTaxCents: 0 };
+      current.totalForTaxCents += Math.round(Number(line.line_subtotal) * 100);
+      current.totalTaxCents += Math.round(Number(line.line_vat) * 100);
+      grouped.set(tax, current);
+    });
+    const payload = encodeAtkBase64(encodeAtkPosCoupon({
+      businessId: String(org.nui), couponId, branchId: pos.atk_branch_id,
+      location: pos.location || org.municipality || "", operatorId: auth.user.id,
+      posId: pos.pos_id, applicationId: Number(verification.application_id),
+      verificationNo: createAndroidVerificationNo(), type: 1, unixTime: Math.floor(Date.now() / 1000),
+      items: itemRows.map(({ line, unit, tax, itemType }) => ({
+        name: line.description, unitPriceEuro: Number(line.unit_price), unit, quantity: Number(line.quantity),
+        lineTotalCents: Math.round((Number(line.line_subtotal) + Number(line.line_vat)) * 100), taxRate: tax, itemType,
+      })),
+      payments: Array.from(paymentTotals.entries()).map(([type, amountCents]) => ({ type, amountCents })),
+      totalCents,
+      taxGroups: Array.from(grouped.entries()).map(([taxRate, values]) => ({ taxRate, ...values })),
+      totalTaxCents: Math.round(Number(invoice.vat_total) * 100),
+      totalNoTaxCents: Math.round(Number(invoice.subtotal) * 100),
+    }));
+    const signature = await FiskaloAtkCrypto.signBase64(alias, payload);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) throw new Error("Sesioni ka skaduar. Hyr përsëri.");
+    const response = await fetch(androidAtkApiBase() + "/api/atk/test/coupon", {
+      method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+      body: JSON.stringify({ organizationId, nui: String(org.nui), invoiceId, posInstallationId: pos.id,
+        couponId: String(couponId), applicationId: Number(verification.application_id), totalCents, details: payload, signature }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.detail || result.error || "Dërgimi automatik në ATK TEST dështoi. Kontrollo statusin para çdo prove tjetër.");
+    return "ATK TEST e pranoi faturën. Transaction ID: " + String(result.transactionId ?? "");
   }
 
   async function verifyAndroidAtkPos() {
@@ -208,8 +359,7 @@ export default function App() {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
       if (!token) throw new Error("Sesioni ka skaduar. Hyr përsëri.");
-      const apiBase = process.env.EXPO_PUBLIC_FISKALO_API_URL?.trim();
-      if (!apiBase) throw new Error("Konfiguro EXPO_PUBLIC_FISKALO_API_URL me adresën reale të Fiskalo Cloudflare Worker.");
+      const apiBase = androidAtkApiBase();
       const posInstallationId = await getAndroidTestPosInstallationId();
       const response = await fetch(apiBase.replace(/\/$/, "") + "/api/atk/test/verify", {
         method: "POST",
@@ -261,6 +411,10 @@ export default function App() {
       const matches = await FiskaloAtkCrypto.matchesCertificate(alias, result.signedCertificate);
       if (!matches) throw new Error("Certifikata e ATK-së nuk përputhet me çelësin lokal të këtij Android-i. Nuk u ruajt.");
       await SecureStore.setItemAsync("fiskalo-atk-certificate:" + alias, result.signedCertificate as string);
+      const posInstallation = await getAndroidTestPosInstallation();
+      const { error: activationError } = await supabase.from("fiskalo_atk_pos_installations")
+        .update({ status: "active" }).eq("organization_id", organizationId).eq("id", posInstallation.id);
+      if (activationError) throw new Error("Certifikata u mor, por instalimi nuk u aktivizua në llogarinë e biznesit: " + activationError.message);
       setAtkCertificateInstalled(true);
       setMessage("Certifikata TEST u mor nga ATK dhe u verifikua se përputhet me çelësin Android Keystore. Nuk është certifikatë prodhimi.");
     } catch (e) {
