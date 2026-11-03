@@ -51,7 +51,7 @@ function readableProviderMessage(value: unknown, fallback: string): string {
 
 function parseATKTransactionId(raw: string): string | null {
   // Preserve the exact uint64 decimal digits: JavaScript Number loses precision above 2^53-1.
-  const match = raw.match(/"transaction_id"\\s*:\\s*(?:"([0-9]+)"|([0-9]+))/);
+  const match = raw.match(/"transaction_id"\s*:\s*(?:"([0-9]+)"|([0-9]+))/);
   const value = match?.[1] ?? match?.[2];
   if (!value) return null;
   try {
