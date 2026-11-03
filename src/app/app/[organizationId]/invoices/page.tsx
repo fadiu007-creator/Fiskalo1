@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ArrowLeft, ArrowUpRight, FileText, Search } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, FileText } from "lucide-react";
 
 type Props = { params: Promise<{ organizationId: string }> };
 const money = (value: number) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR" }).format(value);
