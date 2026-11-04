@@ -1,38 +1,43 @@
-# Fiskalo ARBK business lookup
+# Fiskalo — official ATK taxpayer lookup
 
-Fiskalo onboarding supports a NUI lookup through the ARBK Atlas business-data API.
+## Official service
 
-## Runtime configuration
+Fiskalo onboarding links to ATK's public **Kërko tatimpaguesin** service:
 
-Set `ARBK_ATLAS_API_KEY` as a server-side environment secret in the Cloudflare deployment environment. Do not prefix it with `NEXT_PUBLIC_` and do not expose it to browser code.
+https://apps.atk-ks.org/BizPasiveApp/VatRegist/Index
 
-Provider documentation: https://arbk.atlas-studio.eu/en/docs
+ATK states that this service searches by:
+- Numri fiskal
+- NRB
+- Nr. TVSh
 
-The provider currently documents exact NUI lookup at:
+The published result fields include fiscal number, NRB, registration status, taxpayer name, address, city, municipality, tax centre, VAT number and VAT registration status.
 
-```
-GET https://api.atlas-studio.eu/v1/businesses/{nui}
-Authorization: Bearer <ARBK_ATLAS_API_KEY>
-```
+## API availability
 
-The provider documents API access as Enterprise-only. Fiskalo does not scrape the official ARBK website: the official portal warns against automated collection and reuse of its published data. If Fiskalo obtains an authorized direct ARBK API or data-sharing agreement later, replace the provider adapter in `src/app/api/arbk/business/route.ts`.
+ATK's public website documents a human-facing taxpayer search service. The publicly available documentation reviewed for this implementation does not publish a supported third-party API contract, authentication method, request schema or service-level terms for automated lookups.
 
-## User flow
+The SEF integration documentation is a separate interface for fiscal coupons, digital signatures and transmission to ATK. It must not be treated as a taxpayer-profile API.
 
-1. An authenticated user opens `/onboarding`.
-2. Enters a 9-digit NUI and selects **Kërko në ARBK**.
-3. Fiskalo fetches the record server-side, checks that the returned NUI matches the requested NUI, and fills available registration fields.
-4. The user reviews and confirms the data before creating the organization.
-5. The organization stores the source label, retrieval timestamp, registry status and registration date when supplied.
+Therefore Fiskalo does not scrape the ATK search form, reverse-engineer private endpoints, or claim automatic official verification. Onboarding opens the official ATK search in a new tab and allows the business owner to enter the returned details. NUI, fiscal number and NRB are kept distinct.
 
-A successful provider lookup is labelled as data from the ARBK Atlas registry dataset. It is not presented as a government-issued certificate or live official verification. Contact details and VAT registration are not guessed; the user can enter/confirm them separately.
+## Future direct integration
 
-## Database
+An automatic lookup can be added when ATK provides written authorization and an API specification for third-party SEF providers. The adapter should then:
+1. Authenticate server-side using ATK-issued credentials.
+2. Query only the approved identifiers and fields.
+3. Validate that the returned identifier matches the submitted business.
+4. Store source, retrieval timestamp and response status.
+5. Clearly distinguish taxpayer registration status from tax-clearance certificates or tax debt status.
 
-Apply `supabase/migrations/20261104120000_fiskalo_arbk_registry_lookup.sql` to the Fiskalo Supabase database before deploying this onboarding change. The migration adds registry provenance fields and updates the organization-creation RPC. It is namespaced to Fiskalo tables.
+Contact ATK through its official channels to request a supported taxpayer lookup API and commercial integration authorization:
+- https://www.atk-ks.org/
+- info@atk-ks.org
+- edi@atk-ks.org
 
-## Failure behavior
+## Current behavior
 
-- Missing API key: lookup returns a configuration message; manual form entry remains available.
-- NUI not found, invalid NUI, provider authorization failure, throttling or timeout: the form remains editable and does not fabricate data.
-- A changed NUI invalidates the previous lookup confirmation.
+- The onboarding form retains manual entry.
+- The official ATK lookup is opened directly from the onboarding screen.
+- Fiskalo does not mark the business as ATK-verified merely because the user opened the ATK page.
+- The old ARBK Atlas integration is removed from the onboarding path and no Atlas API key is required.
