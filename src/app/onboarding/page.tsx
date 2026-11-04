@@ -26,7 +26,9 @@ export default function OnboardingPage() {
   const [registryLoaded, setRegistryLoaded] = useState(false);
 
   function update<K extends keyof BusinessForm>(key: K, value: BusinessForm[K]) {
-    setForm((current) => ({ ...current, [key]: value }));
+    setForm((current) => key === "nui"
+      ? { ...current, nui: value as string, arbk_verified_nui: undefined, arbk_retrieved_at: undefined, arbk_business_status: undefined, arbk_registration_date: undefined }
+      : { ...current, [key]: value });
     if (key === "nui") {
       setRegistryLoaded(false);
       setLookupMessage("");
