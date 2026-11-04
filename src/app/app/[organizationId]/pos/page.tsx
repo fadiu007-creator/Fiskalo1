@@ -6,6 +6,8 @@ import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { submitPaidInvoiceToATK } from "@/lib/atk/submit-paid-invoice";
 import { FiscalQrCode } from "@/components/fiscal-qr-code";
+import { ThermalPrinterSettings } from "@/components/thermal-printer-settings";
+import { printWithAgent, readPrinterSettings } from "@/lib/printing/thermal-printer-client";
 import { ensureATKTestPosReady } from "@/lib/atk/ensure-test-pos-ready";
 import { ArrowRight, FileText, Plus, RefreshCw, Search, Settings2, ShoppingCart } from "lucide-react";
 
@@ -264,12 +266,15 @@ export default function WebPosPage() {
     setIssuedInvoiceId(invoice.id);
     setIssuedNumber(String(invoiceNumber ?? ""));
     let fiscalNotice = "";
+    let receiptQrPayload = "";
+    let receiptFiscalStatus = "";
     if (paymentMethod !== "credit") {
       try {
         const fiscalResult = await submitPaidInvoiceToATK(supabase, organizationId, invoice.id);
         fiscalNotice = " " + fiscalResult.message;
         setIssuedFiscalStatus(fiscalResult.status);
-        if (fiscalResult.qrPayload) setIssuedQrPayload(fiscalResult.qrPayload);
+        if (fiscalResult.qrPayload) { receiptQrPayload = fiscalResult.qrPayload; setIssuedQrPayload(fiscalResult.qrPayload); }
+        receiptFiscalStatus = fiscalResult.status;
       } catch (fiscalError) {
         fiscalNotice = " Pagesa u ruajt, por dërgimi automatik në ATK nuk u përfundua: " +
           (fiscalError instanceof Error ? fiscalError.message : "Gabim i panjohur.") +
@@ -277,8 +282,45 @@ export default function WebPosPage() {
         const { data: fiscalDocument } = await supabase.from("fiskalo_atk_fiscal_documents")
           .select("qr_payload,status").eq("organization_id", organizationId)
           .eq("source_invoice_id", invoice.id).maybeSingle();
-        if (typeof fiscalDocument?.qr_payload === "string") setIssuedQrPayload(fiscalDocument.qr_payload);
-        if (typeof fiscalDocument?.status === "string") setIssuedFiscalStatus(fiscalDocument.status);
+        if (typeof fiscalDocument?.qr_payload === "string") { receiptQrPayload = fiscalDocument.qr_payload; setIssuedQrPayload(fiscalDocument.qr_payload); }
+        if (typeof fiscalDocument?.status === "string") { receiptFiscalStatus = fiscalDocument.status; setIssuedFiscalStatus(fiscalDocument.status); }
+      }
+    }
+    if (paymentMethod !== "credit") {
+      const printerSettings = readPrinterSettings();
+      if (printerSettings.autoPrint) {
+        try {
+          const { data: business } = await supabase.from("fiskalo_organizations")
+            .select("legal_name,trade_name,nui,address,municipality,phone")
+            .eq("id", organizationId).maybeSingle();
+          await printWithAgent({
+            businessName: business?.trade_name || business?.legal_name || "Biznesi",
+            nui: business?.nui ?? null,
+            address: business?.address ?? null,
+            municipality: business?.municipality ?? null,
+            phone: business?.phone ?? null,
+            invoiceNumber: String(invoiceNumber ?? ""),
+            issuedAt: new Date().toLocaleString("sq-XK"),
+            paymentMethod: paymentMethod === "cash" ? "PARA NE DORE" : paymentMethod === "card" ? "KARTELE" : "TRANSFER BANKAR",
+            items: valid.map((line) => ({
+              name: line.product!.name,
+              quantity: line.quantity,
+              unitPrice: Number(line.product!.unit_price),
+              vatRate: Number(line.product!.vat_rate),
+              lineTotal: line.lineTotal,
+            })),
+            subtotal,
+            vatTotal,
+            total: Number(issuedInvoice.total),
+            qrPayload: receiptQrPayload,
+            fiscalStatus: receiptFiscalStatus,
+            paperWidthMm: printerSettings.paperWidthMm,
+          }, printerSettings);
+          fiscalNotice += " Kuponi u dërgua te printeri.";
+        } catch (printError) {
+          fiscalNotice += " Shitja u ruajt, por printimi dështoi: " +
+            (printError instanceof Error ? printError.message : "Gabim i panjohur.");
+        }
       }
     }
     setNotice(paymentMethod === "credit"
@@ -301,6 +343,7 @@ export default function WebPosPage() {
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Link href={`/app/${organizationId}/pos/shifts`} style={{ ...secondary, textDecoration: "none" }}>Ndërrimi i arkës</Link>{["owner", "administrator", "manager"].includes(userRole) && <Link href={`/app/${organizationId}/pos/products`} style={{ ...secondary, textDecoration: "none" }}>Produktet</Link>}{isManagement && <Link href={`/app/${organizationId}/pos/setup`} style={{ ...secondary, textDecoration: "none" }}><Settings2 size={15} /> Konfiguro ATK</Link>}
         {userRole !== "cashier" && <Link href={`/app/${organizationId}`} style={{ ...secondary, textDecoration: "none" }}>Paneli i biznesit</Link>}<button style={secondary} onClick={() => void load()}><RefreshCw size={15} /> Rifresko</button></div>
     </header>
+    <ThermalPrinterSettings />
     <div role="status" style={{ marginBottom: 12, border: "1px solid var(--line)", borderRadius: 10, padding: "10px 12px", color: "var(--muted)", fontSize: 13 }}>{["owner", "administrator"].includes(userRole) ? atkSetupNotice : "Arka është gati për përdorim. Konfigurimi dhe certifikata ATK TEST menaxhohen nga pronari ose administratori."}</div>
     {!activeShiftId && <div role="status" style={{ marginBottom: 12, border: "1px solid #e8c98d", background: "#fff9ed", borderRadius: 10, padding: 13, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}><div><strong>Hape ndërrimin para pagesave me para në dorë</strong><div style={{ fontSize: 12, marginTop: 3 }}>Kjo lidh çdo pagesë me arkën e arkëtarit dhe mundëson barazimin e saktë në fund të ndërrimit.</div></div><Link href={`/app/${organizationId}/pos/shifts`} style={{ ...button, textDecoration: "none" }}>Hap arkën</Link></div>}
     <nav aria-label="POS dhe faturat" style={{ display: "flex", gap: 8, marginBottom: 14, borderBottom: "1px solid var(--line)", paddingBottom: 10 }}><button aria-pressed={activeView === "pos"} onClick={() => setActiveView("pos")} style={{ ...(activeView === "pos" ? button : secondary) }}><ShoppingCart size={15} /> Shitje</button><button aria-pressed={activeView === "invoices"} onClick={() => setActiveView("invoices")} style={{ ...(activeView === "invoices" ? button : secondary) }}><FileText size={15} /> Faturat <span className="status-pill">{invoices.length}</span></button></nav>
