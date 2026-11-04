@@ -8,8 +8,12 @@ export type AtkAndroidKeyResult = {
 };
 
 export type BondedBluetoothPrinter = { name: string; address: string; bonded: boolean };
+export type UsbPrinter = { deviceName: string; vendorId: number; productId: number; manufacturerName: string; productName: string; hasPermission: boolean };
 
 type FiskaloAtkCryptoModuleType = {
+  listUsbPrinters(): Promise<UsbPrinter[]>;
+  requestUsbPermission(deviceName: string): Promise<boolean>;
+  printUsb(deviceName: string, dataBase64: string): Promise<{ printed: boolean; transport: string; bytes: number }>;
   listBondedBluetoothPrinters(): Promise<BondedBluetoothPrinter[]>;
   printBluetooth(address: string, dataBase64: string): Promise<{ printed: boolean; transport: string; bytes: number }>;
   hasKey(alias: string): Promise<boolean>;
