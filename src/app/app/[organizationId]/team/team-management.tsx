@@ -20,6 +20,9 @@ export default function TeamManagement({ organizationId }: { organizationId: str
   const [members,setMembers] = useState<Member[]>([]);
   const [canManageAdministrators,setCanManageAdministrators] = useState(false);
   const [email,setEmail] = useState("");
+  const [displayName,setDisplayName] = useState("");
+  const [phone,setPhone] = useState("");
+  const [password,setPassword] = useState("");
   const [role,setRole] = useState("cashier");
   const [busy,setBusy] = useState(false);
   const [error,setError] = useState("");
@@ -42,16 +45,19 @@ export default function TeamManagement({ organizationId }: { organizationId: str
 
   async function addMember(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
-    const { data, error } = await supabase.rpc("fiskalo_add_existing_member",{target_org:organizationId,target_email:email.trim(),target_role:role});
-    setBusy(false);
-    if(error) { setError(error.message); return; }
-    const result = (data ?? {}) as { status?: string; role?: string };
-    const selectedRole = roles.find((item) => item.value === (result.role || role))?.label || labels[result.role || role];
-    setEmail("");
-    setNotice(result.status === "invited"
-      ? `Ftesa për ${selectedRole} u ruajt. Përdoruesi do të shtohet automatikisht kur të regjistrohet ose të hyjë me këtë email.`
-      : `Anëtari u shtua me rolin: ${selectedRole}.`);
-    await load();
+    try {
+      const response = await fetch("/api/team/add-worker", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organizationId, email, displayName, phone, password, role }),
+      });
+      const result = await response.json() as { error?: string; detail?: string; message?: string };
+      if (!response.ok) throw new Error(result.detail || result.error || "Punëtori nuk u shtua.");
+      setEmail(""); setDisplayName(""); setPhone(""); setPassword("");
+      setNotice(result.message || "Punëtori u shtua në ekip.");
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Punëtori nuk u shtua.");
+    } finally { setBusy(false); }
   }
   async function removeMember(member: Member) {
     if(!window.confirm(`A dëshiron t'ia heqësh qasjen ${member.member_email}?`)) return;
@@ -78,9 +84,12 @@ export default function TeamManagement({ organizationId }: { organizationId: str
       <div style={{background:"white",border:"1px solid var(--line)",borderRadius:15,padding:18}}>
         <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:15}}><UserPlus color="var(--brand)"/><h2 style={{fontSize:17,margin:0}}>Shto punëtor</h2></div>
         <form onSubmit={addMember} style={{display:"grid",gap:12}}>
-          <label style={{fontSize:12,fontWeight:700}}>Email i llogarisë<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="punetori@email.com" style={{...field,display:"block",marginTop:6}}/></label>
+          <label style={{fontSize:12,fontWeight:700}}>Emri dhe mbiemri<input required value={displayName} onChange={e=>setDisplayName(e.target.value)} placeholder="Emri i punëtorit" style={{...field,display:"block",marginTop:6}}/></label>
+          <label style={{fontSize:12,fontWeight:700}}>Email<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="punetori@email.com" style={{...field,display:"block",marginTop:6}}/></label>
+          <label style={{fontSize:12,fontWeight:700}}>Telefoni (opsional)<input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+383…" style={{...field,display:"block",marginTop:6}}/></label>
+          <label style={{fontSize:12,fontWeight:700}}>Fjalëkalimi fillestar<input type="password" minLength={8} value={password} onChange={e=>setPassword(e.target.value)} placeholder="Së paku 8 karaktere për llogari të re" autoComplete="new-password" style={{...field,display:"block",marginTop:6}}/></label>
           <label style={{fontSize:12,fontWeight:700}}>Roli<select value={role} onChange={e=>setRole(e.target.value)} style={{...field,display:"block",marginTop:6}}>{roles.filter(r=>r.value!=="administrator" || canManageAdministrators).map(r=><option key={r.value} value={r.value}>{r.label}</option>)}</select></label>
-          <p style={{fontSize:12,color:"var(--muted)",lineHeight:1.5,margin:0}}>{roles.find(r=>r.value===role)?.description}. Nëse emaili ka llogari, anëtari shtohet menjëherë; përndryshe ftesa ruhet dhe aktivizohet kur ai regjistrohet ose hyn në Fiskalo.</p>
+          <p style={{fontSize:12,color:"var(--muted)",lineHeight:1.5,margin:0}}>{roles.find(r=>r.value===role)?.description}. Nëse emaili ka llogari, shtohet menjëherë. Për llogari të re, vendos fjalëkalim fillestar. Llogaria krijohet dhe verifikohet automatikisht nga sistemi; punëtori nuk ka nevojë të konfirmojë email-in.</p>
           <button disabled={busy} style={{border:0,borderRadius:10,padding:13,background:"var(--brand)",color:"white",fontWeight:800,cursor:"pointer"}}>{busy?"Duke ruajtur…":"Shto në ekip"}</button>
         </form>
       </div>
