@@ -17,7 +17,7 @@ export function FiscalQrCode({ payload, size = 176, label = "Kodi QR i kuponit f
       qr.addData(payload, "Byte");
       qr.make();
       const cellSize = Math.max(2, Math.floor(size / (qr.getModuleCount() + 8)));
-      return qr.createSvgTag(cellSize, 4, label);
+      return qr.createSvgTag(cellSize, 4);
     } catch {
       return "";
     }
