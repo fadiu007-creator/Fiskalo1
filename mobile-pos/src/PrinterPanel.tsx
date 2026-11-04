@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Platform, Switch, Text, TouchableOpacity, View } from "react-native";
+import { Platform, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import FiskaloAtkCrypto, { type BondedBluetoothPrinter, type UsbPrinter } from "fiskalo-atk-crypto";
 
@@ -45,10 +45,12 @@ export function PrinterPanel() {
   const [message, setMessage] = useState("");
   const [autoPrint, setAutoPrint] = useState(false);
   const [paperWidth, setPaperWidth] = useState<"58" | "80">("80");
+  const [networkHost, setNetworkHost] = useState("");
 
   useEffect(() => {
     void SecureStore.getItemAsync("fiskalo-printer-android-auto").then((value) => setAutoPrint(value === "true"));
     void SecureStore.getItemAsync("fiskalo-printer-android-width").then((value) => setPaperWidth(value === "58" ? "58" : "80"));
+    void SecureStore.getItemAsync("fiskalo-printer-android-host").then((value) => setNetworkHost(value || ""));
     void SecureStore.getItemAsync("fiskalo-printer-android-device").then((value) => {
       if (value) setSelectedUsb(value);
     });
@@ -90,6 +92,19 @@ export function PrinterPanel() {
       setUsbPrinters(await FiskaloAtkCrypto.listUsbPrinters());
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Nuk u kërkua leja USB.");
+    } finally { setBusy(false); }
+  }
+
+  async function testNetworkPrint() {
+    setBusy(true); setMessage("");
+    try {
+      if (!networkHost.trim()) throw new Error("Vendos IP-në private të printerit.");
+      await SecureStore.setItemAsync("fiskalo-printer-android-transport", "lan");
+      await SecureStore.setItemAsync("fiskalo-printer-android-host", networkHost.trim());
+      const result = await FiskaloAtkCrypto.printNetwork(networkHost.trim(), 9100, base64(buildPrinterTest()));
+      setMessage(result.printed ? "Test-printimi LAN u dërgua. Kontrollo tekstin dhe QR-në." : "Printeri nuk konfirmoi printimin.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Test-printimi LAN dështoi.");
     } finally { setBusy(false); }
   }
 
@@ -147,6 +162,13 @@ export function PrinterPanel() {
           <Text style={{ color: "white", textAlign: "center", fontWeight: "700" }}>Testo USB</Text>
         </TouchableOpacity>
       </View>}
+    </View>
+    <View style={{ borderTopWidth: 1, borderColor: border, paddingTop: 8, gap: 7 }}>
+      <Text style={{ color: ink, fontWeight: "700" }}>Printer në rrjet (LAN)</Text>
+      <TextInput value={networkHost} onChangeText={setNetworkHost} onBlur={() => { void SecureStore.setItemAsync("fiskalo-printer-android-host", networkHost.trim()); }} placeholder="IP private, p.sh. 192.168.1.50" keyboardType="numeric" autoCapitalize="none" style={{ borderWidth: 1, borderColor: border, borderRadius: 8, padding: 10, color: ink }} />
+      <TouchableOpacity disabled={busy || !networkHost.trim()} onPress={() => void testNetworkPrint()} style={{ padding: 10, borderRadius: 8, backgroundColor: brand, opacity: busy || !networkHost.trim() ? 0.5 : 1 }}>
+        <Text style={{ color: "white", textAlign: "center", fontWeight: "700" }}>Testo LAN (TCP 9100)</Text>
+      </TouchableOpacity>
     </View>
     <View style={{ gap: 6 }}>
       <Text style={{ color: ink, fontWeight: "700" }}>Gjerësia e letrës</Text>
