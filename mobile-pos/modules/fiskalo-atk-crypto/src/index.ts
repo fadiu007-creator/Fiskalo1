@@ -7,7 +7,11 @@ export type AtkAndroidKeyResult = {
   secureHardwareBacked: boolean;
 };
 
+export type BondedBluetoothPrinter = { name: string; address: string; bonded: boolean };
+
 type FiskaloAtkCryptoModuleType = {
+  listBondedBluetoothPrinters(): Promise<BondedBluetoothPrinter[]>;
+  printBluetooth(address: string, dataBase64: string): Promise<{ printed: boolean; transport: string; bytes: number }>;
   hasKey(alias: string): Promise<boolean>;
   createVerificationNo(): Promise<string>;
   createCsr(alias: string, businessName: string, nui: string, branchId: string, posId: string): Promise<AtkAndroidKeyResult>;
