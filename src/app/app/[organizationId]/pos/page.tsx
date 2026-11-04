@@ -419,20 +419,47 @@ export default function WebPosPage() {
     <p style={{ display: activeView === "pos" ? "block" : "none", color: "var(--muted)", fontSize: 11, lineHeight: 1.5, marginTop: 14 }}>Shitjet regjistrohen në arkë. Pas pagesës së plotë, Fiskalo tenton dërgimin automatik në ATK TEST. Pagesat me kartelë nuk procesohen nga aplikacioni.</p>
     <section style={{ display: activeView === "invoices" ? "block" : "none", ...panel }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 }}><div><h2 style={{ margin: 0, fontSize: 20 }}>Faturat</h2><p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: 12 }}>Shitjet e regjistruara së fundmi</p></div><button onClick={() => setActiveView("pos")} style={button}><Plus size={16} /> Shitje e re</button></div><div style={{ display: "flex", gap: 8, marginBottom: 12 }}><div style={{ position: "relative", flex: 1, maxWidth: 360 }}><Search size={16} style={{ position: "absolute", left: 12, top: 13, color: "var(--muted)" }} /><input className="invoice-search" aria-label="Kërko faturë" value={invoiceSearch} onChange={(e) => setInvoiceSearch(e.target.value)} placeholder="Kërko sipas numrit ose statusit..." style={{ ...field, paddingLeft: 36 }} /></div></div><div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}><thead><tr><th style={{ textAlign: "left", padding: 9 }}>Numri</th><th style={{ textAlign: "left", padding: 9 }}>Data</th><th style={{ textAlign: "left", padding: 9 }}>Statusi</th><th style={{ textAlign: "left", padding: 9 }}>Fiskalizimi ATK</th><th style={{ textAlign: "right", padding: 9 }}>Totali</th><th style={{ textAlign: "right", padding: 9 }}> </th></tr></thead><tbody>{visibleInvoices.map((invoice) => <tr key={invoice.id} style={{ borderTop: "1px solid var(--line)" }}><td style={{ padding: 9 }}>{invoice.invoice_number || "Draft"}</td><td style={{ padding: 9 }}>{invoice.issue_date}</td><td style={{ padding: 9 }}><span className={"status-pill " + (invoice.status === "draft" ? "" : invoice.payment_status === "paid" ? "paid" : "unpaid")}>{invoice.status === "draft" ? "Draft" : invoice.payment_status === "paid" ? "Paguar" : "E papaguar"}</span></td><td style={{ padding: 9 }}>{invoice.atk_test_status ? <span className={"status-pill " + (invoice.atk_test_status === "accepted" ? "accepted" : invoice.atk_test_status === "rejected" ? "rejected" : invoice.atk_test_status === "queued" || invoice.atk_test_status === "offline_pending" ? "queued" : "")}>{({ queued: "Në radhë", submitted: "Dërguar", accepted: "Pranuar", rejected: "Refuzuar", offline_pending: "Në pritje", draft: "Draft" } as Record<string,string>)[invoice.atk_test_status] || invoice.atk_test_status}</span> : <span style={{ color: "var(--muted)", fontSize: 12 }}>{invoice.payment_status === "paid" ? "Dërgimi nuk u krye" : "Pas pagesës"}</span>}</td><td style={{ padding: 9, textAlign: "right", fontWeight: 700 }}>{money(Number(invoice.total))}</td><td style={{ padding: 9, textAlign: "right", whiteSpace: "nowrap" }}><Link href={`/app/${organizationId}/invoices/${invoice.id}`} style={{ color: "var(--brand)", fontWeight: 700 }}>Hap <ArrowRight size={14} /></Link></td></tr>)}{!visibleInvoices.length && <tr><td colSpan={6} style={{ padding: 18, color: "var(--muted)", textAlign: "center" }}>Nuk ka fatura ende. Krijo shitjen e parë nga POS.</td></tr>}</tbody></table></div></section>
     <style jsx>{`
-      .pos-layout { grid-template-columns: minmax(0,1.45fr) minmax(330px,0.85fr); }
-      .pos-categories { display:flex; gap:8px; overflow-x:auto; padding:2px 0 14px; }
-      .pos-category { flex:0 0 auto; border:1px solid var(--line); border-radius:999px; padding:10px 16px; background:white; color:var(--ink); font-weight:750; cursor:pointer; }
-      .pos-category.active { background:var(--brand); color:white; border-color:var(--brand); }
-      .pos-product-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(155px,1fr)); gap:12px; }
-      .pos-product-card { overflow:hidden; border:1px solid var(--line); border-radius:14px; padding:0 0 12px; background:white; color:var(--ink); text-align:left; display:flex; flex-direction:column; gap:7px; cursor:pointer; min-width:0; }
-      .pos-product-image { width:100%; aspect-ratio:1.45 / 1; display:grid; place-items:center; background:#f4f1eb center/cover no-repeat; color:#a75b27; font-size:48px; }
-      .pos-product-name { font-size:14px; font-weight:800; padding:0 11px; min-height:36px; }
-      .pos-product-price { color:var(--brand); font-size:17px; font-weight:900; padding:0 11px; }
-      .pos-product-card small { color:var(--muted); padding:0 11px; }
-      .pos-quantity-stepper { display:flex; align-items:center; gap:8px; margin-top:7px; }
-      .pos-quantity-stepper button { min-width:38px; min-height:38px; font-size:18px; padding:6px 10px; }
-      .pos-quantity-stepper strong { min-width:22px; text-align:center; }
-      @media (max-width:760px) { .pos-layout { grid-template-columns:minmax(0,1fr) !important; } .pos-layout aside { position:static !important; } .pos-product-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+      .pos-layout { grid-template-columns: minmax(0,1.55fr) minmax(340px,.85fr); gap:18px !important; }
+      .pos-layout > section, .pos-layout > aside { border-radius:18px !important; box-shadow:0 5px 22px rgba(21,48,33,.045); }
+      .pos-categories { display:flex; gap:8px; overflow-x:auto; padding:3px 0 16px; scrollbar-width:thin; }
+      .pos-category { flex:0 0 auto; min-height:42px; border:1px solid var(--line); border-radius:999px; padding:9px 16px; background:#fff; color:var(--muted); font-size:13px; font-weight:750; cursor:pointer; transition:background .15s ease,color .15s ease,border-color .15s ease,transform .15s ease; }
+      .pos-category:hover { border-color:#a8cbb7; color:var(--brand-dark); background:#f7fbf8; }
+      .pos-category.active { background:var(--brand); color:#fff; border-color:var(--brand); box-shadow:0 4px 10px rgba(19,122,85,.16); }
+      .pos-product-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(155px,1fr)); gap:13px; }
+      .pos-product-card { overflow:hidden; border:1px solid var(--line); border-radius:16px; padding:0 0 13px; background:#fff; color:var(--ink); text-align:left; display:flex; flex-direction:column; gap:7px; cursor:pointer; min-width:0; transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease; }
+      .pos-product-card:hover { transform:translateY(-2px); border-color:#b8d4c3; box-shadow:0 9px 22px rgba(21,48,33,.09); }
+      .pos-product-card:active { transform:scale(.985); }
+      .pos-product-card:focus-visible { outline:3px solid rgba(19,122,85,.28); outline-offset:3px; }
+      .pos-product-image { width:100%; aspect-ratio:1.45 / 1; display:grid; place-items:center; background:linear-gradient(145deg,#f5f8f5,#edf3ef) center/cover no-repeat; color:#a75b27; font-size:46px; }
+      .pos-product-name { font-size:13px; line-height:1.35; font-weight:780; padding:0 12px; min-height:35px; }
+      .pos-product-price { color:var(--brand-dark); font-size:17px; letter-spacing:-.3px; font-weight:900; padding:0 12px; font-variant-numeric:tabular-nums; }
+      .pos-product-card small { color:var(--muted); padding:0 12px; font-size:11px; }
+      .pos-quantity-stepper { display:flex; align-items:center; gap:8px; margin-top:8px; }
+      .pos-quantity-stepper button { min-width:40px; min-height:40px; font-size:18px; padding:6px 10px; border-radius:11px !important; }
+      .pos-quantity-stepper strong { min-width:24px; text-align:center; font-variant-numeric:tabular-nums; }
+      .pos-layout aside h2 { letter-spacing:-.45px; }
+      .pos-layout aside select { min-height:44px; border-radius:11px !important; }
+      .pos-layout aside button[disabled] { cursor:not-allowed; }
+      .fiskalo-pos input, .fiskalo-pos select { transition:border-color .15s ease,box-shadow .15s ease; }
+      .fiskalo-pos input:focus, .fiskalo-pos select:focus { border-color:#8bbba0 !important; box-shadow:0 0 0 3px rgba(19,122,85,.09); outline:none; }
+      @media (max-width:760px) {
+        .pos-layout { grid-template-columns:minmax(0,1fr) !important; gap:12px !important; }
+        .pos-layout > section, .pos-layout > aside { padding:14px !important; }
+        .pos-layout aside { position:static !important; }
+        .pos-product-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+        .pos-product-card { border-radius:14px; }
+        .pos-product-name { font-size:12px; min-height:32px; }
+        .pos-product-price { font-size:16px; }
+        .pos-category { min-height:40px; padding:8px 13px; }
+      }
+      @media (min-width:761px) and (max-width:1050px) {
+        .pos-layout { grid-template-columns:minmax(0,1.2fr) minmax(300px,.9fr) !important; }
+        .pos-product-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      }
+      @media (prefers-reduced-motion:reduce) {
+        .pos-product-card,.pos-category,.fiskalo-pos input,.fiskalo-pos select { transition:none !important; }
+        .pos-product-card:hover { transform:none; }
+      }
     `}</style>
   </main>;
 }
