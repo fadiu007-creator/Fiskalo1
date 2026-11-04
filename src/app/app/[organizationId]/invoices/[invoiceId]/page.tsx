@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { submitPaidInvoiceToATK } from "@/lib/atk/submit-paid-invoice";
+import { FiscalQrCode } from "@/components/fiscal-qr-code";
 
 type Invoice = { id: string; invoice_number: string | null; status: string; issue_date: string; due_date: string | null; subtotal: number; vat_total: number; total: number; payment_method: string; payment_status: string; fiscalization_status: string; notes: string | null; customer_id: string | null };
 type Org = { legal_name: string; trade_name: string | null; nui: string; fiscal_number: string | null; address: string | null; municipality: string; phone: string | null; email: string | null };
@@ -13,7 +14,7 @@ type Product = { id: string; name: string; unit_price: number; vat_rate: number;
 type CustomerOption = { id: string; name: string };
 const fieldStyle: React.CSSProperties = { width: "100%", minWidth: 0, border: "1px solid var(--line)", borderRadius: 8, padding: "10px 11px", background: "white", color: "var(--ink)" };
 type Payment = { id: string; amount: number; payment_method: string; reference: string | null; created_at: string };
-type FiscalDocument = { status: string; coupon_id: number | string | null; atk_transaction_id: string | null; accepted_at: string | null; occurred_at: string | null };
+type FiscalDocument = { status: string; coupon_id: number | string | null; atk_transaction_id: string | null; accepted_at: string | null; occurred_at: string | null; qr_payload: string | null };
 
 export default function InvoiceDetailPage() {
   const params = useParams<{ organizationId: string; invoiceId: string }>();
@@ -51,7 +52,7 @@ export default function InvoiceDetailPage() {
         supabase.from("fiskalo_invoice_payments").select("*").eq("invoice_id", params.invoiceId).order("created_at"),
         supabase.from("fiskalo_products").select("id,name,unit_price,vat_rate,stock_quantity,track_stock,is_active").eq("organization_id", params.organizationId).eq("is_active", true).order("name"),
         supabase.from("fiskalo_customers").select("id,name").eq("organization_id", params.organizationId).order("name"),
-        supabase.from("fiskalo_atk_fiscal_documents").select("status,coupon_id,atk_transaction_id,accepted_at,occurred_at").eq("organization_id", params.organizationId).eq("source_invoice_id", params.invoiceId).eq("document_type", "sale").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+        supabase.from("fiskalo_atk_fiscal_documents").select("status,coupon_id,atk_transaction_id,accepted_at,occurred_at,qr_payload").eq("organization_id", params.organizationId).eq("source_invoice_id", params.invoiceId).eq("document_type", "sale").order("created_at", { ascending: false }).limit(1).maybeSingle(),
       ]);
       if (inv.error || business.error || items.error || paymentRows.error || productRows.error || customerRows.error || !inv.data || !business.data) {
         setError("Fatura nuk u gjet ose nuk ke qasje.");
@@ -164,6 +165,14 @@ export default function InvoiceDetailPage() {
       <Link href={`/app/${params.organizationId}`} style={{ color: "var(--brand)", fontWeight: 700 }}>← Kthehu te paneli</Link>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{fiscalDocument?.status === "accepted" && <><Link href={`/app/${params.organizationId}/invoices/${params.invoiceId}/adjustments/new?type=return`} style={{ border: "1px solid var(--line)", borderRadius: 8, background: "white", color: "var(--ink)", padding: "10px 12px", fontWeight: 700, textDecoration: "none", fontSize: 12 }}>Regjistro kthim</Link><Link href={`/app/${params.organizationId}/invoices/${params.invoiceId}/adjustments/new?type=cancel`} style={{ border: "1px solid #b64a43", borderRadius: 8, background: "white", color: "#a33f36", padding: "10px 12px", fontWeight: 700, textDecoration: "none", fontSize: 12 }}>Kërko anulim</Link></>}<button onClick={() => { setPrintMode("invoice"); window.setTimeout(() => window.print(), 0); }} style={{ border: 0, borderRadius: 8, background: "var(--brand)", color: "white", padding: "10px 15px", fontWeight: 700 }}>Printo faturën A4</button><button onClick={() => { setPrintMode("receipt"); window.setTimeout(() => window.print(), 0); }} style={{ border: "1px solid var(--brand)", borderRadius: 8, background: "white", color: "var(--brand)", padding: "10px 15px", fontWeight: 700 }}>Printo kuponin 80mm</button></div>
     </div>
+    {fiscalDocument?.qr_payload && <section className="no-print" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, flexWrap: "wrap", margin: "0 0 18px", padding: 18, background: "white", border: "1px solid var(--line)", borderRadius: 14 }}>
+      <div style={{ flex: "1 1 240px" }}>
+        <h2 style={{ margin: "0 0 6px", fontSize: 16 }}>Kodi QR i kuponit fiskal</h2>
+        <p style={{ margin: 0, color: "var(--muted)", fontSize: 12, lineHeight: 1.6 }}>Përmban të dhënat e kuponit dhe nënshkrimin digjital. Skanimi shërben për verifikim në ATK. Ky dokument është nga mjedisi ATK TEST dhe nuk ka vlefshmëri fiskale në prodhim.</p>
+        <span className="status-pill" style={{ marginTop: 9 }}>{fiscalDocument.status === "accepted" ? "Pranuar nga ATK TEST" : "ATK TEST · " + fiscalDocument.status}</span>
+      </div>
+      <FiscalQrCode payload={fiscalDocument.qr_payload} size={164} label="Kodi QR i kuponit fiskal TEST" />
+    </section>}
     {printMode === "receipt" && <article className="thermal-receipt" aria-label="Kupon termik Fiskalo">
       <header className="thermal-head">
         <strong className="thermal-business">{org.trade_name || org.legal_name}</strong>
@@ -195,6 +204,10 @@ export default function InvoiceDetailPage() {
       <div className="thermal-footer">
         <strong>ARTIKUJT: {lines.reduce((sum, line) => sum + Number(line.quantity), 0)}</strong>
         <strong>JU FALEMINDERIT!</strong>
+        {fiscalDocument?.qr_payload && <div className="thermal-qr">
+          <FiscalQrCode payload={fiscalDocument.qr_payload} size={128} label="Kodi QR i kuponit fiskal TEST" />
+          <small>QR i nënshkruar · ATK TEST</small>
+        </div>}
         {fiscalDocument?.status === "accepted" ? <>
           <div className="thermal-fiscal-mark"><strong>RKS</strong><strong>ATK</strong></div>
           <div>KU PON FISKAL NR. {fiscalDocument.coupon_id ?? "—"}</div>
@@ -287,6 +300,9 @@ export default function InvoiceDetailPage() {
       .thermal-totals div { margin: 3px 0; }
       .thermal-grand { font-size: 15px; font-weight: 900; border-top: 1px dashed #000; padding-top: 6px; margin-top: 6px !important; }
       .thermal-footer { display: grid; gap: 7px; text-align: center; margin-top: 14px; }
+      .thermal-qr { display: grid; justify-items: center; gap: 3px; margin: 8px auto; }
+      .thermal-qr > div { width: 30mm !important; height: 30mm !important; padding: 0 !important; }
+      .thermal-qr svg { display: block; width: 100%; height: 100%; }
       .thermal-fiscal-mark { display: flex; justify-content: center; gap: 10px; align-items: center; font-size: 18px; letter-spacing: 2px; margin: 4px 0; }
       .thermal-transaction { overflow-wrap: anywhere; font-size: 10px; }
       .thermal-test-label { border: 2px solid #000; padding: 5px; font-size: 14px; font-weight: 900; margin-top: 6px; }
