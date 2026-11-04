@@ -288,7 +288,9 @@ export default function WebPosPage() {
     }
     if (paymentMethod !== "credit") {
       const printerSettings = readPrinterSettings();
-      if (printerSettings.autoPrint) {
+      if (printerSettings.autoPrint && (receiptFiscalStatus !== "accepted" || !receiptQrPayload)) {
+        fiscalNotice += " Printimi automatik u ndal: kuponi nuk ka QR me status të pranuar nga ATK TEST. Nuk u printua si kupon fiskal.";
+      } else if (printerSettings.autoPrint) {
         try {
           const { data: business } = await supabase.from("fiskalo_organizations")
             .select("legal_name,trade_name,nui,address,municipality,phone")
