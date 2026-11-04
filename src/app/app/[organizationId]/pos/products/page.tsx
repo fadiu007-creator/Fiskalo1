@@ -143,7 +143,6 @@ export default function PosProductsPage() {
           <label style={{ fontSize: 12 }}>Kategoria e artikullit ATK<select value={form.atk_item_category_code} onChange={e=>setForm(v=>({...v,atk_item_category_code:e.target.value}))} style={field}><option value="">Zgjidh kategorinë ATK</option>{itemCategoryCodes.map(code=><option key={code} value={code}>{code}</option>)}</select></label>
         </div>
         {(!itemCategoryCodes.length || !unitCodes.length) && <p style={{ color: "var(--muted)", fontSize: 12 }}>Listat e njësive dhe kategorive shfaqin kodet ATK të regjistruara në katalogun e biznesit. Katalogu zyrtar duhet të importohet për të ofruar listën e plotë.</p>}
-        </div>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button disabled={busy} type="submit" style={primary}>{busy ? "Duke ruajtur..." : editingId ? "Ruaj ndryshimet" : "Shto produktin"}</button>{editingId && <button type="button" onClick={reset} style={{ ...primary, background: "white", color: "var(--ink)", border: "1px solid var(--line)" }}>Anulo</button>}</div>
     </form>
