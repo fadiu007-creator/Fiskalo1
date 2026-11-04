@@ -11,7 +11,6 @@ type BusinessForm = {
   address: string; phone: string; email: string; vat_registered: boolean;
 };
 
-const ATK_TAXPAYER_LOOKUP = "https://apps.atk-ks.org/BizPasiveApp/VatRegist/Index";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -50,25 +49,8 @@ export default function OnboardingPage() {
       <Link href="/app" style={{ color: "var(--brand)", fontWeight: 700 }}>← Kthehu te bizneset</Link>
       <h1 style={{ fontSize: 32 }}>Regjistro biznesin</h1>
       <p style={{ color: "var(--muted)", lineHeight: 1.6 }}>
-        Plotëso të dhënat e biznesit. Për të kontrolluar numrin fiskal dhe statusin e TVSh-së,
-        përdor kërkimin publik zyrtar të ATK-së.
+        Plotëso të dhënat bazë të biznesit. Verifikimet zyrtare të tatimpaguesit kryhen veçmas nga ekipi i ofruesit Fiskalo.
       </p>
-      <section style={{ border: "1px solid var(--line)", borderRadius: 12, padding: 16, marginBottom: 16, background: "white" }}>
-        <strong style={{ display: "block", marginBottom: 7 }}>Verifikimi në ATK</strong>
-        <p style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.6, margin: "0 0 12px" }}>
-          ATK lejon kërkimin publik sipas numrit fiskal, NRB ose numrit të TVSh-së.
-          Ky shërbim nuk dokumenton API publike për plotësim automatik nga NUI, prandaj Fiskalo
-          nuk pretendon se i ka verifikuar automatikisht të dhënat.
-        </p>
-        <a href={ATK_TAXPAYER_LOOKUP} target="_blank" rel="noopener noreferrer"
-          style={{ display: "inline-flex", alignItems: "center", borderRadius: 9, background: "var(--brand)", color: "white", padding: "11px 15px", fontWeight: 700, textDecoration: "none" }}>
-          Hap kërkimin zyrtar të ATK-së ↗
-        </a>
-        <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5, margin: "10px 0 0" }}>
-          Kopjo të dhënat e publikuara nga ATK dhe vendosi në fushat përkatëse më poshtë.
-          NUI, numri fiskal dhe NRB janë identifikues të ndryshëm.
-        </p>
-      </section>
       <form onSubmit={submit} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 16, background: "white", padding: 24, border: "1px solid var(--line)", borderRadius: 16 }}>
         <Field label="NUI" required value={form.nui} onChange={(v) => update("nui", v.replace(/\D/g, "").slice(0, 9))} />
         <Field label="Emri ligjor i biznesit" required value={form.legal_name} onChange={(v) => update("legal_name", v)} />
