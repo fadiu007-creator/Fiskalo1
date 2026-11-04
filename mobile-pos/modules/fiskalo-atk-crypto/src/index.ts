@@ -14,6 +14,13 @@ type FiskaloAtkCryptoModuleType = {
   signBase64(alias: string, base64Payload: string): Promise<string>;
   matchesCertificate(alias: string, certificatePem: string): Promise<boolean>;
   deleteKey(alias: string): Promise<boolean>;
+  requestBluetoothPermission(): Promise<boolean>;
+  listBluetoothPrinters(): Promise<Array<{ name: string; address: string }>>;
+  printBluetooth(address: string, dataBase64: string): Promise<{ printed: boolean; transport: string }>;
+  listUsbPrinters(): Promise<Array<{ deviceId: number; deviceName: string; manufacturerName: string; productName: string; vendorId: number; productId: number; hasPermission: boolean }>>;
+  requestUsbPermission(deviceId: number): Promise<{ permissionGranted: boolean; permissionDialogRequested: boolean }>;
+  printUsb(deviceId: number, dataBase64: string): Promise<{ printed: boolean; transport: string }>;
+  printNetwork(host: string, port: number, dataBase64: string): Promise<{ printed: boolean; transport: string }>;
 };
 
 export default requireNativeModule<FiskaloAtkCryptoModuleType>("FiskaloAtkCrypto");
