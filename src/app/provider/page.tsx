@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import ProviderDashboard, { type ProviderBusiness, type ProviderPos, type ProviderSettings } from "./provider-dashboard";
+import ProviderDashboard, { type ProviderBusiness, type ProviderPos, type ProviderSettings, type ProviderAtkLookup } from "./provider-dashboard";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +17,7 @@ export default async function ProviderPage() {
 
   if (!providerAccess) redirect("/app");
 
-  const [{ data: businesses, error: businessesError }, { data: posDevices, error: posError }, { data: settings }] = await Promise.all([
+  const [{ data: businesses, error: businessesError }, { data: posDevices, error: posError }, { data: settings }, { data: atkLookups, error: atkLookupError }] = await Promise.all([
     supabase.from("fiskalo_organizations")
       .select("id,trade_name,legal_name,municipality,fiscalization_status,created_at")
       .order("created_at", { ascending: false }),
@@ -28,6 +28,9 @@ export default async function ProviderPage() {
       .select("provider_nui,sef_code,application_id,solution_name,solution_version,certification_status,production_enabled")
       .eq("singleton", true)
       .maybeSingle(),
+    supabase.from("fiskalo_provider_atk_lookups")
+      .select("id,organization_id,lookup_type,lookup_value,taxpayer_name,registration_status,municipality,vat_status,checked_at")
+      .order("checked_at", { ascending: false }).limit(30),
   ]);
 
   return (
@@ -37,7 +40,8 @@ export default async function ProviderPage() {
       businesses={(businesses ?? []) as ProviderBusiness[]}
       posDevices={(posDevices ?? []) as ProviderPos[]}
       settings={(settings ?? null) as ProviderSettings | null}
-      loadError={businessesError?.message ?? posError?.message ?? ""}
+      atkLookups={(atkLookups ?? []) as ProviderAtkLookup[]}
+      loadError={businessesError?.message ?? posError?.message ?? atkLookupError?.message ?? ""}
     />
   );
 }
