@@ -33,6 +33,6 @@
     "wrangler": "latest"
   },
   "overrides": {
-    "@aws-sdk/credential-provider-ini": "3.973.25"
+    "@aws-sdk/credential-provider-ini": "3.973.19"
   }
 }
