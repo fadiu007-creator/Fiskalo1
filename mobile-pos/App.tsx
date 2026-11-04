@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, SafeAreaView, ScrollView, Share, StatusBar, Text, TextInput, TouchableOpacity, View } from "react-native";
 import FiskaloAtkCrypto from "fiskalo-atk-crypto";
 import { PrinterPanel } from "./src/PrinterPanel";
+import { printAndroidReceipt } from "./src/thermalReceipt";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import * as SecureStore from "expo-secure-store";
 import { supabase } from "./src/supabase";
@@ -215,6 +216,38 @@ export default function App() {
         fiscalMessage = " Pagesa u regjistrua, por fiskalizimi automatik nuk u konfirmua: " +
           (fiscalError instanceof Error ? fiscalError.message : "Gabim i panjohur.") +
           " Kontrollo statusin ATK para çdo prove tjetër.";
+      }
+    }
+    if (paymentMethod !== "credit" && await SecureStore.getItemAsync("fiskalo-printer-android-auto") === "true") {
+      try {
+        const { data: fiscalDocument, error: fiscalReadError } = await supabase.from("fiskalo_atk_fiscal_documents")
+          .select("qr_payload,status").eq("organization_id", organizationId).eq("source_invoice_id", invoice.id).maybeSingle();
+        if (fiscalReadError) throw new Error("Nuk u lexua QR i fiskalizimit: " + fiscalReadError.message);
+        const subtotal = cart.reduce((sum, row) => sum + Number(row.product.unit_price) * row.quantity, 0);
+        const vatTotal = cart.reduce((sum, row) => sum + Number(row.product.unit_price) * row.quantity * Number(row.product.vat_rate) / 100, 0);
+        await printAndroidReceipt({
+          businessName: organizationName,
+          nui: organizationNui,
+          municipality: "",
+          invoiceNumber: String(invoiceNumber ?? ""),
+          issuedAt: new Date().toLocaleString("sq-XK"),
+          paymentMethod: ({ cash: "PARA NE DORE", card: "KARTELE", bank_transfer: "TRANSFER BANKAR", credit: "ME AFAT" })[paymentMethod],
+          items: cart.map((row) => ({
+            name: row.product.name,
+            quantity: row.quantity,
+            unitPrice: Number(row.product.unit_price),
+            vatRate: Number(row.product.vat_rate),
+            lineTotal: Number(row.product.unit_price) * row.quantity * (1 + Number(row.product.vat_rate) / 100),
+          })),
+          subtotal,
+          vatTotal,
+          total: Number(issuedInvoice.total),
+          qrPayload: typeof fiscalDocument?.qr_payload === "string" ? fiscalDocument.qr_payload : null,
+          fiscalStatus: typeof fiscalDocument?.status === "string" ? fiscalDocument.status : null,
+        });
+        fiscalMessage += " Kuponi ATK TEST u dërgua te printeri.";
+      } catch (printError) {
+        fiscalMessage += " Printimi automatik nuk u krye: " + (printError instanceof Error ? printError.message : "Gabim i panjohur.");
       }
     }
     setBusy(false); setCart([]); setCustomerId(""); setPaymentConfirmed(false); setPaymentMethod("cash");
