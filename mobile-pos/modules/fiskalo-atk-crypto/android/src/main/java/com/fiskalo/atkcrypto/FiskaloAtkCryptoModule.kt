@@ -14,6 +14,11 @@ import java.util.UUID
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.hardware.usb.UsbConstants
+import android.hardware.usb.UsbManager
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyInfo
 import android.security.keystore.KeyProperties
@@ -36,6 +41,78 @@ import java.security.cert.CertificateFactory
 class FiskaloAtkCryptoModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("FiskaloAtkCrypto")
+
+    AsyncFunction("listUsbPrinters") {
+      val context = appContext.reactContext ?: throw IllegalStateException("Android application context is unavailable.")
+      val manager = context.getSystemService(Context.USB_SERVICE) as UsbManager
+      manager.deviceList.values.map { device ->
+        mapOf(
+          "deviceName" to device.deviceName,
+          "vendorId" to device.vendorId,
+          "productId" to device.productId,
+          "manufacturerName" to (device.manufacturerName ?: ""),
+          "productName" to (device.productName ?: "USB printer"),
+          "hasPermission" to manager.hasPermission(device)
+        )
+      }
+    }
+
+    AsyncFunction("requestUsbPermission") { deviceName: String ->
+      val context = appContext.reactContext ?: throw IllegalStateException("Android application context is unavailable.")
+      val manager = context.getSystemService(Context.USB_SERVICE) as UsbManager
+      val device = manager.deviceList.values.firstOrNull { it.deviceName == deviceName }
+        ?: throw IllegalArgumentException("USB device is no longer connected.")
+      if (manager.hasPermission(device)) return@AsyncFunction true
+      val permissionIntent = PendingIntent.getBroadcast(
+        context, device.deviceId,
+        Intent("com.fiskalo.pos.USB_PERMISSION").setPackage(context.packageName),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+      )
+      manager.requestPermission(device, permissionIntent)
+      false
+    }
+
+    AsyncFunction("printUsb") { deviceName: String, dataBase64: String ->
+      val context = appContext.reactContext ?: throw IllegalStateException("Android application context is unavailable.")
+      val manager = context.getSystemService(Context.USB_SERVICE) as UsbManager
+      val device = manager.deviceList.values.firstOrNull { it.deviceName == deviceName }
+        ?: throw IllegalArgumentException("USB printer is no longer connected.")
+      if (!manager.hasPermission(device)) throw SecurityException("Grant USB permission first, then press print again.")
+      require(dataBase64.isNotBlank() && dataBase64.length <= 350000) { "Print data is empty or too large." }
+      val data = Base64.decode(dataBase64, Base64.DEFAULT)
+      require(data.isNotEmpty() && data.size <= 262144) { "Print data must be between 1 byte and 256 KB." }
+      var selectedInterface: android.hardware.usb.UsbInterface? = null
+      var outputEndpoint: android.hardware.usb.UsbEndpoint? = null
+      for (i in 0 until device.interfaceCount) {
+        val candidate = device.getInterface(i)
+        for (j in 0 until candidate.endpointCount) {
+          val endpoint = candidate.getEndpoint(j)
+          if (endpoint.type == UsbConstants.USB_ENDPOINT_XFER_BULK && endpoint.direction == UsbConstants.USB_DIR_OUT) {
+            selectedInterface = candidate
+            outputEndpoint = endpoint
+            break
+          }
+        }
+        if (outputEndpoint != null) break
+      }
+      val usbInterface = selectedInterface ?: throw IllegalStateException("No USB bulk-output interface was found on this device.")
+      val endpoint = outputEndpoint ?: throw IllegalStateException("No USB printer output endpoint was found.")
+      val connection = manager.openDevice(device) ?: throw IllegalStateException("Android could not open the USB printer.")
+      try {
+        if (!connection.claimInterface(usbInterface, true)) throw IllegalStateException("Could not claim the USB printer interface.")
+        var offset = 0
+        while (offset < data.size) {
+          val count = minOf(16384, data.size - offset)
+          val written = connection.bulkTransfer(endpoint, data, offset, count, 10000)
+          if (written <= 0) throw IllegalStateException("USB printer stopped accepting receipt data.")
+          offset += written
+        }
+        mapOf("printed" to true, "transport" to "android-usb", "bytes" to offset)
+      } finally {
+        try { connection.releaseInterface(usbInterface) } catch (_: Exception) { }
+        connection.close()
+      }
+    }
 
     AsyncFunction("listBondedBluetoothPrinters") {
       val adapter = BluetoothAdapter.getDefaultAdapter()
