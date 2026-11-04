@@ -173,6 +173,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "invoice_already_submitted", fiscalDocumentId: existing.id, status: existing.status, transactionId: existing.atk_transaction_id }, { status: 409 });
   }
 
+  const qrPayload = details + "|" + signature;
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(details));
   const payloadHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
   const { data: fiscalDocument, error: insertError } = await supabase.from("fiskalo_atk_fiscal_documents").insert({
@@ -186,6 +187,7 @@ export async function POST(request: Request) {
     total: Number(invoice.total),
     pos_coupon_base64: details,
     signature_base64: signature,
+    qr_payload: qrPayload,
     payload_sha256: payloadHash,
     created_by: user.id,
   }).select("id").single();
@@ -267,7 +269,7 @@ export async function POST(request: Request) {
       organization_id: organizationId, fiscal_document_id: fiscalDocument.id,
       event_type: "accepted", details: { transactionId, environment: "TEST" },
     });
-    return Response.json({ accepted: true, environment: "TEST", transactionId, fiscalDocumentId: fiscalDocument.id, message: result.message ?? "ATK accepted the TEST coupon." }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json({ accepted: true, environment: "TEST", transactionId, fiscalDocumentId: fiscalDocument.id, qrPayload, message: result.message ?? "ATK accepted the TEST coupon." }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const detail = error instanceof Error && error.name === "TimeoutError" ? "ATK TEST request timed out; check ATK before retrying to avoid a duplicate." : "Could not reach ATK TEST. Check the fiscal document before retrying.";
     await supabase.from("fiskalo_atk_fiscal_documents").update({ status: "offline_pending", last_error: detail }).eq("id", fiscalDocument.id);
