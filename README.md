@@ -20,10 +20,18 @@ Implemented:
 - ATK preparation foundation: taxpayer fiscalization-number profile, test POS registry, fiscal document/event schema and provider production lock
 - Provider-only ATK public taxpayer lookup capture and audit history (manual capture; no unsupported ATK API scraping)
 - Responsive browser POS for product search, cart, invoice issue and confirmed/manual payment ledger posting
+- Shared web/Android POS checkout through one atomic, idempotent database transaction; network retries reuse the original invoice instead of creating duplicates
+- Local pending-order recovery in browser IndexedDB and Android SecureStore; pending drafts are explicitly not invoices and require reconnection and cashier confirmation
+- Android fiscal receipt printing is blocked unless the linked ATK document is accepted and has an official QR payload
 - Android-native POS client scaffold (Expo/React Native) with Supabase sign-in, business selection, cart, invoice issue and payment recording
 - Fiskalo invoice-to-ATK coupon mapping core with explicit ATK catalogue/payment inputs and Sale/Cancel/Return reference validation
 - .NET 8 POS protocol core based on ATK's official C# sample: Protobuf models, P-256 CSR helpers, ECDSA coupon signing, money conversion and test-only HTTP client
 - Row Level Security on all Fiskalo tables
+
+Recent migrations applied to the existing `zikos` project include:
+- `20261105003000_fiskalo_product_plan_limits.sql` — server-enforced product caps for Starter (10), Standard (50), and Pro (100)
+- `20261105003100_fiskalo_provider_plan_assignment.sql` — provider-admin-only plan assignment
+- `20261105010000_fiskalo_atomic_pos_checkout.sql` and `20261105010200_fiskalo_pos_rpc_invoker.sql` — atomic, idempotent POS checkout with caller RLS
 - Cloudflare Workers deployment configuration (OpenNext)
 
 Not yet part of this MVP:
