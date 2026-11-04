@@ -257,78 +257,51 @@ export default function WebPosPage() {
     }
 
     setBusy(true);
-    const { data: auth, error: authError } = await supabase.auth.getUser();
-    if (authError || !auth.user) { setBusy(false); setError("Sesioni ka skaduar. Hyr përsëri."); return; }
-
-    const { data: invoice, error: invoiceError } = await supabase.from("fiskalo_invoices").insert({
-      organization_id: organizationId,
-      created_by: auth.user.id,
-      customer_id: customerId || null,
-      payment_method: paymentMethod,
-      payment_status: "unpaid",
-      issue_date: new Date().toISOString().slice(0, 10),
-    }).select("id").single();
-
-    if (invoiceError || !invoice) { setBusy(false); setError(invoiceError?.message ?? "Fatura nuk u krijua."); return; }
-
-    const { error: itemError } = await supabase.from("fiskalo_invoice_items").insert(valid.map((line) => ({
-      invoice_id: invoice.id,
-      product_id: line.product!.id,
-      description: line.product!.name,
-      quantity: line.quantity,
-      unit_price: Number(line.product!.unit_price),
-      vat_rate: Number(line.product!.vat_rate),
-    })));
-
-    if (itemError) {
+    const requestId = restoredDraftId ?? crypto.randomUUID();
+    const pendingDraft: OfflinePosDraft = {
+      id: requestId,
+      organizationId,
+      createdAt: new Date().toISOString(),
+      cart: valid.map((line) => ({ productId: line.productId, quantity: String(line.quantity) })),
+      customerId,
+      paymentMethod,
+    };
+    try {
+      await saveOfflinePosDraft(pendingDraft);
+      setOfflineDrafts(await listOfflinePosDrafts(organizationId));
+      setRestoredDraftId(requestId);
+    } catch (draftError) {
       setBusy(false);
-      setError("Drafti u krijua, por artikujt nuk u ruajtën. Hape draftin për ta korrigjuar: " + itemError.message);
-      setIssuedInvoiceId(invoice.id);
+      setError("Shitja nuk u dërgua sepse porosia nuk u ruajt në mënyrë të sigurt në këtë pajisje: " +
+        (draftError instanceof Error ? draftError.message : "Gabim i ruajtjes lokale."));
       return;
     }
 
-    const { data: invoiceNumber, error: issueError } = await supabase.rpc("fiskalo_issue_invoice", { target_invoice: invoice.id });
-    if (issueError) {
+    const { data: saleRows, error: saleError } = await supabase.rpc("fiskalo_create_pos_sale", {
+      target_org: organizationId,
+      request_id: requestId,
+      target_customer: customerId || null,
+      target_payment_method: paymentMethod,
+      sale_items: valid.map((line) => ({ product_id: line.productId, quantity: line.quantity })),
+    });
+    const sale = Array.isArray(saleRows) ? saleRows[0] : saleRows;
+    if (saleError || !sale?.invoice_id) {
       setBusy(false);
-      setError("Fatura mbeti draft. Nuk u lëshua: " + issueError.message);
-      setIssuedInvoiceId(invoice.id);
+      setError("Rezultati i shitjes nuk u konfirmua. Drafti dhe ID-ja e kërkesës u ruajtën; provo përsëri pa krijuar shitje të re. " +
+        (saleError?.message ?? "Përgjigje e pavlefshme nga serveri."));
       return;
     }
-
-    const { data: issuedInvoice, error: issuedReadError } = await supabase.from("fiskalo_invoices").select("total").eq("id", invoice.id).eq("organization_id", organizationId).single();
-    if (issuedReadError || !issuedInvoice) {
-      setBusy(false);
-      setIssuedInvoiceId(invoice.id);
-      setIssuedNumber(String(invoiceNumber ?? ""));
-      setError("Fatura u lëshua, por totali i saj nuk u lexua. Kontrollo faturën para regjistrimit të pagesës.");
-      return;
-    }
-
-    if (paymentMethod !== "credit") {
-      const { error: paymentError } = await supabase.rpc("fiskalo_record_payment", {
-        target_invoice: invoice.id,
-        payment_amount: Number(issuedInvoice.total),
-        method: paymentMethod,
-        payment_reference: null,
-      });
-      if (paymentError) {
-        setBusy(false);
-        setIssuedInvoiceId(invoice.id);
-        setIssuedNumber(String(invoiceNumber ?? ""));
-        setError("Fatura u lëshua, por pagesa nuk u regjistrua. Hape faturën dhe regjistro pagesën veçmas: " + paymentError.message);
-        await load();
-        return;
-      }
-    }
-
-    setIssuedInvoiceId(invoice.id);
+    const invoiceId = String(sale.invoice_id);
+    const invoiceNumber = sale.invoice_number;
+    const issuedInvoice = { total: Number(sale.invoice_total) };
+    setIssuedInvoiceId(invoiceId);
     setIssuedNumber(String(invoiceNumber ?? ""));
     let fiscalNotice = "";
     let receiptQrPayload = "";
     let receiptFiscalStatus = "";
     if (paymentMethod !== "credit") {
       try {
-        const fiscalResult = await submitPaidInvoiceToATK(supabase, organizationId, invoice.id);
+        const fiscalResult = await submitPaidInvoiceToATK(supabase, organizationId, invoiceId);
         fiscalNotice = " " + fiscalResult.message;
         setIssuedFiscalStatus(fiscalResult.status);
         if (fiscalResult.qrPayload) { receiptQrPayload = fiscalResult.qrPayload; setIssuedQrPayload(fiscalResult.qrPayload); }
@@ -339,7 +312,7 @@ export default function WebPosPage() {
           " Kontrollo statusin e faturës para çdo prove tjetër.";
         const { data: fiscalDocument } = await supabase.from("fiskalo_atk_fiscal_documents")
           .select("qr_payload,status").eq("organization_id", organizationId)
-          .eq("source_invoice_id", invoice.id).maybeSingle();
+          .eq("source_invoice_id", invoiceId).maybeSingle();
         if (typeof fiscalDocument?.qr_payload === "string") { receiptQrPayload = fiscalDocument.qr_payload; setIssuedQrPayload(fiscalDocument.qr_payload); }
         if (typeof fiscalDocument?.status === "string") { receiptFiscalStatus = fiscalDocument.status; setIssuedFiscalStatus(fiscalDocument.status); }
       }
