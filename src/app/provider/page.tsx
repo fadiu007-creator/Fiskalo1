@@ -19,7 +19,7 @@ export default async function ProviderPage() {
 
   const [{ data: businesses, error: businessesError }, { data: posDevices, error: posError }, { data: settings }, { data: atkLookups, error: atkLookupError }] = await Promise.all([
     supabase.from("fiskalo_organizations")
-      .select("id,trade_name,legal_name,municipality,fiscalization_status,created_at")
+      .select("id,trade_name,legal_name,municipality,fiscalization_status,plan_package,product_limit,created_at")
       .order("created_at", { ascending: false }),
     supabase.from("fiskalo_atk_pos_installations")
       .select("id,organization_id,label,status,environment,last_seen_at")
