@@ -200,36 +200,69 @@ export default function App() {
     if (invalidStock) { setError("Stok i pamjaftueshëm: " + invalidStock.product.name); return; }
 
     setBusy(true);
-    const { data: auth } = await supabase.auth.getUser();
-    if (!auth.user) { setBusy(false); setError("Sesioni ka skaduar."); return; }
-    const { data: invoice, error: invoiceError } = await supabase.from("fiskalo_invoices").insert({
-      organization_id: organizationId, created_by: auth.user.id, customer_id: customerId || null,
-      payment_method: paymentMethod, payment_status: "unpaid", issue_date: new Date().toISOString().slice(0, 10),
-    }).select("id").single();
-    if (invoiceError || !invoice) { setBusy(false); setError(invoiceError?.message ?? "Fatura nuk u krijua."); return; }
-
-    const { error: itemError } = await supabase.from("fiskalo_invoice_items").insert(cart.map((row) => ({
-      invoice_id: invoice.id, product_id: row.product.id, description: row.product.name,
-      quantity: row.quantity, unit_price: Number(row.product.unit_price), vat_rate: Number(row.product.vat_rate),
-    })));
-    if (itemError) { setBusy(false); setError("Drafti u krijua, por artikujt nuk u ruajtën: " + itemError.message); return; }
-
-    const { data: invoiceNumber, error: issueError } = await supabase.rpc("fiskalo_issue_invoice", { target_invoice: invoice.id });
-    if (issueError) { setBusy(false); setError("Fatura mbeti draft: " + issueError.message); return; }
-
-    const { data: issuedInvoice, error: issuedReadError } = await supabase.from("fiskalo_invoices").select("total").eq("id", invoice.id).eq("organization_id", organizationId).single();
-    if (issuedReadError || !issuedInvoice) { setBusy(false); setError("Fatura u lëshua, por totali nuk u lexua. Kontrolloje para pagesës."); return; }
-
-    if (paymentMethod !== "credit") {
-      const { error: payError } = await supabase.rpc("fiskalo_record_payment", {
-        target_invoice: invoice.id, payment_amount: Number(issuedInvoice.total), method: paymentMethod, payment_reference: null,
-      });
-      if (payError) { setBusy(false); setError("Fatura " + invoiceNumber + " u lëshua, por pagesa nuk u regjistrua: " + payError.message); return; }
+    const pendingKey = "fiskalo-pos-pending-sale:" + organizationId;
+    let requestId: string;
+    try {
+      const pendingRaw = await SecureStore.getItemAsync(pendingKey);
+      if (pendingRaw) {
+        const pending = JSON.parse(pendingRaw) as { id: string; items: Array<{ product_id: string; quantity: number }>; customer_id: string; payment_method: string };
+        const currentItems = cart.map((row) => ({ product_id: row.product.id, quantity: row.quantity })).sort((a,b) => a.product_id.localeCompare(b.product_id));
+        const savedItems = [...pending.items].sort((a,b) => a.product_id.localeCompare(b.product_id));
+        if (JSON.stringify(savedItems) !== JSON.stringify(currentItems) || pending.customer_id !== customerId || pending.payment_method !== paymentMethod) {
+          setBusy(false);
+          setError("Ekziston një porosi me rezultat të pakonfirmuar. Rikthe shportën e ruajtur dhe provo përsëri; mos ndrysho artikujt ose pagesën.");
+          return;
+        }
+        requestId = pending.id;
+      } else {
+        requestId = makeRequestId();
+        await SecureStore.setItemAsync(pendingKey, JSON.stringify({
+          id: requestId,
+          items: cart.map((row) => ({ product_id: row.product.id, quantity: row.quantity })),
+          customer_id: customerId,
+          payment_method: paymentMethod,
+        }));
+      }
+    } catch (draftError) {
+      setBusy(false);
+      setError("Porosia nuk u ruajt në mënyrë të sigurt në pajisje: " + (draftError instanceof Error ? draftError.message : "Gabim i ruajtjes."));
+      return;
     }
+
+    const { data: saleRows, error: saleError } = await supabase.rpc("fiskalo_create_pos_sale", {
+      target_org: organizationId,
+      request_id: requestId,
+      target_customer: customerId || null,
+      target_payment_method: paymentMethod,
+      sale_items: cart.map((row) => ({ product_id: row.product.id, quantity: row.quantity })),
+    });
+    const sale = Array.isArray(saleRows) ? saleRows[0] : saleRows;
+    if (saleError || !sale?.invoice_id) {
+      setBusy(false);
+      setError("Rezultati i shitjes nuk u konfirmua. Porosia ruhet me të njëjtën ID; provo përsëri pa nisur shitje të re. " + (saleError?.message ?? "Përgjigje e pavlefshme nga serveri."));
+      return;
+    }
+    const invoiceId = String(sale.invoice_id);
+    const invoiceNumber = sale.invoice_number;
+    const issuedInvoice = { total: Number(sale.invoice_total) };
+    const { data: persistedItems, error: persistedItemsError } = await supabase.from("fiskalo_invoice_items")
+      .select("description,quantity,unit_price,vat_rate,line_subtotal,line_vat").eq("invoice_id", invoiceId).order("id");
+    if (persistedItemsError || !persistedItems?.length) {
+      setBusy(false);
+      setError("Fatura u regjistrua, por artikujt nuk u lexuan. Porosia mbetet e ruajtur; provo përsëri me të njëjtën ID.");
+      return;
+    }
+    const receiptLines = persistedItems.map((item) => ({
+      name: item.description, quantity: Number(item.quantity), unitPrice: Number(item.unit_price),
+      vatRate: Number(item.vat_rate), lineTotal: Number(item.line_subtotal) + Number(item.line_vat),
+    }));
+    const subtotal = persistedItems.reduce((sum, item) => sum + Number(item.line_subtotal), 0);
+    const vatTotal = persistedItems.reduce((sum, item) => sum + Number(item.line_vat), 0);
+
     let fiscalMessage = "";
     if (paymentMethod !== "credit") {
       try {
-        fiscalMessage = " " + await submitAndroidPaidInvoiceToATK(invoice.id);
+        fiscalMessage = " " + await submitAndroidPaidInvoiceToATK(invoiceId);
       } catch (fiscalError) {
         fiscalMessage = " Pagesa u regjistrua, por fiskalizimi automatik nuk u konfirmua: " +
           (fiscalError instanceof Error ? fiscalError.message : "Gabim i panjohur.") +
@@ -239,7 +272,7 @@ export default function App() {
     if (paymentMethod !== "credit" && await SecureStore.getItemAsync("fiskalo-printer-android-auto") === "true") {
       try {
         const { data: fiscalDocument, error: fiscalReadError } = await supabase.from("fiskalo_atk_fiscal_documents")
-          .select("qr_payload,status").eq("organization_id", organizationId).eq("source_invoice_id", invoice.id).maybeSingle();
+          .select("qr_payload,status").eq("organization_id", organizationId).eq("source_invoice_id", invoiceId).maybeSingle();
         if (fiscalReadError) throw new Error("Nuk u lexua QR i fiskalizimit: " + fiscalReadError.message);
         const subtotal = cart.reduce((sum, row) => sum + Number(row.product.unit_price) * row.quantity, 0);
         const vatTotal = cart.reduce((sum, row) => sum + Number(row.product.unit_price) * row.quantity * Number(row.product.vat_rate) / 100, 0);
@@ -250,13 +283,7 @@ export default function App() {
           invoiceNumber: String(invoiceNumber ?? ""),
           issuedAt: new Date().toLocaleString("sq-XK"),
           paymentMethod: ({ cash: "PARA NE DORE", card: "KARTELE", bank_transfer: "TRANSFER BANKAR", credit: "ME AFAT" })[paymentMethod],
-          items: cart.map((row) => ({
-            name: row.product.name,
-            quantity: row.quantity,
-            unitPrice: Number(row.product.unit_price),
-            vatRate: Number(row.product.vat_rate),
-            lineTotal: Number(row.product.unit_price) * row.quantity * (1 + Number(row.product.vat_rate) / 100),
-          })),
+          items: receiptLines,
           subtotal,
           vatTotal,
           total: Number(issuedInvoice.total),
@@ -268,6 +295,7 @@ export default function App() {
         fiscalMessage += " Printimi automatik nuk u krye: " + (printError instanceof Error ? printError.message : "Gabim i panjohur.");
       }
     }
+    await SecureStore.deleteItemAsync(pendingKey);
     setBusy(false); setCart([]); setCustomerId(""); setPaymentConfirmed(false); setPaymentMethod("cash");
     setMessage("Fatura " + invoiceNumber + " u lëshua. " + (paymentMethod === "credit" ? "Mbeti e papaguar." : "Pagesa u regjistrua." + fiscalMessage));
     await selectOrganization({ organization_id: organizationId, role: "", fiskalo_organizations: { legal_name: organizationName, municipality: "", nui: organizationNui } });
