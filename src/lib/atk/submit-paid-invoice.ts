@@ -30,7 +30,7 @@ export async function submitPaidInvoiceToATK(
   supabase: SupabaseBrowserClient,
   organizationId: string,
   invoiceId: string,
-): Promise<{ status: string; transactionId?: string; message: string }> {
+): Promise<{ status: string; transactionId?: string; qrPayload?: string; message: string }> {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) throw new Error("Sesioni ka skaduar. Hyr përsëri.");
 
@@ -44,11 +44,12 @@ export async function submitPaidInvoiceToATK(
   }
   
   const { data: existing, error: existingError } = await supabase.from("fiskalo_atk_fiscal_documents")
-    .select("id,status,atk_transaction_id").eq("organization_id", organizationId)
+    .select("id,status,atk_transaction_id,qr_payload").eq("organization_id", organizationId)
     .eq("source_invoice_id", invoiceId).maybeSingle();
   if (existingError) throw new Error("Nuk u kontrollua statusi ekzistues i ATK-së: " + existingError.message);
   if (existing) {
     return { status: existing.status, transactionId: existing.atk_transaction_id ? String(existing.atk_transaction_id) : undefined,
+      qrPayload: typeof existing.qr_payload === "string" ? existing.qr_payload : undefined,
       message: existing.status === "accepted" ? "Fatura është pranuar tashmë nga ATK." : "Kjo faturë tashmë ka një dërgesë ATK (" + existing.status + "). Nuk u krijua kupon i dytë." };
   }
 
@@ -157,5 +158,5 @@ export async function submitPaidInvoiceToATK(
   });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(errorText(result, "Dërgimi i faturës në ATK dështoi. Kontrollo statusin para çdo veprimi tjetër."));
-  return { status: "accepted", transactionId: String(result.transactionId), message: "Fatura u dërgua dhe u pranua nga ATK TEST." };
+  return { status: "accepted", transactionId: String(result.transactionId), qrPayload: typeof result.qrPayload === "string" ? result.qrPayload : undefined, message: "Fatura u dërgua dhe u pranua nga ATK TEST." };
 }
