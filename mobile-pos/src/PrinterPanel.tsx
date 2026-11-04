@@ -46,8 +46,9 @@ export function PrinterPanel() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [autoPrint, setAutoPrint] = useState(false);
+  const [paperWidth, setPaperWidth] = useState<"58" | "80">("80");
 
-  React.useEffect(() => { void SecureStore.getItemAsync("fiskalo-printer-android-auto").then((value) => setAutoPrint(value === "true")); }, []);
+  React.useEffect(() => {\n    void SecureStore.getItemAsync("fiskalo-printer-android-auto").then((value) => setAutoPrint(value === "true"));\n    void SecureStore.getItemAsync("fiskalo-printer-android-width").then((value) => setPaperWidth(value === "58" ? "58" : "80"));\n  }, []);
 
   async function loadPrinters() {
     setBusy(true); setMessage("");
@@ -149,6 +150,14 @@ export function PrinterPanel() {
           <Text style={{ color: "white", textAlign: "center", fontWeight: "700" }}>Testo USB</Text>
         </TouchableOpacity>
       </View>}
+    </View>
+    <View style={{ gap: 6 }}>
+      <Text style={{ color: ink, fontWeight: "700" }}>Gjerësia e letrës</Text>
+      <View style={{ flexDirection: "row", gap: 7 }}>
+        {(["58", "80"] as const).map((width) => <TouchableOpacity key={width} onPress={() => { setPaperWidth(width); void SecureStore.setItemAsync("fiskalo-printer-android-width", width); }} style={{ flex: 1, padding: 9, borderRadius: 8, borderWidth: 1, borderColor: paperWidth === width ? brand : border, backgroundColor: paperWidth === width ? "#edf5f1" : "white" }}>
+          <Text style={{ color: ink, textAlign: "center", fontWeight: "700" }}>{width} mm</Text>
+        </TouchableOpacity>)}
+      </View>
     </View>
     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: 8, borderTopWidth: 1, borderColor: border }}>
       <View style={{ flex: 1, paddingRight: 10 }}>
