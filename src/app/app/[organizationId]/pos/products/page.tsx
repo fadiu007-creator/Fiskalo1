@@ -27,6 +27,8 @@ export default function PosProductsPage() {
   const [notice, setNotice] = useState("");
   const [permissionChecked, setPermissionChecked] = useState(false);
   const [canManage, setCanManage] = useState(false);
+  const unitCodes = Array.from(new Set(["cope", ...products.map(p => p.atk_unit_code).filter((v): v is string => Boolean(v))])).sort();
+  const itemCategoryCodes = Array.from(new Set(products.map(p => p.atk_item_category_code).filter((v): v is string => Boolean(v)))).sort();
 
   const load = useCallback(async () => {
     const { data: auth } = await supabase.auth.getUser();
@@ -85,6 +87,23 @@ export default function PosProductsPage() {
     reset(); await load();
   }
 
+  async function deleteProduct(product: Product) {
+    if (!window.confirm(`A dëshiron ta fshish produktin “${product.name}”? Ky veprim nuk mund të kthehet.`)) return;
+    setBusy(true); setError(""); setNotice("");
+    const { error: deleteError } = await supabase.from("fiskalo_products").delete()
+      .eq("organization_id", organizationId).eq("id", product.id);
+    setBusy(false);
+    if (deleteError) {
+      setError(deleteError.message.includes("foreign key") || deleteError.code === "23503"
+        ? "Produkti është përdorur në fatura dhe nuk mund të fshihet. Çaktivizoje për ta larguar nga arka pa ndryshuar historikun."
+        : deleteError.message);
+      return;
+    }
+    setNotice("Produkti u fshi.");
+    if (editingId === product.id) reset();
+    await load();
+  }
+
   async function toggleActive(product: Product) {
     setBusy(true); setError(""); setNotice("");
     const { error: updateError } = await supabase.from("fiskalo_products")
@@ -119,9 +138,11 @@ export default function PosProductsPage() {
       <div style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
         <strong style={{ fontSize: 13 }}>Kodet fiskale ATK</strong>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10, marginTop: 8 }}>
-          <label style={{ fontSize: 12 }}>Kodi i njësisë<input value={form.atk_unit_code} onChange={e=>setForm(v=>({...v,atk_unit_code:e.target.value}))} placeholder="Sipas katalogut ATK" style={field}/></label>
-          <label style={{ fontSize: 12 }}>Kodi i TVSH-së<input maxLength={1} value={form.atk_tax_code} onChange={e=>setForm(v=>({...v,atk_tax_code:e.target.value.toUpperCase()}))} placeholder="Shkronja ATK" style={field}/></label>
-          <label style={{ fontSize: 12 }}>Kategoria e artikullit ATK<input value={form.atk_item_category_code} onChange={e=>setForm(v=>({...v,atk_item_category_code:e.target.value}))} placeholder="Plotëso kodin zyrtar ATK" style={field}/></label>
+          <label style={{ fontSize: 12 }}>Kodi i njësisë ATK<select value={form.atk_unit_code} onChange={e=>setForm(v=>({...v,atk_unit_code:e.target.value}))} style={field}><option value="">Zgjidh njësinë</option>{unitCodes.map(code=><option key={code} value={code}>{code}</option>)}</select></label>
+          <label style={{ fontSize: 12 }}>Kodi fiskal ATK / TVSH<select value={form.atk_tax_code} onChange={e=>setForm(v=>({...v,atk_tax_code:e.target.value}))} style={field}><option value="">Zgjidh kodin fiskal</option><option value="A">A — Përjashtuar nga TVSH (0%)</option><option value="C">C — Norma zero (0%)</option><option value="D">D — TVSH 8%</option><option value="E">E — TVSH 18%</option></select></label>
+          <label style={{ fontSize: 12 }}>Kategoria e artikullit ATK<select value={form.atk_item_category_code} onChange={e=>setForm(v=>({...v,atk_item_category_code:e.target.value}))} style={field}><option value="">Zgjidh kategorinë ATK</option>{itemCategoryCodes.map(code=><option key={code} value={code}>{code}</option>)}</select></label>
+        </div>
+        {(!itemCategoryCodes.length || !unitCodes.length) && <p style={{ color: "var(--muted)", fontSize: 12 }}>Listat e njësive dhe kategorive shfaqin kodet ATK të regjistruara në katalogun e biznesit. Katalogu zyrtar duhet të importohet për të ofruar listën e plotë.</p>}
         </div>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button disabled={busy} type="submit" style={primary}>{busy ? "Duke ruajtur..." : editingId ? "Ruaj ndryshimet" : "Shto produktin"}</button>{editingId && <button type="button" onClick={reset} style={{ ...primary, background: "white", color: "var(--ink)", border: "1px solid var(--line)" }}>Anulo</button>}</div>
@@ -129,7 +150,7 @@ export default function PosProductsPage() {
     <input aria-label="Kërko produkt" placeholder="Kërko sipas emrit ose SKU..." value={search} onChange={e=>setSearch(e.target.value)} style={{ ...field, marginBottom: 12 }}/>
     <div style={{ display: "grid", gap: 8 }}>{visible.map(product=><div key={product.id} style={{ background: "white", border: "1px solid var(--line)", borderRadius: 10, padding: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
       <div><strong>{product.name}</strong><div style={{ color: "var(--muted)", fontSize: 12 }}>{product.pos_category || "Tjera"} · {product.sku || "Pa SKU"} · {product.item_type === "service" ? "Shërbim" : "Produkt"} · TVSH {product.vat_rate}% · {Number(product.unit_price).toFixed(2)} € · {product.atk_unit_code && product.atk_tax_code && product.atk_item_category_code ? "Kodet ATK të plotësuara" : "Mungojnë kodet ATK"}</div></div>
-      <div style={{ display: "flex", gap: 7 }}><button type="button" onClick={()=>edit(product)} style={{ ...primary, background: "white", color: "var(--ink)", border: "1px solid var(--line)" }}>Ndrysho</button><button type="button" disabled={busy} onClick={()=>void toggleActive(product)} style={{ ...primary, background: product.is_active ? "#8a3b35" : "var(--brand)" }}>{product.is_active ? "Çaktivizo" : "Aktivizo"}</button></div>
+      <div style={{ display: "flex", gap: 7 }}><button type="button" onClick={()=>edit(product)} style={{ ...primary, background: "white", color: "var(--ink)", border: "1px solid var(--line)" }}>Ndrysho</button><button type="button" disabled={busy} onClick={()=>void toggleActive(product)} style={{ ...primary, background: product.is_active ? "#8a3b35" : "var(--brand)" }}>{product.is_active ? "Çaktivizo" : "Aktivizo"}</button><button type="button" disabled={busy} onClick={()=>void deleteProduct(product)} style={{ ...primary, background: "white", color: "#982d25", border: "1px solid #e4b8b4" }}>Fshije</button></div>
     </div>)}
     {!visible.length && <p style={{ color: "var(--muted)" }}>Nuk ka artikuj. Shto produktin e parë më lart.</p>}</div>
   </main>;
