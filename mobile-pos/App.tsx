@@ -260,6 +260,8 @@ export default function App() {
     const vatTotal = persistedItems.reduce((sum, item) => sum + Number(item.line_vat), 0);
 
     let fiscalMessage = "";
+    let fiscalConfirmed = paymentMethod === "credit";
+    let fiscalQrPayload: string | null = null;
     if (paymentMethod !== "credit") {
       try {
         fiscalMessage = " " + await submitAndroidPaidInvoiceToATK(invoiceId);
@@ -268,37 +270,49 @@ export default function App() {
           (fiscalError instanceof Error ? fiscalError.message : "Gabim i panjohur.") +
           " Kontrollo statusin ATK para çdo prove tjetër.";
       }
-    }
-    if (paymentMethod !== "credit" && await SecureStore.getItemAsync("fiskalo-printer-android-auto") === "true") {
-      try {
-        const { data: fiscalDocument, error: fiscalReadError } = await supabase.from("fiskalo_atk_fiscal_documents")
-          .select("qr_payload,status").eq("organization_id", organizationId).eq("source_invoice_id", invoiceId).maybeSingle();
-        if (fiscalReadError) throw new Error("Nuk u lexua QR i fiskalizimit: " + fiscalReadError.message);
-        const subtotal = cart.reduce((sum, row) => sum + Number(row.product.unit_price) * row.quantity, 0);
-        const vatTotal = cart.reduce((sum, row) => sum + Number(row.product.unit_price) * row.quantity * Number(row.product.vat_rate) / 100, 0);
-        await printAndroidReceipt({
-          businessName: organizationName,
-          nui: organizationNui,
-          municipality: "",
-          invoiceNumber: String(invoiceNumber ?? ""),
-          issuedAt: new Date().toLocaleString("sq-XK"),
-          paymentMethod: ({ cash: "PARA NE DORE", card: "KARTELE", bank_transfer: "TRANSFER BANKAR", credit: "ME AFAT" })[paymentMethod],
-          items: receiptLines,
-          subtotal,
-          vatTotal,
-          total: Number(issuedInvoice.total),
-          qrPayload: typeof fiscalDocument?.qr_payload === "string" ? fiscalDocument.qr_payload : null,
-          fiscalStatus: typeof fiscalDocument?.status === "string" ? fiscalDocument.status : null,
-        });
-        fiscalMessage += " Kuponi ATK TEST u dërgua te printeri.";
-      } catch (printError) {
-        fiscalMessage += " Printimi automatik nuk u krye: " + (printError instanceof Error ? printError.message : "Gabim i panjohur.");
+      const { data: fiscalDocument, error: fiscalReadError } = await supabase.from("fiskalo_atk_fiscal_documents")
+        .select("qr_payload,status").eq("organization_id", organizationId).eq("source_invoice_id", invoiceId).maybeSingle();
+      if (fiscalReadError) {
+        fiscalMessage += " Statusi i ATK-së nuk u lexua: " + fiscalReadError.message;
+      } else {
+        fiscalQrPayload = typeof fiscalDocument?.qr_payload === "string" ? fiscalDocument.qr_payload : null;
+        fiscalConfirmed = fiscalDocument?.status === "accepted" && Boolean(fiscalQrPayload);
       }
     }
-    await SecureStore.deleteItemAsync(pendingKey);
-    setBusy(false); setCart([]); setCustomerId(""); setPaymentConfirmed(false); setPaymentMethod("cash");
-    setMessage("Fatura " + invoiceNumber + " u lëshua. " + (paymentMethod === "credit" ? "Mbeti e papaguar." : "Pagesa u regjistrua." + fiscalMessage));
-    await selectOrganization({ organization_id: organizationId, role: "", fiskalo_organizations: { legal_name: organizationName, municipality: "", nui: organizationNui } });
+    if (paymentMethod !== "credit" && await SecureStore.getItemAsync("fiskalo-printer-android-auto") === "true") {
+      if (!fiscalConfirmed || !fiscalQrPayload) {
+        fiscalMessage += " Printimi fiskal u ndal: mungon pranimi nga ATK ose QR-ja zyrtare.";
+      } else {
+        try {
+          await printAndroidReceipt({
+            businessName: organizationName,
+            nui: organizationNui,
+            municipality: "",
+            invoiceNumber: String(invoiceNumber ?? ""),
+            issuedAt: new Date().toLocaleString("sq-XK"),
+            paymentMethod: ({ cash: "PARA NE DORE", card: "KARTELE", bank_transfer: "TRANSFER BANKAR", credit: "ME AFAT" })[paymentMethod],
+            items: receiptLines,
+            subtotal,
+            vatTotal,
+            total: Number(issuedInvoice.total),
+            qrPayload: fiscalQrPayload,
+            fiscalStatus: "accepted",
+          });
+          fiscalMessage += " Kuponi ATK TEST u dërgua te printeri.";
+        } catch (printError) {
+          fiscalMessage += " Printimi automatik nuk u krye: " + (printError instanceof Error ? printError.message : "Gabim i panjohur.");
+        }
+      }
+    }
+    setBusy(false);
+    if (fiscalConfirmed) {
+      await SecureStore.deleteItemAsync(pendingKey);
+      setCart([]); setCustomerId(""); setPaymentConfirmed(false); setPaymentMethod("cash");
+      setMessage("Fatura " + invoiceNumber + " u lëshua. " + (paymentMethod === "credit" ? "Mbeti e papaguar." : "Pagesa u regjistrua." + fiscalMessage));
+      await selectOrganization({ organization_id: organizationId, role: "", fiskalo_organizations: { legal_name: organizationName, municipality: "", nui: organizationNui } });
+    } else {
+      setMessage("Fatura " + invoiceNumber + " dhe pagesa u regjistruan, por ATK nuk e konfirmoi fiskalizimin. Porosia mbetet e ruajtur; provo përsëri me të njëjtën shportë. " + fiscalMessage);
+    }
   }
 
   async function createAndroidAtkCsr() {
