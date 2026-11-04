@@ -7,6 +7,7 @@ using Fiskalo.PosAgent.Core.Atk;
 using Fiskalo.PosAgent.Core.Queue;
 using Fiskalo.PosAgent.Core.Security;
 using Atk;
+using Fiskalo.PosAgent.Host.Printing;
 
 const string AgentVersion = "0.1.0";
 const string PairPath = "/api/v1/pair";
@@ -18,6 +19,9 @@ const string QueueReconcilePath = "/api/v1/queue/reconcile";
 const string AtkVerifyPath = "/api/v1/atk/test/verify";
 const string AtkSignCsrPath = "/api/v1/atk/test/sign-csr";
 const string AtkCouponPath = "/api/v1/atk/test/coupon";
+const string PrintersPath = "/api/v1/printers";
+const string PrinterPrintPath = "/api/v1/printers/print";
+const string PrinterTestPath = "/api/v1/printers/test";
 
 var allowedOrigins = (Environment.GetEnvironmentVariable("FISKALO_ALLOWED_ORIGINS")
     ?? "https://fiskalo.shqiptare.workers.dev")
@@ -152,7 +156,7 @@ app.MapGet(StatusPath, (HttpContext context) =>
         version = AgentVersion,
         paired = true,
         fiscalizationEnabled = false,
-        capabilities = new[] { "health", "secure-local-pairing", "windows-dpapi-key-csr", "encrypted-queue-inspection", "manual-queue-reconciliation", "atk-test-coupon-submission" },
+        capabilities = new[] { "health", "secure-local-pairing", "windows-dpapi-key-csr", "encrypted-queue-inspection", "manual-queue-reconciliation", "atk-test-coupon-submission", "thermal-printer-windows-spooler", "thermal-printer-lan-9100", "thermal-printer-test" },
         windowsKeyStoreAvailable = OperatingSystem.IsWindows(),
         signingKeyInitialized = OperatingSystem.IsWindows() && File.Exists(keyPath),
         queueInitialized = OperatingSystem.IsWindows() && File.Exists(queuePath),
@@ -355,6 +359,69 @@ app.MapPost(AtkCouponPath, async (AtkCouponRequest request, HttpContext context,
         return Results.Problem("Local test certificate or signing key could not be validated.", statusCode: StatusCodes.Status500InternalServerError);
     }
 });
+app.MapGet(PrintersPath, (HttpContext context) =>
+{
+    if (!HasValidSession(context, sessionToken)) return Results.Unauthorized();
+    if (!OperatingSystem.IsWindows()) return Results.Problem("Installed USB and Windows queue printers are available through the Windows POS Agent.", statusCode: StatusCodes.Status501NotImplemented);
+    try
+    {
+        return Results.Ok(new { printers = ThermalPrinterService.GetInstalledPrinters(), networkPrinting = true, networkPort = 9100 });
+    }
+    catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or EntryPointNotFoundException)
+    {
+        return Results.Problem("Windows could not enumerate installed printers.", statusCode: StatusCodes.Status500InternalServerError);
+    }
+});
+
+app.MapPost(PrinterPrintPath, async (PrinterPrintRequest request, HttpContext context, CancellationToken cancellationToken) =>
+{
+    if (!HasValidSession(context, sessionToken)) return Results.Unauthorized();
+    if (!OperatingSystem.IsWindows()) return Results.Problem("The Windows POS Agent is required for this print route.", statusCode: StatusCodes.Status501NotImplemented);
+    if (string.IsNullOrWhiteSpace(request.DataBase64)) return Results.BadRequest(new { error = "print_data_required" });
+    if ((!string.IsNullOrWhiteSpace(request.PrinterName)) == (!string.IsNullOrWhiteSpace(request.NetworkHost)))
+        return Results.BadRequest(new { error = "choose_exactly_one_printer_name_or_network_host" });
+    try
+    {
+        var data = Convert.FromBase64String(request.DataBase64);
+        if (data.Length is < 1 or > 262144) return Results.BadRequest(new { error = "print_data_must_be_between_1_byte_and_256_kb" });
+        if (!string.IsNullOrWhiteSpace(request.PrinterName))
+            ThermalPrinterService.PrintToWindowsQueue(request.PrinterName, data);
+        else
+            await ThermalPrinterService.PrintToNetworkPrinterAsync(request.NetworkHost!, data, cancellationToken);
+        return Results.Ok(new { printed = true, transport = request.PrinterName is not null ? "windows-spooler" : "lan-9100" });
+    }
+    catch (FormatException) { return Results.BadRequest(new { error = "print_data_must_be_base64" }); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (PlatformNotSupportedException ex) { return Results.Problem(ex.Message, statusCode: StatusCodes.Status501NotImplemented); }
+    catch (Exception ex) when (ex is InvalidOperationException or SocketException or IOException or DllNotFoundException)
+    {
+        return Results.Problem("Printer job failed. Check printer selection, paper, connection and Windows printer status.", statusCode: StatusCodes.Status502BadGateway);
+    }
+});
+
+app.MapPost(PrinterTestPath, async (PrinterTestRequest request, HttpContext context, CancellationToken cancellationToken) =>
+{
+    if (!HasValidSession(context, sessionToken)) return Results.Unauthorized();
+    if (!OperatingSystem.IsWindows()) return Results.Problem("The Windows POS Agent is required for this print route.", statusCode: StatusCodes.Status501NotImplemented);
+    if ((!string.IsNullOrWhiteSpace(request.PrinterName)) == (!string.IsNullOrWhiteSpace(request.NetworkHost)))
+        return Results.BadRequest(new { error = "choose_exactly_one_printer_name_or_network_host" });
+    if (request.PaperWidthMm is not (58 or 80)) return Results.BadRequest(new { error = "paper_width_must_be_58_or_80" });
+    try
+    {
+        var data = ThermalPrinterService.BuildTestReceipt(request.PaperWidthMm);
+        if (!string.IsNullOrWhiteSpace(request.PrinterName))
+            ThermalPrinterService.PrintToWindowsQueue(request.PrinterName, data);
+        else
+            await ThermalPrinterService.PrintToNetworkPrinterAsync(request.NetworkHost!, data, cancellationToken);
+        return Results.Ok(new { printed = true, testOnly = true, paperWidthMm = request.PaperWidthMm });
+    }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (Exception ex) when (ex is InvalidOperationException or SocketException or IOException or DllNotFoundException)
+    {
+        return Results.Problem("Test print failed. Check printer selection, paper, connection and Windows printer status.", statusCode: StatusCodes.Status502BadGateway);
+    }
+});
+
 if (OperatingSystem.IsWindows())
 {
     try
@@ -424,3 +491,13 @@ internal sealed record AtkSignCsrRequest(
 internal sealed record AtkCouponRequest(
     [property: JsonPropertyName("idempotencyKey")] string IdempotencyKey,
     [property: JsonPropertyName("coupon")] PosCouponInput Coupon);
+
+internal sealed record PrinterPrintRequest(
+    [property: JsonPropertyName("printerName")] string? PrinterName,
+    [property: JsonPropertyName("networkHost")] string? NetworkHost,
+    [property: JsonPropertyName("dataBase64")] string DataBase64);
+
+internal sealed record PrinterTestRequest(
+    [property: JsonPropertyName("printerName")] string? PrinterName,
+    [property: JsonPropertyName("networkHost")] string? NetworkHost,
+    [property: JsonPropertyName("paperWidthMm")] int PaperWidthMm);
