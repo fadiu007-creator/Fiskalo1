@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { PermissionsAndroid, Platform, Text, TouchableOpacity, View } from "react-native";
-import FiskaloAtkCrypto, { type BondedBluetoothPrinter } from "fiskalo-atk-crypto";
+import FiskaloAtkCrypto, { type BondedBluetoothPrinter, type UsbPrinter } from "fiskalo-atk-crypto";
 
 const ink = "#17212b";
 const brand = "#245b50";
@@ -40,6 +40,8 @@ function buildPrinterTest(): number[] {
 export function PrinterPanel() {
   const [printers, setPrinters] = useState<BondedBluetoothPrinter[]>([]);
   const [selected, setSelected] = useState("");
+  const [usbPrinters, setUsbPrinters] = useState<UsbPrinter[]>([]);
+  const [selectedUsb, setSelectedUsb] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -63,6 +65,43 @@ export function PrinterPanel() {
     } finally { setBusy(false); }
   }
 
+
+  async function loadUsbPrinters() {
+    setBusy(true); setMessage("");
+    try {
+      const result = await FiskaloAtkCrypto.listUsbPrinters();
+      setUsbPrinters(result);
+      if (result.length && !result.some((item) => item.deviceName === selectedUsb)) setSelectedUsb(result[0].deviceName);
+      setMessage(result.length ? "U gjetën " + result.length + " pajisje USB." : "Nuk u gjet printer USB. Lidhe me kabllo OTG dhe rifresko.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Nuk u lexuan pajisjet USB.");
+    } finally { setBusy(false); }
+  }
+
+  async function requestUsbAccess() {
+    setBusy(true); setMessage("");
+    try {
+      if (!selectedUsb) throw new Error("Zgjidh një pajisje USB.");
+      const alreadyGranted = await FiskaloAtkCrypto.requestUsbPermission(selectedUsb);
+      setMessage(alreadyGranted ? "Leja USB është aktive. Mund të printosh testin." : "Konfirmo lejen USB në dritaren e Android-it, pastaj shtyp përsëri Printo testin.");
+      const refreshed = await FiskaloAtkCrypto.listUsbPrinters();
+      setUsbPrinters(refreshed);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Nuk u kërkua leja USB.");
+    } finally { setBusy(false); }
+  }
+
+  async function testUsbPrint() {
+    setBusy(true); setMessage("");
+    try {
+      if (!selectedUsb) throw new Error("Zgjidh një printer USB.");
+      const result = await FiskaloAtkCrypto.printUsb(selectedUsb, base64(buildPrinterTest()));
+      setMessage(result.printed ? "Test-printimi USB u dërgua (" + result.bytes + " byte). Kontrollo letrën dhe QR-në." : "Printeri nuk konfirmoi printimin.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Test-printimi USB dështoi.");
+    } finally { setBusy(false); }
+  }
+
   async function testPrint() {
     setBusy(true); setMessage("");
     try {
@@ -77,8 +116,8 @@ export function PrinterPanel() {
   }
 
   return <View style={{ padding: 12, marginBottom: 9, backgroundColor: "white", borderWidth: 1, borderColor: border, borderRadius: 9, gap: 8 }}>
-    <Text style={{ color: ink, fontWeight: "800" }}>Printer termik Bluetooth · Android</Text>
-    <Text style={{ color: "#687773", fontSize: 11 }}>Çiftoje printerin në cilësimet e Android-it, pastaj rifresko listën. Kërkohet printer ESC/POS me Bluetooth Classic (SPP).</Text>
+    <Text style={{ color: ink, fontWeight: "800" }}>Printer termik · Android</Text>
+    <Text style={{ color: "#687773", fontSize: 11 }}>Bluetooth Classic (SPP) dhe USB OTG për printerë ESC/POS. Për USB, lidhe printerin me kabllo OTG dhe jep lejen e Android-it.</Text>
     <TouchableOpacity disabled={busy} onPress={() => void loadPrinters()} style={{ padding: 11, borderRadius: 8, backgroundColor: brand, opacity: busy ? 0.55 : 1 }}>
       <Text style={{ color: "white", textAlign: "center", fontWeight: "800" }}>{busy ? "Duke kontrolluar..." : "Gjej printerët e çiftuar"}</Text>
     </TouchableOpacity>
@@ -89,7 +128,25 @@ export function PrinterPanel() {
     <TouchableOpacity disabled={busy || !selected} onPress={() => void testPrint()} style={{ padding: 11, borderRadius: 8, borderWidth: 1, borderColor: border, opacity: busy || !selected ? 0.5 : 1 }}>
       <Text style={{ color: ink, textAlign: "center", fontWeight: "800" }}>Printo testin (tekst + QR)</Text>
     </TouchableOpacity>
+    <View style={{ borderTopWidth: 1, borderColor: border, paddingTop: 8, gap: 7 }}>
+      <Text style={{ color: ink, fontWeight: "700" }}>USB OTG</Text>
+      <TouchableOpacity disabled={busy} onPress={() => void loadUsbPrinters()} style={{ padding: 10, borderRadius: 8, borderWidth: 1, borderColor: border, opacity: busy ? 0.5 : 1 }}>
+        <Text style={{ color: ink, textAlign: "center", fontWeight: "700" }}>Gjej printerët USB</Text>
+      </TouchableOpacity>
+      {usbPrinters.map((printer) => <TouchableOpacity key={printer.deviceName} onPress={() => setSelectedUsb(printer.deviceName)} style={{ padding: 9, borderRadius: 8, borderWidth: 1, borderColor: selectedUsb === printer.deviceName ? brand : border, backgroundColor: selectedUsb === printer.deviceName ? "#edf5f1" : "white" }}>
+        <Text style={{ color: ink, fontWeight: "700" }}>{selectedUsb === printer.deviceName ? "● " : "○ "}{printer.productName}</Text>
+        <Text style={{ color: "#687773", fontSize: 10 }}>{printer.manufacturerName} · VID {printer.vendorId} / PID {printer.productId} · {printer.hasPermission ? "Leja aktive" : "Kërkon leje"}</Text>
+      </TouchableOpacity>)}
+      {!!selectedUsb && <View style={{ flexDirection: "row", gap: 7 }}>
+        <TouchableOpacity disabled={busy} onPress={() => void requestUsbAccess()} style={{ flex: 1, padding: 10, borderRadius: 8, borderWidth: 1, borderColor: border }}>
+          <Text style={{ color: ink, textAlign: "center", fontWeight: "700" }}>Lejo USB</Text>
+        </TouchableOpacity>
+        <TouchableOpacity disabled={busy || !usbPrinters.find((item) => item.deviceName === selectedUsb)?.hasPermission} onPress={() => void testUsbPrint()} style={{ flex: 1, padding: 10, borderRadius: 8, backgroundColor: brand, opacity: busy || !usbPrinters.find((item) => item.deviceName === selectedUsb)?.hasPermission ? 0.5 : 1 }}>
+          <Text style={{ color: "white", textAlign: "center", fontWeight: "700" }}>Testo USB</Text>
+        </TouchableOpacity>
+      </View>}
+    </View>
     {!!message && <Text accessibilityRole="alert" style={{ color: "#52635e", fontSize: 11, lineHeight: 16 }}>{message}</Text>}
-    <Text style={{ color: "#8a5a18", fontSize: 10 }}>Testi provon lidhjen Bluetooth dhe komandën QR. Nuk verifikon përputhshmërinë zyrtare ATK dhe nuk dërgon kupon fiskal.</Text>
+    <Text style={{ color: "#8a5a18", fontSize: 10 }}>Testi dërgon tekst dhe QR ESC/POS. Nuk është kupon fiskal dhe nuk certifikon pajtueshmërinë ATK. USB kërkon OTG dhe pajisje me ndërfaqe bulk OUT.</Text>
   </View>;
 }
