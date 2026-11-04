@@ -1,43 +1,37 @@
-# Fiskalo — official ATK taxpayer lookup
+# Fiskalo — ATK taxpayer verification (provider workspace)
 
-## Official service
+## Official ATK public search
 
-Fiskalo onboarding links to ATK's public **Kërko tatimpaguesin** service:
+The Fiskalo provider workspace opens ATK's public **Kërko tatimpaguesin** page:
 
 https://apps.atk-ks.org/BizPasiveApp/VatRegist/Index
 
-ATK states that this service searches by:
+ATK documents search by:
 - Numri fiskal
 - NRB
 - Nr. TVSh
 
 The published result fields include fiscal number, NRB, registration status, taxpayer name, address, city, municipality, tax centre, VAT number and VAT registration status.
 
-## API availability
+## Who can use this in Fiskalo
 
-ATK's public website documents a human-facing taxpayer search service. The publicly available documentation reviewed for this implementation does not publish a supported third-party API contract, authentication method, request schema or service-level terms for automated lookups.
+The feature is available only inside `/provider` to accounts present in `fiskalo_provider_users` with one of these roles:
+- `provider_admin`
+- `provider_support`
+- `provider_compliance`
 
-The SEF integration documentation is a separate interface for fiscal coupons, digital signatures and transmission to ATK. It must not be treated as a taxpayer-profile API.
+It is deliberately not part of customer onboarding or the business dashboard. Provider staff can associate a lookup with a customer organization, enter the values shown by ATK, and save an auditable lookup record. Row Level Security limits reads and inserts to provider users; update and delete are restricted to provider administrators.
 
-Therefore Fiskalo does not scrape the ATK search form, reverse-engineer private endpoints, or claim automatic official verification. Onboarding opens the official ATK search in a new tab and allows the business owner to enter the returned details. NUI, fiscal number and NRB are kept distinct.
+The saved record includes the lookup type/value, ATK result fields, source URL, timestamp and provider user who recorded it. The UI labels it as a manually recorded result, not an API response or an ATK-issued certificate.
 
-## Future direct integration
+## API availability and limitations
 
-An automatic lookup can be added when ATK provides written authorization and an API specification for third-party SEF providers. The adapter should then:
-1. Authenticate server-side using ATK-issued credentials.
-2. Query only the approved identifiers and fields.
-3. Validate that the returned identifier matches the submitted business.
-4. Store source, retrieval timestamp and response status.
-5. Clearly distinguish taxpayer registration status from tax-clearance certificates or tax debt status.
+ATK's public website documents a human-facing search service. The public documentation reviewed for this implementation does not publish a supported third-party API contract, authentication method, request schema or service-level terms for automated lookups.
 
-Contact ATK through its official channels to request a supported taxpayer lookup API and commercial integration authorization:
-- https://www.atk-ks.org/
-- info@atk-ks.org
-- edi@atk-ks.org
+The SEF integration is a separate interface for fiscal coupons, digital signatures and transmission to ATK. It must not be treated as a taxpayer-profile API. Tax debts, declarations and tax-clearance certificates remain in the taxpayer's authorized EDI access and are not returned by this public lookup.
 
-## Current behavior
+Fiskalo does not scrape the ATK form, reverse-engineer private endpoints, or claim automatic official verification. Direct integration requires written ATK authorization and an official API specification.
 
-- The onboarding form retains manual entry.
-- The official ATK lookup is opened directly from the onboarding screen.
-- Fiskalo does not mark the business as ATK-verified merely because the user opened the ATK page.
-- The old ARBK Atlas integration is removed from the onboarding path and no Atlas API key is required.
+## Atlas removal
+
+The ARBK Atlas endpoint, environment-key requirement and onboarding lookup path are removed. The obsolete Atlas metadata columns are dropped by the new provider lookup migration, and the organization-creation RPC no longer accepts Atlas fields. The earlier migration file is retained as migration history; it is not an active integration or deployment.
