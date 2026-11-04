@@ -141,15 +141,15 @@ export function PrinterPanel() {
       <TouchableOpacity disabled={busy} onPress={() => void loadUsbPrinters()} style={{ padding: 10, borderRadius: 8, borderWidth: 1, borderColor: border, opacity: busy ? 0.5 : 1 }}>
         <Text style={{ color: ink, textAlign: "center", fontWeight: "700" }}>Gjej printerët USB</Text>
       </TouchableOpacity>
-      {usbPrinters.map((printer) => <TouchableOpacity key={printer.deviceName} onPress={() => { setSelectedUsb(printer.deviceName); void SecureStore.setItemAsync("fiskalo-printer-android-transport", "usb"); void SecureStore.setItemAsync("fiskalo-printer-android-device", printer.deviceName); }} style={{ padding: 9, borderRadius: 8, borderWidth: 1, borderColor: selectedUsb === printer.deviceName ? brand : border, backgroundColor: selectedUsb === printer.deviceName ? "#edf5f1" : "white" }}>
-        <Text style={{ color: ink, fontWeight: "700" }}>{selectedUsb === printer.deviceName ? "● " : "○ "}{printer.productName}</Text>
+      {usbPrinters.map((printer) => <TouchableOpacity key={printer.deviceName} onPress={() => { setSelectedUsb(printer.deviceName); void SecureStore.setItemAsync("fiskalo-printer-android-transport", "usb"); void SecureStore.setItemAsync("fiskalo-printer-android-device", printer.deviceName); }} style={{ padding: 9, borderRadius: 8, borderWidth: 1, borderColor: selectedUsb === printer.deviceName ? brand : border, backgroundColor: selectedUsb === String(printer.deviceId) ? "#edf5f1" : "white" }}>
+        <Text style={{ color: ink, fontWeight: "700" }}>{selectedUsb === String(printer.deviceId) ? "● " : "○ "}{printer.productName}</Text>
         <Text style={{ color: "#687773", fontSize: 10 }}>{printer.manufacturerName} · VID {printer.vendorId} / PID {printer.productId} · {printer.hasPermission ? "Leja aktive" : "Kërkon leje"}</Text>
       </TouchableOpacity>)}
       {!!selectedUsb && <View style={{ flexDirection: "row", gap: 7 }}>
         <TouchableOpacity disabled={busy} onPress={() => void requestUsbAccess()} style={{ flex: 1, padding: 10, borderRadius: 8, borderWidth: 1, borderColor: border }}>
           <Text style={{ color: ink, textAlign: "center", fontWeight: "700" }}>Lejo USB</Text>
         </TouchableOpacity>
-        <TouchableOpacity disabled={busy || !usbPrinters.find((item) => item.deviceName === selectedUsb)?.hasPermission} onPress={() => void testUsbPrint()} style={{ flex: 1, padding: 10, borderRadius: 8, backgroundColor: brand, opacity: busy || !usbPrinters.find((item) => item.deviceName === selectedUsb)?.hasPermission ? 0.5 : 1 }}>
+        <TouchableOpacity disabled={busy || !usbPrinters.find((item) => String(item.deviceId) === selectedUsb)?.hasPermission} onPress={() => void testUsbPrint()} style={{ flex: 1, padding: 10, borderRadius: 8, backgroundColor: brand, opacity: busy || !usbPrinters.find((item) => item.deviceName === selectedUsb)?.hasPermission ? 0.5 : 1 }}>
           <Text style={{ color: "white", textAlign: "center", fontWeight: "700" }}>Testo USB</Text>
         </TouchableOpacity>
       </View>}
