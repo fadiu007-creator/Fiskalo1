@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ArrowLeft, Download, FileBarChart2 } from "lucide-react";
 
 type Props = { params: Promise<{ organizationId: string }> };
-const money = (value: number) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR" }).format(value);
+const money = (value: number | string | null | undefined) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR" }).format(Number(value ?? 0));
 const day = (value: string) => new Date(value + "T12:00:00").toLocaleDateString("sq-XK");
 
 export default async function ReportsPage({ params }: Props) {
@@ -54,7 +54,7 @@ export default async function ReportsPage({ params }: Props) {
         .in("invoice_id", invoiceIds)
     : { data: [] as { invoice_id: string; amount: number; payment_method: string; created_at: string }[] };
 
-  const sum = (values: Array<number | string | null | undefined>) => values.reduce((total, value) => total + Number(value ?? 0), 0);
+  const sum = (values: Array<number | string | null | undefined>) => values.reduce<number>((total, value) => total + Number(value ?? 0), 0);
   const turnover = sum(invoices.map((invoice) => invoice.total));
   const netSales = sum(invoices.map((invoice) => invoice.subtotal));
   const vatTotal = sum(invoices.map((invoice) => invoice.vat_total));
