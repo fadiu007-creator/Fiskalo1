@@ -17,7 +17,7 @@ create or replace function public.fiskalo_create_pos_sale(
 )
 returns table(invoice_id uuid, invoice_number text, invoice_total numeric, replayed boolean)
 language plpgsql
-security definer
+security invoker
 set search_path = ''
 as $$
 declare
