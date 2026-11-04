@@ -51,8 +51,12 @@ export function PrinterPanel() {
     void SecureStore.getItemAsync("fiskalo-printer-android-auto").then((value) => setAutoPrint(value === "true"));
     void SecureStore.getItemAsync("fiskalo-printer-android-width").then((value) => setPaperWidth(value === "58" ? "58" : "80"));
     void SecureStore.getItemAsync("fiskalo-printer-android-host").then((value) => setNetworkHost(value || ""));
-    void SecureStore.getItemAsync("fiskalo-printer-android-device").then((value) => {
-      if (value) setSelectedUsb(value);
+    void Promise.all([
+      SecureStore.getItemAsync("fiskalo-printer-android-transport"),
+      SecureStore.getItemAsync("fiskalo-printer-android-device"),
+    ]).then(([transport, device]) => {
+      if (device && transport === "bluetooth") setSelected(device);
+      if (device && transport === "usb") setSelectedUsb(device);
     });
   }, []);
 
