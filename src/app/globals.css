@@ -133,3 +133,221 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 @media(max-width:600px){.workspace-picker{padding-top:20px}.workspace-picker>header{margin-bottom:46px}.workspace-picker-grid{grid-template-columns:1fr}}
 
 .provider-signout{width:100%;border:1px solid #345747;background:transparent;color:#d4e3da;border-radius:9px;padding:9px 10px;margin-top:12px;text-align:left;font-size:11px;font-weight:750;cursor:pointer}.provider-signout:hover{background:#1d4938;color:#fff}.provider-workspace-link{display:inline-flex;align-items:center;gap:6px;color:#137a55;background:#eaf5ef;padding:9px 11px;border-radius:9px;font-size:11px;font-weight:800;white-space:nowrap}
+
+
+/* Fiskalo interface system — November 2026 */
+:root {
+  --canvas: #f4f7f5;
+  --surface: #ffffff;
+  --surface-soft: #f8faf9;
+  --line: #e4ebe6;
+  --line-strong: #d4dfd8;
+  --ink: #17251e;
+  --muted: #6d7b73;
+  --brand: #137a55;
+  --brand-dark: #0c5d40;
+  --brand-soft: #e9f5ee;
+  --radius-card: 16px;
+  --shadow-card: 0 8px 28px rgba(21, 48, 33, .055);
+  --shadow-float: 0 16px 42px rgba(21, 48, 33, .12);
+}
+html { scroll-behavior: smooth; }
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: #cde9d8; color: #103e2b; }
+a { text-underline-offset: 3px; }
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 3px solid rgba(19, 122, 85, .22);
+  outline-offset: 2px;
+}
+input::placeholder, textarea::placeholder { color: #9aa69f; }
+.data-table th { background: #f7faf8; letter-spacing: .045em; text-transform: uppercase; }
+.data-table tbody tr:hover { background: #fbfdfb; }
+
+/* Business navigation: clear hierarchy and predictable mobile layout */
+.business-shell-header {
+  background: rgba(255,255,255,.96);
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 3px 16px rgba(21,48,33,.035);
+}
+.business-shell-inner { min-height: 72px; gap: 16px; }
+.business-shell-brand span {
+  width: 35px; height: 35px; border-radius: 11px;
+  background: linear-gradient(145deg, #19865f, #0d6546);
+  box-shadow: 0 4px 10px rgba(19,122,85,.18);
+}
+.business-shell-brand strong { font-size: 21px; letter-spacing: -.9px; }
+.business-shell-nav { gap: 3px; }
+.business-shell-nav a {
+  padding: 10px 12px; border-radius: 10px;
+  color: #617168; font-size: 12px; font-weight: 680;
+  transition: color .15s ease, background .15s ease;
+}
+.business-shell-nav a.active { background: var(--brand-soft); color: var(--brand-dark); }
+.business-shell-nav a:hover { background: #f2f7f4; color: var(--brand-dark); }
+.business-shell-nav a svg { flex: none; }
+.business-switch-link { transition: background .15s ease, color .15s ease; }
+.business-switch-link:hover { background: #f0f5f2; color: var(--brand-dark); }
+.business-provider-link { border-radius: 10px; background: #153d2e; }
+.business-dashboard { padding-top: 38px; }
+.business-dashboard-hero { margin-top: 5px; margin-bottom: 28px; }
+.business-dashboard-hero h1 { line-height: 1.12; }
+.business-dashboard-stats { gap: 15px; }
+.business-dashboard-stats article {
+  border-radius: var(--radius-card); padding: 19px 20px;
+  box-shadow: 0 2px 9px rgba(21,48,33,.025);
+}
+.business-dashboard-stats article strong { font-variant-numeric: tabular-nums; }
+.business-module-grid { gap: 15px; }
+.business-module-card {
+  min-height: 190px; border-radius: var(--radius-card); padding: 20px;
+  box-shadow: 0 2px 9px rgba(21,48,33,.025);
+}
+.business-module-card:hover {
+  transform: translateY(-3px); border-color: #b9d4c4;
+  box-shadow: var(--shadow-card);
+}
+.business-module-icon { width: 44px; height: 44px; border-radius: 13px; }
+.business-module-card p { line-height: 1.6; }
+
+/* POS: prioritize product selection, basket and payment action */
+.fiskalo-pos { padding-top: 28px !important; }
+.fiskalo-pos > header { align-items: flex-end !important; }
+.fiskalo-pos > header h1 { font-size: clamp(27px, 3vw, 34px) !important; letter-spacing: -.045em; }
+.fiskalo-pos > header > div:first-child > div { margin-top: 7px; line-height: 1.55; }
+.fiskalo-pos .pos-layout { gap: 16px !important; }
+.fiskalo-pos .pos-layout > section,
+.fiskalo-pos .pos-layout > aside {
+  border: 1px solid var(--line) !important;
+  border-radius: 18px !important;
+  box-shadow: var(--shadow-card);
+}
+.fiskalo-pos .pos-layout > section { padding: 18px !important; }
+.fiskalo-pos .pos-layout > aside { padding: 18px !important; }
+.fiskalo-pos .pos-product-grid { gap: 13px; }
+.fiskalo-pos .pos-product-card {
+  border: 1px solid #e5ece7; border-radius: 15px;
+  padding-bottom: 14px; gap: 8px;
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+.fiskalo-pos .pos-product-card:hover {
+  transform: translateY(-2px); border-color: #b8d4c3;
+  box-shadow: 0 8px 22px rgba(21,48,33,.08);
+}
+.fiskalo-pos .pos-product-image { background-color: #f2f6f3; }
+.fiskalo-pos .pos-product-name { line-height: 1.35; }
+.fiskalo-pos .pos-product-price { font-variant-numeric: tabular-nums; }
+.fiskalo-pos .pos-category { padding: 9px 14px; font-size: 12px; }
+.fiskalo-pos .pos-category:not(.active):hover { background: #f3f8f5; border-color: #c7d9ce; }
+.fiskalo-pos .pos-layout aside h2 { font-size: 18px !important; }
+.fiskalo-pos .pos-quantity-stepper button { border-radius: 10px; }
+.fiskalo-pos .cart-empty { padding: 28px 18px !important; line-height: 1.6; }
+.fiskalo-pos .pos-layout aside > div:last-child { border-color: var(--line); }
+.fiskalo-pos .status-pill { letter-spacing: 0; }
+.fiskalo-pos nav[aria-label="POS dhe faturat"] { gap: 6px !important; }
+.fiskalo-pos nav[aria-label="POS dhe faturat"] button { min-height: 42px; padding: 10px 15px !important; }
+.fiskalo-pos input { font-size: 14px; }
+.fiskalo-pos input[aria-label="Kërko produkt ose skano barkod"] {
+  min-height: 48px; padding-left: 15px !important;
+  background: #fbfdfb; border-color: #dce7df !important;
+}
+.fiskalo-pos input[aria-label="Kërko produkt ose skano barkod"]:focus {
+  background: #fff; border-color: var(--brand) !important;
+}
+
+/* Provider workspace: consistent surfaces and readable density */
+.provider-shell { background: #f4f7f5; }
+.provider-sidebar { background: #102b22; }
+.provider-nav-item { transition: background .15s ease, color .15s ease; }
+.provider-main { padding-top: 32px; }
+.provider-welcome { box-shadow: 0 12px 32px rgba(15,55,37,.10); }
+.provider-stats article, .provider-panel {
+  border-color: var(--line); border-radius: var(--radius-card);
+  box-shadow: 0 2px 9px rgba(21,48,33,.025);
+}
+.provider-panel { padding: 22px; }
+.provider-table tbody tr:hover { background: #fbfdfb; }
+.provider-search:focus-within { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(19,122,85,.09); }
+.provider-primary, .provider-signout { transition: background .15s ease, transform .15s ease; }
+.provider-primary:hover { background: var(--brand-dark); }
+.provider-device-grid article { border-radius: 13px; background: #fff; }
+.provider-status { white-space: nowrap; }
+
+/* Responsive rules: no clipped navigation or overlapping controls */
+@media (max-width: 1100px) {
+  .business-shell-inner { gap: 9px; }
+  .business-shell-nav a { padding: 9px 8px; font-size: 11px; }
+  .business-shell-actions .business-switch-link { padding: 8px; }
+}
+@media (max-width: 760px) {
+  .business-shell-inner {
+    position: relative; display: grid;
+    grid-template-columns: minmax(0,1fr) auto;
+    gap: 8px 10px; padding: 10px 12px 0;
+  }
+  .business-shell-brand { display: flex; grid-column: 1; grid-row: 1; }
+  .business-shell-brand span { width: 30px; height: 30px; }
+  .business-shell-brand strong { font-size: 18px; }
+  .business-shell-divider, .business-shell-name { display: none; }
+  .business-shell-actions {
+    position: static; grid-column: 2; grid-row: 1;
+    justify-content: flex-end; gap: 2px;
+  }
+  .business-shell-actions .business-switch-link { padding: 7px; font-size: 0; }
+  .business-shell-actions .business-switch-link svg { width: 17px; height: 17px; }
+  .business-shell-nav {
+    grid-column: 1 / -1; grid-row: 2;
+    width: 100%; overflow-x: auto; overscroll-behavior-x: contain;
+    padding: 0 0 9px; scrollbar-width: none;
+  }
+  .business-shell-nav::-webkit-scrollbar { display: none; }
+  .business-shell-nav a { flex: 0 0 auto; padding: 9px 11px; font-size: 11px; }
+  .business-dashboard { padding: 22px 13px 42px; }
+  .business-dashboard-hero { gap: 10px; }
+  .business-dashboard-hero h1 { font-size: 26px; }
+  .business-dashboard-stats { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; }
+  .business-dashboard-stats article { padding: 12px 10px; }
+  .business-dashboard-stats article strong { font-size: 21px; }
+  .business-dashboard-stats article span, .business-dashboard-stats article small { font-size: 10px; line-height: 1.4; }
+  .business-module-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }
+  .business-module-card { min-height: 176px; padding: 14px; }
+  .business-module-card>strong { font-size: 14px; }
+  .business-module-card p { font-size: 11px; }
+  .fiskalo-pos { padding-top: 18px !important; }
+  .fiskalo-pos .pos-layout { grid-template-columns: minmax(0,1fr) !important; }
+  .fiskalo-pos .pos-layout > section, .fiskalo-pos .pos-layout > aside { padding: 13px !important; }
+  .fiskalo-pos .pos-product-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }
+  .fiskalo-pos .pos-product-name { font-size: 13px; }
+  .fiskalo-pos .pos-product-price { font-size: 15px; }
+  .fiskalo-pos .pos-layout aside { position: static !important; }
+  .provider-shell { display: block; }
+  .provider-sidebar { position: relative; height: auto; padding: 12px 13px 8px; }
+  .provider-logo { padding: 0 4px 10px; }
+  .provider-nav-label { display: none; }
+  .provider-sidebar > .provider-nav-item {
+    display: inline-flex; width: auto; margin: 0 3px 4px 0;
+    padding: 8px 10px; font-size: 11px; vertical-align: middle;
+  }
+  .provider-sidebar > .provider-nav-item span { margin-left: 2px; }
+  .provider-sidebar-bottom { display: none; }
+  .provider-main { padding: 18px 13px 25px; }
+  .provider-panel { padding: 15px; }
+}
+@media (max-width: 440px) {
+  .business-dashboard-stats { grid-template-columns: 1fr 1fr; }
+  .business-dashboard-stats article:last-child { grid-column: 1 / -1; }
+  .business-module-grid { grid-template-columns: 1fr 1fr; }
+  .business-module-card { min-height: 165px; }
+  .provider-sidebar > .provider-nav-item { padding: 8px; font-size: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}
