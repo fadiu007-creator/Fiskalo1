@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 const field: React.CSSProperties = { width: "100%", border: "1px solid var(--line)", borderRadius: 10, padding: "12px 13px", background: "white", color: "var(--ink)" };
@@ -9,6 +11,7 @@ const button: React.CSSProperties = { border: 0, borderRadius: 10, padding: "12p
 
 export default function AccountProfilePage() {
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
   const [name,setName] = useState("");
   const [phone,setPhone] = useState("");
   const [email,setEmail] = useState("");
@@ -22,7 +25,7 @@ export default function AccountProfilePage() {
     let active = true;
     void supabase.auth.getUser().then(({data,error}) => {
       if (!active) return;
-      if (error || !data.user) setError("Nuk u lexua llogaria. Hyr përsëri.");
+      if (error || !data.user) { router.replace("/login"); return; }
       else {
         setName(String(data.user.user_metadata?.display_name || data.user.user_metadata?.full_name || ""));
         setPhone(String(data.user.user_metadata?.phone || ""));
@@ -31,7 +34,13 @@ export default function AccountProfilePage() {
       setLoading(false);
     });
     return () => { active = false; };
-  },[supabase]);
+  },[supabase,router]);
+
+  async function signOut() {
+    await supabase.auth.signOut();
+    router.replace("/login");
+    router.refresh();
+  }
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
@@ -56,7 +65,7 @@ export default function AccountProfilePage() {
   }
 
   return <main style={{maxWidth:760,margin:"0 auto",padding:"28px 16px 56px"}}>
-    <Link href="/app" style={{color:"var(--brand)",fontWeight:750,textDecoration:"none"}}>← Kthehu te bizneset</Link>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}><Link href="/app?switch=1" style={{color:"var(--brand)",fontWeight:750,textDecoration:"none"}}>← Kthehu te bizneset</Link><button type="button" onClick={()=>void signOut()} style={{border:"1px solid var(--line)",borderRadius:9,padding:"9px 12px",background:"white",color:"var(--ink)",fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7}}><LogOut size={15}/> Dil nga llogaria</button></div>
     <h1 style={{fontSize:28,margin:"16px 0 5px"}}>Profili im</h1>
     <p style={{color:"var(--muted)",fontSize:13,margin:"0 0 20px"}}>Ndrysho të dhënat personale të llogarisë tënde. Këto të dhëna nuk ndryshojnë rolin ose qasjen në biznes.</p>
     {error && <p role="alert" style={{background:"#fff0ef",color:"#982d25",padding:12,borderRadius:9}}>{error}</p>}
