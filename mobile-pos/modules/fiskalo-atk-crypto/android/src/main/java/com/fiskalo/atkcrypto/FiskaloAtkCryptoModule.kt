@@ -199,22 +199,27 @@ class FiskaloAtkCryptoModule : Module() {
       require(bytes.isNotEmpty() && bytes.size <= 262144) { "Print data must be between 1 byte and 256 KB." }
       val connection = manager.openDevice(device) ?: throw IllegalStateException("Android could not open the USB printer.")
       try {
-        val pair = device.interfaces.asSequence().mapNotNull { usbInterface ->
-          val endpoint = (0 until usbInterface.endpointCount).map { usbInterface.getEndpoint(it) }
-            .firstOrNull { it.direction == UsbConstants.USB_DIR_OUT && it.type == UsbConstants.USB_ENDPOINT_XFER_BULK }
-          if (endpoint == null) null else Pair(usbInterface, endpoint)
-        }.firstOrNull() ?: throw IllegalStateException("No USB bulk-output endpoint was found. This printer may need a vendor driver.")
-        if (!connection.claimInterface(pair.first, true)) throw IllegalStateException("Could not claim the USB printer interface.")
+        val usbInterface = device.interfaces.firstOrNull { candidate ->
+          (0 until candidate.endpointCount).any { index ->
+            val endpoint = candidate.getEndpoint(index)
+            endpoint.direction == UsbConstants.USB_DIR_OUT &&
+              endpoint.type == UsbConstants.USB_ENDPOINT_XFER_BULK
+          }
+        } ?: throw IllegalStateException("No USB bulk-output endpoint was found. This printer may need a vendor driver.")
+        val outputEndpoint = (0 until usbInterface.endpointCount)
+          .map { usbInterface.getEndpoint(it) }
+          .first { it.direction == UsbConstants.USB_DIR_OUT && it.type == UsbConstants.USB_ENDPOINT_XFER_BULK }
+        if (!connection.claimInterface(usbInterface, true)) throw IllegalStateException("Could not claim the USB printer interface.")
         try {
           var offset = 0
           while (offset < bytes.size) {
             val length = minOf(16384, bytes.size - offset)
             val chunk = bytes.copyOfRange(offset, offset + length)
-            val sent = connection.bulkTransfer(pair.second, chunk, chunk.size, 5000)
+            val sent = connection.bulkTransfer(outputEndpoint, chunk, chunk.size, 5000)
             if (sent <= 0) throw IllegalStateException("USB printer stopped accepting data.")
             offset += sent
           }
-        } finally { connection.releaseInterface(pair.first) }
+        } finally { connection.releaseInterface(usbInterface) }
       } finally { connection.close() }
       mapOf("printed" to true, "transport" to "usb")
     }
