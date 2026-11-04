@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { submitPaidInvoiceToATK } from "@/lib/atk/submit-paid-invoice";
+import { FiscalQrCode } from "@/components/fiscal-qr-code";
 import { ensureATKTestPosReady } from "@/lib/atk/ensure-test-pos-ready";
 import { ArrowRight, FileText, Plus, RefreshCw, Search, Settings2, ShoppingCart } from "lucide-react";
 
@@ -47,6 +48,8 @@ export default function WebPosPage() {
   const [notice, setNotice] = useState("");
   const [issuedInvoiceId, setIssuedInvoiceId] = useState("");
   const [issuedNumber, setIssuedNumber] = useState("");
+  const [issuedQrPayload, setIssuedQrPayload] = useState("");
+  const [issuedFiscalStatus, setIssuedFiscalStatus] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -165,7 +168,7 @@ export default function WebPosPage() {
   }
 
   async function completeSale() {
-    setError(""); setNotice(""); setIssuedInvoiceId(""); setIssuedNumber("");
+    setError(""); setNotice(""); setIssuedInvoiceId(""); setIssuedNumber(""); setIssuedQrPayload(""); setIssuedFiscalStatus("");
     const valid = lines.filter((line) => Number.isFinite(line.quantity) && line.quantity > 0);
     if (!valid.length || valid.length !== lines.length) { setError("Shto artikuj dhe kontrollo sasitë."); return; }
     if (paymentMethod !== "credit") {
@@ -265,10 +268,17 @@ export default function WebPosPage() {
       try {
         const fiscalResult = await submitPaidInvoiceToATK(supabase, organizationId, invoice.id);
         fiscalNotice = " " + fiscalResult.message;
+        setIssuedFiscalStatus(fiscalResult.status);
+        if (fiscalResult.qrPayload) setIssuedQrPayload(fiscalResult.qrPayload);
       } catch (fiscalError) {
         fiscalNotice = " Pagesa u ruajt, por dërgimi automatik në ATK nuk u përfundua: " +
           (fiscalError instanceof Error ? fiscalError.message : "Gabim i panjohur.") +
           " Kontrollo statusin e faturës para çdo prove tjetër.";
+        const { data: fiscalDocument } = await supabase.from("fiskalo_atk_fiscal_documents")
+          .select("qr_payload,status").eq("organization_id", organizationId)
+          .eq("source_invoice_id", invoice.id).maybeSingle();
+        if (typeof fiscalDocument?.qr_payload === "string") setIssuedQrPayload(fiscalDocument.qr_payload);
+        if (typeof fiscalDocument?.status === "string") setIssuedFiscalStatus(fiscalDocument.status);
       }
     }
     setNotice(paymentMethod === "credit"
@@ -300,8 +310,16 @@ export default function WebPosPage() {
       <div><strong>{issuedNumber ? "Fatura " + issuedNumber : "Draft i ruajtur"}</strong><div style={{ color: "var(--muted)", fontSize: 12, marginTop: 3 }}>{"Kontrollo statusin e pagesës dhe fiskalizimit."}</div></div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <Link href={`/app/${organizationId}/invoices/${issuedInvoiceId}`} style={{ color: "var(--brand)", fontWeight: 750, alignSelf: "center" }}>Hap faturën →</Link>
-        
       </div>
+      {issuedQrPayload && <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap", borderTop: "1px solid var(--line)", marginTop: 12, paddingTop: 14 }}>
+        <div style={{ flex: "1 1 220px" }}>
+          <strong>Kodi QR i kuponit</strong>
+          <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5, margin: "5px 0" }}>Klienti mund ta skanojë për të verifikuar të dhënat e nënshkruara të kuponit në sistemin e ATK-së.</p>
+          <span className="status-pill">{issuedFiscalStatus === "accepted" ? "Pranuar nga ATK TEST" : "ATK TEST · " + (issuedFiscalStatus || "në pritje")}</span>
+          <p style={{ color: "#9a3412", fontSize: 11, margin: "7px 0 0" }}>Kupon prove — nuk është kupon fiskal për përdorim në prodhim.</p>
+        </div>
+        <FiscalQrCode payload={issuedQrPayload} size={156} label="Kodi QR i kuponit fiskal TEST" />
+      </div>}
     </div>}
     <div className="pos-layout" style={{ display: activeView === "pos" ? "grid" : "none", gridTemplateColumns: "minmax(0,1.55fr) minmax(310px,0.85fr)", gap: 14, alignItems: "start" }}>
       <section style={panel}>
