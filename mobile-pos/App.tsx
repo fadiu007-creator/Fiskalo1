@@ -20,6 +20,7 @@ const ink = "#17212b";
 const brand = "#245b50";
 const line = "#dce3e1";
 const money = (n: number) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR" }).format(n);
+const makeRequestId = () => "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => { const r = Math.floor(Math.random() * 16); return (c === "x" ? r : (r & 3) | 8).toString(16); });
 
 export default function App() {
   const [email, setEmail] = useState("");
@@ -119,6 +120,23 @@ export default function App() {
     setAtkCsr(""); setAtkFingerprint(""); setAtkHardwareBacked(null);
     setProducts((p ?? []) as Product[]);
     setCustomers((c ?? []) as Customer[]);
+    const pendingRaw = await SecureStore.getItemAsync("fiskalo-pos-pending-sale:" + org.organization_id);
+    if (pendingRaw) {
+      try {
+        const pending = JSON.parse(pendingRaw) as { items: Array<{ product_id: string; quantity: number }>; customer_id: string; payment_method: "cash" | "card" | "bank_transfer" | "credit" };
+        const restored = pending.items.map((item) => {
+          const product = (p ?? []).find((row) => row.id === item.product_id);
+          return product ? { product: product as Product, quantity: item.quantity } : null;
+        });
+        if (restored.length && restored.every(Boolean)) {
+          setCart(restored as CartLine[]);
+          setCustomerId(pending.customer_id ?? "");
+          setPaymentMethod(pending.payment_method);
+          setPaymentConfirmed(false);
+          setMessage("U rikthye një porosi e papërfunduar. Vazhdo me të njëjtën shportë për të shmangur faturën e dyfishtë.");
+        } else setError("Porosia e papërfunduar u gjet, por disa produkte mungojnë në katalog. Mos e fshi.");
+      } catch { setError("Porosia lokale nuk mund të lexohet. Kontrollo faturat para se të krijosh shitje të re."); }
+    }
   }
 
   async function openCashierShift() {
