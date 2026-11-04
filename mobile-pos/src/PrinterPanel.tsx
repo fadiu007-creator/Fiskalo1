@@ -48,7 +48,10 @@ export function PrinterPanel() {
   const [autoPrint, setAutoPrint] = useState(false);
   const [paperWidth, setPaperWidth] = useState<"58" | "80">("80");
 
-  React.useEffect(() => {\n    void SecureStore.getItemAsync("fiskalo-printer-android-auto").then((value) => setAutoPrint(value === "true"));\n    void SecureStore.getItemAsync("fiskalo-printer-android-width").then((value) => setPaperWidth(value === "58" ? "58" : "80"));\n  }, []);
+  React.useEffect(() => {
+    void SecureStore.getItemAsync("fiskalo-printer-android-auto").then((value) => setAutoPrint(value === "true"));
+    void SecureStore.getItemAsync("fiskalo-printer-android-width").then((value) => setPaperWidth(value === "58" ? "58" : "80"));
+  }, []);
 
   async function loadPrinters() {
     setBusy(true); setMessage("");
