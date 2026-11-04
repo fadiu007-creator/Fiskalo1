@@ -124,7 +124,25 @@ begin
     target_org, actor_id, target_customer, target_payment_method, 'unpaid',
     current_date, request_id, request_fingerprint
   )
+  on conflict (organization_id, created_by, pos_request_id) do nothing
   returning id into created_invoice;
+
+  if created_invoice is null then
+    select * into existing
+    from public.fiskalo_invoices i
+    where i.organization_id = target_org
+      and i.created_by = actor_id
+      and i.pos_request_id = request_id
+    for update;
+    if not found or existing.pos_request_fingerprint is distinct from request_fingerprint then
+      raise exception 'Request ID was already used for a different sale';
+    end if;
+    if existing.status <> 'issued' then
+      raise exception 'A previous sale request is incomplete; review its draft before retrying';
+    end if;
+    return query select existing.id, existing.invoice_number, existing.total, true;
+    return;
+  end if;
 
   insert into public.fiskalo_invoice_items(
     invoice_id, product_id, description, quantity, unit_price, vat_rate
