@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   const phone = typeof body.phone === "string" ? body.phone.trim() : "";
   const password = typeof body.password === "string" ? body.password : "";
   const role = typeof body.role === "string" ? body.role : "cashier";
-  if (!organizationId || !email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || !displayName) {
+  if (!organizationId || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !displayName) {
     return NextResponse.json({ error: "invalid_input", detail: "Plotëso biznesin, emrin dhe email-in valid." }, { status: 400 });
   }
   if (!["cashier", "manager", "accountant", "administrator"].includes(role)) {
