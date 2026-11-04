@@ -111,6 +111,17 @@ public static class ThermalPrinterService
         output.Write(new byte[] { 0x1B, 0x40 }); // Initialize
         output.Write(new byte[] { 0x1B, 0x61, 0x01 }); // Center
         foreach (var line in lines) WriteAscii(output, line);
+        output.Write(new byte[] { 0x1B, 0x61, 0x01 }); // Center QR
+        WriteAscii(output, "QR command test:");
+        var qr = Encoding.ASCII.GetBytes("FISKALO-PRINTER-TEST");
+        output.Write(new byte[] { 0x1D, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00 }); // QR model 2
+        output.Write(new byte[] { 0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, 0x06 }); // Module size
+        output.Write(new byte[] { 0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x45, 0x31 }); // Error correction M
+        var qrLength = qr.Length + 3;
+        output.Write(new byte[] { 0x1D, 0x28, 0x6B, (byte)(qrLength & 0xFF), (byte)((qrLength >> 8) & 0xFF), 0x31, 0x50, 0x30 });
+        output.Write(qr);
+        output.Write(new byte[] { 0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30 });
+        WriteAscii(output, "QR TEST ONLY");
         output.Write(new byte[] { 0x1B, 0x61, 0x00 }); // Left
         output.Write(new byte[] { 0x1D, 0x56, 0x00 }); // Full cut
         return output.ToArray();
