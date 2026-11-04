@@ -37,7 +37,7 @@ export default function BusinessWorkspaceNav({ organizationId, businessName, rol
           const href = "/app/" + organizationId + item.path;
           const active = item.path === "" ? pathname === href : pathname === href || pathname.startsWith(href + "/");
           const Icon = item.icon;
-          return <Link key={item.path} href={href} className={active ? "active" : ""}><Icon size={16}/><span>{item.label}</span></Link>;
+          return <Link key={item.path} href={href} className={active ? "active" : ""} aria-current={active ? "page" : undefined}><Icon size={16}/><span>{item.label}</span></Link>;
         })}
       </nav>
       <div className="business-shell-actions">{isProvider && <Link href="/provider" className="business-provider-link"><Building2 size={15}/><span>Ofruesi</span></Link>}<Link href="/account" className="business-switch-link" title="Profili im"><UserCircle size={16}/><span>Profili</span></Link><Link href="/app?switch=1" className="business-switch-link" title="Ndërro biznesin"><ArrowLeftRight size={16}/><span>Bizneset</span></Link><button type="button" className="business-switch-link" title="Dil nga llogaria" onClick={() => void signOut()}><LogOut size={16}/><span>Dil</span></button></div>
