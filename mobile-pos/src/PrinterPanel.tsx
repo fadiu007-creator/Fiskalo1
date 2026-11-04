@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { PermissionsAndroid, Platform, Text, TouchableOpacity, View } from "react-native";
+import { PermissionsAndroid, Platform, Switch, Text, TouchableOpacity, View } from "react-native";
+import * as SecureStore from "expo-secure-store";
 import FiskaloAtkCrypto, { type BondedBluetoothPrinter, type UsbPrinter } from "fiskalo-atk-crypto";
 
 const ink = "#17212b";
@@ -44,6 +45,7 @@ export function PrinterPanel() {
   const [selectedUsb, setSelectedUsb] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [autoPrint, setAutoPrint] = useState(false);\n\n  React.useEffect(() => { void SecureStore.getItemAsync("fiskalo-printer-android-auto").then((value) => setAutoPrint(value === "true")); }, []);
 
   async function loadPrinters() {
     setBusy(true); setMessage("");
@@ -121,7 +123,7 @@ export function PrinterPanel() {
     <TouchableOpacity disabled={busy} onPress={() => void loadPrinters()} style={{ padding: 11, borderRadius: 8, backgroundColor: brand, opacity: busy ? 0.55 : 1 }}>
       <Text style={{ color: "white", textAlign: "center", fontWeight: "800" }}>{busy ? "Duke kontrolluar..." : "Gjej printerët e çiftuar"}</Text>
     </TouchableOpacity>
-    {printers.map((printer) => <TouchableOpacity key={printer.address} onPress={() => setSelected(printer.address)} style={{ padding: 10, borderRadius: 8, borderWidth: 1, borderColor: selected === printer.address ? brand : border, backgroundColor: selected === printer.address ? "#edf5f1" : "white" }}>
+    {printers.map((printer) => <TouchableOpacity key={printer.address} onPress={() => { setSelected(printer.address); void SecureStore.setItemAsync("fiskalo-printer-android-transport", "bluetooth"); void SecureStore.setItemAsync("fiskalo-printer-android-device", printer.address); }} style={{ padding: 10, borderRadius: 8, borderWidth: 1, borderColor: selected === printer.address ? brand : border, backgroundColor: selected === printer.address ? "#edf5f1" : "white" }}>
       <Text style={{ color: ink, fontWeight: "700" }}>{selected === printer.address ? "● " : "○ "}{printer.name}</Text>
       <Text style={{ color: "#687773", fontSize: 11 }}>{printer.address}</Text>
     </TouchableOpacity>)}
@@ -133,7 +135,7 @@ export function PrinterPanel() {
       <TouchableOpacity disabled={busy} onPress={() => void loadUsbPrinters()} style={{ padding: 10, borderRadius: 8, borderWidth: 1, borderColor: border, opacity: busy ? 0.5 : 1 }}>
         <Text style={{ color: ink, textAlign: "center", fontWeight: "700" }}>Gjej printerët USB</Text>
       </TouchableOpacity>
-      {usbPrinters.map((printer) => <TouchableOpacity key={printer.deviceName} onPress={() => setSelectedUsb(printer.deviceName)} style={{ padding: 9, borderRadius: 8, borderWidth: 1, borderColor: selectedUsb === printer.deviceName ? brand : border, backgroundColor: selectedUsb === printer.deviceName ? "#edf5f1" : "white" }}>
+      {usbPrinters.map((printer) => <TouchableOpacity key={printer.deviceName} onPress={() => { setSelectedUsb(printer.deviceName); void SecureStore.setItemAsync("fiskalo-printer-android-transport", "usb"); void SecureStore.setItemAsync("fiskalo-printer-android-device", printer.deviceName); }} style={{ padding: 9, borderRadius: 8, borderWidth: 1, borderColor: selectedUsb === printer.deviceName ? brand : border, backgroundColor: selectedUsb === printer.deviceName ? "#edf5f1" : "white" }}>
         <Text style={{ color: ink, fontWeight: "700" }}>{selectedUsb === printer.deviceName ? "● " : "○ "}{printer.productName}</Text>
         <Text style={{ color: "#687773", fontSize: 10 }}>{printer.manufacturerName} · VID {printer.vendorId} / PID {printer.productId} · {printer.hasPermission ? "Leja aktive" : "Kërkon leje"}</Text>
       </TouchableOpacity>)}
@@ -145,6 +147,13 @@ export function PrinterPanel() {
           <Text style={{ color: "white", textAlign: "center", fontWeight: "700" }}>Testo USB</Text>
         </TouchableOpacity>
       </View>}
+    </View>
+    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: 8, borderTopWidth: 1, borderColor: border }}>
+      <View style={{ flex: 1, paddingRight: 10 }}>
+        <Text style={{ color: ink, fontWeight: "700" }}>Printim automatik pas shitjes</Text>
+        <Text style={{ color: "#687773", fontSize: 10 }}>Aktivizohet vetëm kur Fiskalo ka QR me status të pranuar nga ATK TEST.</Text>
+      </View>
+      <Switch value={autoPrint} onValueChange={(value) => { setAutoPrint(value); void SecureStore.setItemAsync("fiskalo-printer-android-auto", value ? "true" : "false"); }} />
     </View>
     {!!message && <Text accessibilityRole="alert" style={{ color: "#52635e", fontSize: 11, lineHeight: 16 }}>{message}</Text>}
     <Text style={{ color: "#8a5a18", fontSize: 10 }}>Testi dërgon tekst dhe QR ESC/POS. Nuk është kupon fiskal dhe nuk certifikon pajtueshmërinë ATK. USB kërkon OTG dhe pajisje me ndërfaqe bulk OUT.</Text>
