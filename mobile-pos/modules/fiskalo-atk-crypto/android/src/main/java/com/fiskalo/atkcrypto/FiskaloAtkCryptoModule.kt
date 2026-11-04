@@ -11,10 +11,14 @@ import android.os.Build
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.UUID
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothSocket
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyInfo
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import java.util.UUID
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.ByteArrayInputStream
@@ -32,6 +36,39 @@ import java.security.cert.CertificateFactory
 class FiskaloAtkCryptoModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("FiskaloAtkCrypto")
+
+    AsyncFunction("listBondedBluetoothPrinters") {
+      val adapter = BluetoothAdapter.getDefaultAdapter()
+        ?: throw IllegalStateException("This Android device does not support Bluetooth.")
+      if (!adapter.isEnabled) throw IllegalStateException("Enable Bluetooth before searching for paired printers.")
+      adapter.bondedDevices
+        .sortedBy { it.name ?: it.address }
+        .map { device -> mapOf("name" to (device.name ?: "Bluetooth printer"), "address" to device.address, "bonded" to true) }
+    }
+
+    AsyncFunction("printBluetooth") { address: String, dataBase64: String ->
+      require(address.matches(Regex("(?i)[0-9a-f]{2}(:[0-9a-f]{2}){5}"))) { "Choose a valid paired Bluetooth printer." }
+      require(dataBase64.isNotBlank() && dataBase64.length <= 350000) { "Print data is empty or too large." }
+      val data = Base64.decode(dataBase64, Base64.DEFAULT)
+      require(data.isNotEmpty() && data.size <= 262144) { "Print data must be between 1 byte and 256 KB." }
+      val adapter = BluetoothAdapter.getDefaultAdapter()
+        ?: throw IllegalStateException("This Android device does not support Bluetooth.")
+      if (!adapter.isEnabled) throw IllegalStateException("Enable Bluetooth before printing.")
+      val device = adapter.getRemoteDevice(address)
+      val spp = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+      var socket: BluetoothSocket? = null
+      try {
+        socket = device.createRfcommSocketToServiceRecord(spp)
+        socket.connect()
+        socket.outputStream.use { output ->
+          output.write(data)
+          output.flush()
+        }
+        mapOf("printed" to true, "transport" to "android-bluetooth-spp", "bytes" to data.size)
+      } finally {
+        try { socket?.close() } catch (_: Exception) { }
+      }
+    }
 
     AsyncFunction("hasKey") { alias: String ->
       keyStore().containsAlias(normalizeAlias(alias))
