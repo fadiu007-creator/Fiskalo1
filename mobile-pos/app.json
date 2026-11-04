@@ -11,9 +11,11 @@
       "permissions": [
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
-        "android.permission.BLUETOOTH_CONNECT"
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH_SCAN"
       ],
       "blockedPermissions": [],
+      "usesFeatures": [{ "name": "android.hardware.usb.host", "required": false }],
       "usesCleartextTraffic": false
     },
     "plugins": [
