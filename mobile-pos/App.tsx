@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, SafeAreaView, ScrollView, Share, StatusBar, Text, TextInput, TouchableOpacity, View } from "react-native";
 import FiskaloAtkCrypto from "fiskalo-atk-crypto";
+import { PrinterPanel } from "./src/PrinterPanel";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import * as SecureStore from "expo-secure-store";
 import { supabase } from "./src/supabase";
@@ -530,6 +531,7 @@ export default function App() {
           </>}
           <Text style={{ color: "#8a5a18", fontSize: 11 }}>Mos e dërgo çelësin privat askund. Android-i dërgon automatikisht kuponin TEST pas pagesës së plotë kur POS-i dhe certifikata janë gati. Ky version nuk përbën certifikim zyrtar për prodhim; konfirmo me ATK pranueshmërinë e pajisjes para përdorimit zyrtar.</Text>
         </View>}
+        <PrinterPanel />
         {paymentMethod === "cash" && <View style={{ padding: 11, marginBottom: 8, backgroundColor: "white", borderWidth: 1, borderColor: line, borderRadius: 9, gap: 7 }}>
           {activeShift ? <>
             <Text style={{ color: "#145b3a", fontWeight: "800" }}>Ndërrimi i arkës është i hapur</Text>
