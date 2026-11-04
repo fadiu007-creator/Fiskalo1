@@ -377,16 +377,19 @@ export default function WebPosPage() {
     setNotice(paymentMethod === "credit"
       ? "Fatura u lëshua. Pagesa mbeti e papaguar."
       : "Shitja u regjistrua dhe pagesa u shënua si e pranuar." + fiscalNotice);
-    if (requestId) {
+    const fiscalConfirmed = paymentMethod === "credit" || (receiptFiscalStatus === "accepted" && Boolean(receiptQrPayload));
+    if (fiscalConfirmed) {
       try { await deleteOfflinePosDraft(requestId); setOfflineDrafts(await listOfflinePosDrafts(organizationId)); }
-      catch { setNotice((current) => current + " Kujdes: drafti lokal mbeti i ruajtur; fshije nga lista për të shmangur përdorimin e dyfishtë."); }
+      catch { setNotice((current) => current + " Kujdes: drafti lokal mbeti i ruajtur; fshije vetëm pasi ta verifikosh faturën."); }
+      setRestoredDraftId(null);
+      setCart([]);
+      setCustomerId("");
+      setPaymentMethod("cash");
+      setConfirmedPayment(false);
+    } else {
+      setNotice((current) => current + " Porosia mbetet e ruajtur në këtë pajisje me të njëjtën ID. Kontrollo statusin ATK dhe provo përsëri; nuk krijohet faturë e re.");
     }
-    setRestoredDraftId(null);
     setBusy(false);
-    setCart([]);
-    setCustomerId("");
-    setPaymentMethod("cash");
-    setConfirmedPayment(false);
     await load();
   }
 
