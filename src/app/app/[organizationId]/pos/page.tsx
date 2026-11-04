@@ -9,6 +9,7 @@ import { FiscalQrCode } from "@/components/fiscal-qr-code";
 import { ThermalPrinterSettings } from "@/components/thermal-printer-settings";
 import { printWithAgent, readPrinterSettings } from "@/lib/printing/thermal-printer-client";
 import { ensureATKTestPosReady } from "@/lib/atk/ensure-test-pos-ready";
+import { deleteOfflinePosDraft, listOfflinePosDrafts, saveOfflinePosDraft, type OfflinePosDraft } from "@/lib/pos/offline-drafts";
 import { ArrowRight, FileText, Plus, RefreshCw, Search, Settings2, ShoppingCart } from "lucide-react";
 
 type Product = { id: string; name: string; sku: string | null; pos_category: string; image_url: string | null; unit_price: number; vat_rate: number; stock_quantity: number; track_stock: boolean; item_type: string; is_active: boolean; atk_unit_code: string | null; atk_tax_code: string | null; atk_item_category_code: string | null };
@@ -52,6 +53,8 @@ export default function WebPosPage() {
   const [issuedNumber, setIssuedNumber] = useState("");
   const [issuedQrPayload, setIssuedQrPayload] = useState("");
   const [issuedFiscalStatus, setIssuedFiscalStatus] = useState("");
+  const [offlineDrafts, setOfflineDrafts] = useState<OfflinePosDraft[]>([]);
+  const [restoredDraftId, setRestoredDraftId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -85,6 +88,14 @@ export default function WebPosPage() {
   }, [organizationId, supabase]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    let active = true;
+    void listOfflinePosDrafts(organizationId).then((drafts) => { if (active) setOfflineDrafts(drafts); }).catch(() => {
+      if (active) setError("Ruajtja e porosive lokale nuk është e disponueshme në këtë shfletues.");
+    });
+    return () => { active = false; };
+  }, [organizationId]);
 
   useEffect(() => {
     if (!userRole || !["owner", "administrator"].includes(userRole) || atkAutoInitRef.current) return;
@@ -152,6 +163,53 @@ export default function WebPosPage() {
 
   function updateQuantity(productId: string, quantity: string) {
     setCart((current) => current.map((line) => line.productId === productId ? { ...line, quantity } : line));
+  }
+
+  async function saveCurrentOrderDraft() {
+    if (!cart.length) { setError("Shporta është bosh."); return; }
+    try {
+      const draft: OfflinePosDraft = {
+        id: restoredDraftId ?? (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : "draft-" + Date.now() + "-" + Math.random().toString(36).slice(2)),
+        organizationId,
+        createdAt: new Date().toISOString(),
+        cart: cart.map((line) => ({ ...line })),
+        customerId,
+        paymentMethod,
+      };
+      await saveOfflinePosDraft(draft);
+      setOfflineDrafts(await listOfflinePosDrafts(organizationId));
+      setRestoredDraftId(draft.id);
+      setNotice("Porosia u ruajt në këtë pajisje si draft. Nuk u krijua faturë, nuk u regjistrua pagesë dhe nuk u dërgua asgjë në ATK.");
+      setError("");
+    } catch (draftError) {
+      setError(draftError instanceof Error ? draftError.message : "Porosia nuk u ruajt lokalisht.");
+    }
+  }
+
+  function restoreOrderDraft(draft: OfflinePosDraft) {
+    const missing = draft.cart.filter((line) => !products.some((product) => product.id === line.productId));
+    if (missing.length) {
+      setError("Disa produkte të këtij drafti nuk janë në katalogun aktual. Lidhu me internetin dhe rifresko produktet para rikthimit.");
+      return;
+    }
+    setCart(draft.cart.map((line) => ({ ...line })));
+    setCustomerId(draft.customerId);
+    setPaymentMethod(draft.paymentMethod);
+    setConfirmedPayment(false);
+    setRestoredDraftId(draft.id);
+    setActiveView("pos");
+    setError("");
+    setNotice("Drafti u rikthye në shportë. Kontrollo çmimet, stokun dhe pagesën para se të lëshosh faturën.");
+  }
+
+  async function removeOrderDraft(id: string) {
+    try {
+      await deleteOfflinePosDraft(id);
+      setOfflineDrafts(await listOfflinePosDrafts(organizationId));
+      if (restoredDraftId === id) setRestoredDraftId(null);
+    } catch (draftError) {
+      setError(draftError instanceof Error ? draftError.message : "Drafti nuk u fshi.");
+    }
   }
 
   function handleProductSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -328,6 +386,11 @@ export default function WebPosPage() {
     setNotice(paymentMethod === "credit"
       ? "Fatura u lëshua. Pagesa mbeti e papaguar."
       : "Shitja u regjistrua dhe pagesa u shënua si e pranuar." + fiscalNotice);
+    if (restoredDraftId) {
+      try { await deleteOfflinePosDraft(restoredDraftId); setOfflineDrafts(await listOfflinePosDrafts(organizationId)); }
+      catch { setNotice((current) => current + " Kujdes: drafti lokal mbeti i ruajtur; fshije nga lista për të shmangur përdorimin e dyfishtë."); }
+    }
+    setRestoredDraftId(null);
     setBusy(false);
     setCart([]);
     setCustomerId("");
@@ -349,6 +412,20 @@ export default function WebPosPage() {
     <div role="status" style={{ marginBottom: 12, border: "1px solid var(--line)", borderRadius: 10, padding: "10px 12px", color: "var(--muted)", fontSize: 13 }}>{["owner", "administrator"].includes(userRole) ? atkSetupNotice : "Arka është gati për përdorim. Konfigurimi dhe certifikata ATK TEST menaxhohen nga pronari ose administratori."}</div>
     {!activeShiftId && <div role="status" style={{ marginBottom: 12, border: "1px solid #e8c98d", background: "#fff9ed", borderRadius: 10, padding: 13, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}><div><strong>Hape ndërrimin para pagesave me para në dorë</strong><div style={{ fontSize: 12, marginTop: 3 }}>Kjo lidh çdo pagesë me arkën e arkëtarit dhe mundëson barazimin e saktë në fund të ndërrimit.</div></div><Link href={`/app/${organizationId}/pos/shifts`} style={{ ...button, textDecoration: "none" }}>Hap arkën</Link></div>}
     <nav aria-label="POS dhe faturat" style={{ display: "flex", gap: 8, marginBottom: 14, borderBottom: "1px solid var(--line)", paddingBottom: 10 }}><button aria-pressed={activeView === "pos"} onClick={() => setActiveView("pos")} style={{ ...(activeView === "pos" ? button : secondary) }}><ShoppingCart size={15} /> Shitje</button><button aria-pressed={activeView === "invoices"} onClick={() => setActiveView("invoices")} style={{ ...(activeView === "invoices" ? button : secondary) }}><FileText size={15} /> Faturat <span className="status-pill">{invoices.length}</span></button></nav>
+    {offlineDrafts.length > 0 && <section style={{ ...panel, marginBottom: 14, borderColor: "#d8c49a" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div><strong>Porositë e ruajtura në këtë pajisje</strong><div style={{ color: "var(--muted)", fontSize: 12 }}>Draftet ruhen lokalisht në shfletues dhe mund të rikthehen pas rilidhjes.</div></div>
+        <span className="status-pill">{offlineDrafts.length} draft(e)</span>
+      </div>
+      <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+        {offlineDrafts.map((draft) => <div key={draft.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", paddingTop: 8, borderTop: "1px solid var(--line)" }}>
+          <div><strong>{draft.cart.length} artikuj</strong><div style={{ color: "var(--muted)", fontSize: 11 }}>{new Date(draft.createdAt).toLocaleString("sq-XK")} · {draft.paymentMethod === "credit" ? "Me afat" : draft.paymentMethod === "cash" ? "Para në dorë" : draft.paymentMethod}</div></div>
+          <div style={{ display: "flex", gap: 7 }}><button type="button" style={secondary} onClick={() => restoreOrderDraft(draft)}>Rikthe në shportë</button><button type="button" style={{ ...secondary, color: "#982d25" }} onClick={() => void removeOrderDraft(draft.id)}>Fshije</button></div>
+        </div>)}
+      </div>
+      <p style={{ color: "#8a5a18", fontSize: 11, margin: "10px 0 0" }}>Këto janë vetëm draftet e porosive. Nuk janë fatura, pagesa të regjistruara ose kuponë fiskalë. Fiskalizimi kërkon lidhje aktive dhe konfirmim nga ATK.</p>
+    </section>}
+
     {error && <div role="alert" style={{ background: "#fff0ef", color: "#982d25", padding: 12, borderRadius: 9, marginBottom: 12 }}>{error}</div>}
     {notice && <div role="status" style={{ background: "#edf7f1", color: "#155c3c", padding: 12, borderRadius: 9, marginBottom: 12 }}>{notice}</div>}
     {issuedInvoiceId && <div style={{ ...panel, marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
@@ -411,6 +488,7 @@ export default function WebPosPage() {
             <input type="checkbox" checked={confirmedPayment} onChange={(event) => setConfirmedPayment(event.target.checked)} style={{ marginTop: 2 }} />
             Konfirmoj se pagesa është pranuar. Fiskalo nuk proceson pagesa me kartelë.
           </label>}
+          <button disabled={busy || !cart.length} onClick={() => void saveCurrentOrderDraft()} style={{ ...secondary, width: "100%" }}>Ruaj porosinë në këtë pajisje</button>
           <button disabled={busy || !lines.length} onClick={() => void completeSale()} style={{ ...button, width: "100%", opacity: busy || !lines.length ? 0.55 : 1 }}>{busy ? "Duke regjistruar..." : paymentMethod === "credit" ? "Lësho faturën" : "Përfundo shitjen · " + money(total)}</button>
           <button disabled={busy || !cart.length} onClick={() => { setCart([]); setConfirmedPayment(false); }} style={{ ...secondary, width: "100%" }}>Pastro shportën</button>
         </div>
