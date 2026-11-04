@@ -199,16 +199,25 @@ class FiskaloAtkCryptoModule : Module() {
       require(bytes.isNotEmpty() && bytes.size <= 262144) { "Print data must be between 1 byte and 256 KB." }
       val connection = manager.openDevice(device) ?: throw IllegalStateException("Android could not open the USB printer.")
       try {
-        val usbInterface = device.interfaces.firstOrNull { candidate ->
-          (0 until candidate.endpointCount).any { index ->
-            val endpoint = candidate.getEndpoint(index)
-            endpoint.direction == UsbConstants.USB_DIR_OUT &&
-              endpoint.type == UsbConstants.USB_ENDPOINT_XFER_BULK
+        var selectedInterface: android.hardware.usb.UsbInterface? = null
+        var selectedEndpoint: android.hardware.usb.UsbEndpoint? = null
+        for (interfaceIndex in 0 until device.interfaceCount) {
+          val candidate: android.hardware.usb.UsbInterface = device.getInterface(interfaceIndex)
+          for (endpointIndex in 0 until candidate.endpointCount) {
+            val endpoint: android.hardware.usb.UsbEndpoint = candidate.getEndpoint(endpointIndex)
+            if (endpoint.direction == UsbConstants.USB_DIR_OUT &&
+              endpoint.type == UsbConstants.USB_ENDPOINT_XFER_BULK) {
+              selectedInterface = candidate
+              selectedEndpoint = endpoint
+              break
+            }
           }
-        } ?: throw IllegalStateException("No USB bulk-output endpoint was found. This printer may need a vendor driver.")
-        val outputEndpoint = (0 until usbInterface.endpointCount)
-          .map { usbInterface.getEndpoint(it) }
-          .first { it.direction == UsbConstants.USB_DIR_OUT && it.type == UsbConstants.USB_ENDPOINT_XFER_BULK }
+          if (selectedInterface != null) break
+        }
+        val usbInterface = selectedInterface
+          ?: throw IllegalStateException("No USB bulk-output endpoint was found. This printer may need a vendor driver.")
+        val outputEndpoint = selectedEndpoint
+          ?: throw IllegalStateException("No USB bulk-output endpoint was found. This printer may need a vendor driver.")
         if (!connection.claimInterface(usbInterface, true)) throw IllegalStateException("Could not claim the USB printer interface.")
         try {
           var offset = 0
