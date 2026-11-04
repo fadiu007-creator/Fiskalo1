@@ -9,7 +9,7 @@ This is an Android-native POS client scaffold using Expo/React Native and the ex
 - For USB OTG, connect the printer, find USB devices, grant Android's system permission, refresh the list and run the test.
 - Run the test print to verify text and the ESC/POS QR command. This is a printer connectivity test only, not an ATK fiscal receipt.
 - Select 58 mm or 80 mm and optionally enable automatic printing after checkout. Auto-print is guarded: it only prints when an ATK TEST fiscal document has an `accepted` status and a saved QR payload; the printed receipt is explicitly labelled ATK TEST.
-- Supported Android transports: Bluetooth Classic SPP and USB OTG bulk-output devices. USB permission is requested through Android's system dialog. The current Android integration provides device discovery and a text+QR test print; it is not yet wired to automatic receipt printing after checkout. For production use, validate each printer model, character encoding and ATK receipt/QR requirements.
+- Supported Android transports: Bluetooth Classic SPP, USB OTG bulk-output devices and private LAN printers on TCP 9100. USB permission is requested through Android's system dialog. The current Android integration provides device discovery and a text+QR test print; it is not yet wired to automatic receipt printing after checkout. For production use, validate each printer model, character encoding and ATK receipt/QR requirements.
 
 ## Configure
 
