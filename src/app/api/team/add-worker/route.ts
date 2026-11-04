@@ -58,6 +58,7 @@ export async function POST(request: Request) {
     created = true;
   } else {
     const { error } = await admin.auth.admin.updateUserById(worker.id, {
+      email_confirm: true,
       user_metadata: { ...(worker.user_metadata || {}), display_name: displayName, phone },
     });
     if (error) return NextResponse.json({ error: "worker_profile_update_failed", detail: error.message }, { status: 500 });
