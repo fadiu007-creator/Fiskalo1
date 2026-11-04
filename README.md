@@ -18,6 +18,7 @@ Implemented:
 - Supplier register, purchase drafts, atomic stock receiving, supplier payment ledger and outstanding balances
 - Date-filtered management reports and CSV exports
 - ATK preparation foundation: taxpayer fiscalization-number profile, test POS registry, fiscal document/event schema and provider production lock
+- Provider-only ATK public taxpayer lookup capture and audit history (manual capture; no unsupported ATK API scraping)
 - Responsive browser POS for product search, cart, invoice issue and confirmed/manual payment ledger posting
 - Android-native POS client scaffold (Expo/React Native) with Supabase sign-in, business selection, cart, invoice issue and payment recording
 - Fiskalo invoice-to-ATK coupon mapping core with explicit ATK catalogue/payment inputs and Sale/Cancel/Return reference validation
@@ -99,6 +100,10 @@ The repository contains `wrangler.jsonc` and `open-next.config.ts`.
 - Generate Worker types: `npm run cf-typegen`
 
 Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` as Cloudflare Worker environment variables before deployment. Cloudflare deployment also requires GitHub Actions secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, plus build secrets `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. For a first-time Worker creation, the token needs Workers Admin access; if the Worker already exists, Workers Editor is sufficient. Add Workers Routes Write only if deployment also changes a custom domain/route. Set the two Supabase values as Worker runtime variables in the Cloudflare dashboard as well. Then run the manual `Deploy Fiskalo to Cloudflare Workers` workflow from GitHub Actions.
+
+## Provider workspace and ATK taxpayer checks
+
+The `/provider` workspace is restricted to users in `fiskalo_provider_users`. It includes a provider-only ATK taxpayer lookup section for searching the official ATK public page and recording its published result fields against a customer business. Lookup records are auditable and protected by provider-only RLS policies. Customer onboarding does not expose this feature. ATK has not published a supported third-party API contract for this public search, so the lookup is manual and is not represented as an automated ATK verification.
 
 ## ATK SEF certification roadmap
 
