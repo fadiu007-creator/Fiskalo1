@@ -22,6 +22,7 @@ const field: React.CSSProperties = { width: "100%", minWidth: 0, border: "1px so
 const button: React.CSSProperties = { border: 0, borderRadius: 9, padding: "12px 15px", background: "var(--brand)", color: "white", fontWeight: 750, cursor: "pointer" };
 const secondary: React.CSSProperties = { border: "1px solid var(--line)", borderRadius: 9, padding: "10px 12px", background: "white", color: "var(--ink)", fontWeight: 650, cursor: "pointer" };
 const money = (n: number) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR" }).format(n);
+const createPosRequestId = () => typeof crypto.randomUUID === "function" ? crypto.randomUUID() : ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, (c) => (Number(c) ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> Number(c) / 4).toString(16));
 const roundMoney = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 export default function WebPosPage() {
@@ -169,7 +170,7 @@ export default function WebPosPage() {
     if (!cart.length) { setError("Shporta është bosh."); return; }
     try {
       const draft: OfflinePosDraft = {
-        id: restoredDraftId ?? (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : "draft-" + Date.now() + "-" + Math.random().toString(36).slice(2)),
+        id: restoredDraftId ?? createPosRequestId(),
         organizationId,
         createdAt: new Date().toISOString(),
         cart: cart.map((line) => ({ ...line })),
@@ -178,7 +179,12 @@ export default function WebPosPage() {
       };
       await saveOfflinePosDraft(draft);
       setOfflineDrafts(await listOfflinePosDrafts(organizationId));
-      setRestoredDraftId(draft.id);
+      const safeRequestId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(draft.id) ? draft.id : createPosRequestId();
+    if (safeRequestId !== draft.id) {
+      const migratedDraft = { ...draft, id: safeRequestId };
+      void saveOfflinePosDraft(migratedDraft).then(() => deleteOfflinePosDraft(draft.id)).then(() => listOfflinePosDrafts(organizationId).then(setOfflineDrafts));
+    }
+    setRestoredDraftId(safeRequestId);
       setNotice("Porosia u ruajt në këtë pajisje si draft. Nuk u krijua faturë, nuk u regjistrua pagesë dhe nuk u dërgua asgjë në ATK.");
       setError("");
     } catch (draftError) {
@@ -257,7 +263,7 @@ export default function WebPosPage() {
     }
 
     setBusy(true);
-    const requestId = restoredDraftId ?? crypto.randomUUID();
+    const requestId = restoredDraftId ?? createPosRequestId();
     const pendingDraft: OfflinePosDraft = {
       id: requestId,
       organizationId,
@@ -294,6 +300,24 @@ export default function WebPosPage() {
     const invoiceId = String(sale.invoice_id);
     const invoiceNumber = sale.invoice_number;
     const issuedInvoice = { total: Number(sale.invoice_total) };
+    const { data: persistedItems, error: persistedItemsError } = await supabase.from("fiskalo_invoice_items")
+      .select("description,quantity,unit_price,vat_rate,line_subtotal,line_vat").eq("invoice_id", invoiceId).order("id");
+    if (persistedItemsError || !persistedItems?.length) {
+      setBusy(false);
+      setIssuedInvoiceId(invoiceId);
+      setIssuedNumber(String(invoiceNumber ?? ""));
+      setError("Shitja u regjistrua, por artikujt e faturës nuk u lexuan. Drafti lokal mbetet për rikuperim; mos krijo shitje të re.");
+      return;
+    }
+    const receiptLines = persistedItems.map((item) => ({
+      name: item.description,
+      quantity: Number(item.quantity),
+      unitPrice: Number(item.unit_price),
+      vatRate: Number(item.vat_rate),
+      lineTotal: Number(item.line_subtotal) + Number(item.line_vat),
+    }));
+    const receiptSubtotal = persistedItems.reduce((sum, item) => sum + Number(item.line_subtotal), 0);
+    const receiptVatTotal = persistedItems.reduce((sum, item) => sum + Number(item.line_vat), 0);
     setIssuedInvoiceId(invoiceId);
     setIssuedNumber(String(invoiceNumber ?? ""));
     let fiscalNotice = "";
@@ -335,15 +359,9 @@ export default function WebPosPage() {
             invoiceNumber: String(invoiceNumber ?? ""),
             issuedAt: new Date().toLocaleString("sq-XK"),
             paymentMethod: paymentMethod === "cash" ? "PARA NE DORE" : paymentMethod === "card" ? "KARTELE" : "TRANSFER BANKAR",
-            items: valid.map((line) => ({
-              name: line.product!.name,
-              quantity: line.quantity,
-              unitPrice: Number(line.product!.unit_price),
-              vatRate: Number(line.product!.vat_rate),
-              lineTotal: line.lineTotal,
-            })),
-            subtotal,
-            vatTotal,
+            items: receiptLines,
+            subtotal: receiptSubtotal,
+            vatTotal: receiptVatTotal,
             total: Number(issuedInvoice.total),
             qrPayload: receiptQrPayload,
             fiscalStatus: receiptFiscalStatus,
@@ -359,8 +377,8 @@ export default function WebPosPage() {
     setNotice(paymentMethod === "credit"
       ? "Fatura u lëshua. Pagesa mbeti e papaguar."
       : "Shitja u regjistrua dhe pagesa u shënua si e pranuar." + fiscalNotice);
-    if (restoredDraftId) {
-      try { await deleteOfflinePosDraft(restoredDraftId); setOfflineDrafts(await listOfflinePosDrafts(organizationId)); }
+    if (requestId) {
+      try { await deleteOfflinePosDraft(requestId); setOfflineDrafts(await listOfflinePosDrafts(organizationId)); }
       catch { setNotice((current) => current + " Kujdes: drafti lokal mbeti i ruajtur; fshije nga lista për të shmangur përdorimin e dyfishtë."); }
     }
     setRestoredDraftId(null);
