@@ -2,6 +2,13 @@
 
 This is an Android-native POS client scaffold using Expo/React Native and the existing Fiskalo Supabase schema.
 
+## Android thermal printer support
+
+- Pair a Bluetooth Classic ESC/POS printer in Android system settings.
+- Open the POS screen, use **Printer termik Bluetooth · Android**, grant the nearby-device permission, refresh paired devices and select the printer.
+- Run the test print to verify text and the ESC/POS QR command. This is a printer connectivity test only, not an ATK fiscal receipt.
+- Supported Android transport: Bluetooth Classic SPP. Android USB direct printing and automatic printing after checkout are not implemented yet. For production use, validate each printer model and ATK receipt/QR requirements.
+
 ## Configure
 
 1. Copy `.env.example` to `.env`.
