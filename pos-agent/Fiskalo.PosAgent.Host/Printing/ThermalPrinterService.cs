@@ -27,12 +27,13 @@ public static class ThermalPrinterService
                 throw new InvalidOperationException("Windows could not enumerate installed printers.");
 
             var result = new List<InstalledPrinter>((int)returned);
+            var defaultPrinter = GetDefaultPrinterName();
             var size = Marshal.SizeOf<PrinterInfo4>();
             for (var i = 0; i < returned; i++)
             {
                 var info = Marshal.PtrToStructure<PrinterInfo4>(IntPtr.Add(buffer, checked((int)i * size)));
                 if (string.IsNullOrWhiteSpace(info.PrinterName)) continue;
-                result.Add(new InstalledPrinter(info.PrinterName, false, !string.IsNullOrWhiteSpace(info.ServerName)));
+                result.Add(new InstalledPrinter(info.PrinterName, string.Equals(info.PrinterName, defaultPrinter, StringComparison.OrdinalIgnoreCase), !string.IsNullOrWhiteSpace(info.ServerName)));
             }
             return result.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToArray();
         }
@@ -146,6 +147,19 @@ public static class ThermalPrinterService
         [MarshalAs(UnmanagedType.LPWStr)] public string? OutputFile;
         [MarshalAs(UnmanagedType.LPWStr)] public string DataType;
     }
+
+    private static string? GetDefaultPrinterName()
+    {
+        uint required = 0;
+        _ = GetDefaultPrinter(null, ref required);
+        if (required == 0) return null;
+        var buffer = new StringBuilder((int)required);
+        return GetDefaultPrinter(buffer, ref required) ? buffer.ToString() : null;
+    }
+
+    [DllImport("winspool.drv", EntryPoint = "GetDefaultPrinterW", SetLastError = true, CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetDefaultPrinter(StringBuilder? printerName, ref uint bufferSize);
 
     [DllImport("winspool.drv", EntryPoint = "EnumPrintersW", SetLastError = true, CharSet = CharSet.Unicode)]
     [return: MarshalAs(UnmanagedType.Bool)]
