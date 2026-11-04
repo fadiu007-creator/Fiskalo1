@@ -22,7 +22,7 @@ const field: React.CSSProperties = { width: "100%", minWidth: 0, border: "1px so
 const button: React.CSSProperties = { border: 0, borderRadius: 9, padding: "12px 15px", background: "var(--brand)", color: "white", fontWeight: 750, cursor: "pointer" };
 const secondary: React.CSSProperties = { border: "1px solid var(--line)", borderRadius: 9, padding: "10px 12px", background: "white", color: "var(--ink)", fontWeight: 650, cursor: "pointer" };
 const money = (n: number) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR" }).format(n);
-const createPosRequestId = () => typeof crypto.randomUUID === "function" ? crypto.randomUUID() : ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, (c) => (Number(c) ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> Number(c) / 4).toString(16));
+const createPosRequestId = () => { if (typeof crypto.randomUUID === "function") return crypto.randomUUID(); const bytes = crypto.getRandomValues(new Uint8Array(16)); bytes[6] = (bytes[6] & 0x0f) | 0x40; bytes[8] = (bytes[8] & 0x3f) | 0x80; const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(""); return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`; };
 const roundMoney = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 export default function WebPosPage() {
