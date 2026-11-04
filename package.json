@@ -31,5 +31,8 @@
     "@eslint/eslintrc": "3.3.1",
     "@opennextjs/cloudflare": "1.20.16",
     "wrangler": "latest"
+  },
+  "overrides": {
+    "@aws-sdk/credential-provider-ini": "3.973.25"
   }
 }
