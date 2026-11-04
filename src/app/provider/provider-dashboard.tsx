@@ -11,7 +11,7 @@ import {
 
 export type ProviderBusiness = {
   id: string; trade_name: string | null; legal_name: string;
-  municipality: string; fiscalization_status: string; created_at: string;
+  municipality: string; fiscalization_status: string; plan_package: "starter" | "standard" | "pro"; product_limit: number; created_at: string;
 };
 export type ProviderPos = {
   id: string; organization_id: string; label: string; status: string;
@@ -60,6 +60,8 @@ export default function ProviderDashboard({
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [showSettings, setShowSettings] = useState(false);
+  const [planSaving, setPlanSaving] = useState("");
+  const [planFeedback, setPlanFeedback] = useState("");
   const [atkSaving, setAtkSaving] = useState(false);
   const [atkMessage, setAtkMessage] = useState("");
   const [atkError, setAtkError] = useState("");
@@ -83,6 +85,23 @@ export default function ProviderDashboard({
     await supabase.auth.signOut();
     router.replace("/login");
     router.refresh();
+  }
+
+  async function updateBusinessPlan(organizationId: string, plan: "starter" | "standard" | "pro") {
+    if (role !== "provider_admin") return;
+    setPlanSaving(organizationId); setPlanFeedback("");
+    try {
+      const { data, error: planError } = await supabase.rpc("fiskalo_provider_set_plan", {
+        target_organization: organizationId,
+        target_package: plan,
+      });
+      if (planError) throw planError;
+      const assigned = Array.isArray(data) ? data[0] : data;
+      setPlanFeedback("Paketa u ndryshua. Limiti i ri: " + (assigned?.product_limit ?? (plan === "starter" ? 10 : plan === "standard" ? 50 : 100)) + " produkte.");
+      router.refresh();
+    } catch (e) {
+      setPlanFeedback(e instanceof Error ? e.message : "Paketa nuk u ndryshua.");
+    } finally { setPlanSaving(""); }
   }
 
   async function saveAtkLookup(event: React.FormEvent<HTMLFormElement>) {
@@ -156,12 +175,13 @@ export default function ProviderDashboard({
 
         <section className="provider-panel" id="businesses">
           <div className="provider-panel-heading"><div><span className="provider-eyebrow">KLIENTËT</span><h3>Bizneset në Fiskalo</h3><p>Çdo biznes ka organizatën, degët dhe POS-et e veta.</p></div><label className="provider-search"><Search size={16}/><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Kërko biznes ose qytet…"/></label></div>
-          <div className="provider-table-wrap"><table className="provider-table"><thead><tr><th>Biznesi</th><th>Komuna</th><th>Fiskalizimi</th><th>POS</th></tr></thead><tbody>
+          {planFeedback && <p className="provider-feedback" role="status">{planFeedback}</p>}
+          <div className="provider-table-wrap"><table className="provider-table"><thead><tr><th>Biznesi</th><th>Komuna</th><th>Paketa</th><th>Fiskalizimi</th><th>POS</th></tr></thead><tbody>
             {filteredBusinesses.map((business) => {
               const devices = posDevices.filter((pos) => pos.organization_id === business.id);
-              return <tr key={business.id}><td><strong>{business.trade_name || business.legal_name}</strong><small>{business.legal_name}</small></td><td>{business.municipality}</td><td><span className={"provider-status " + statusTone(business.fiscalization_status)}>{statusLabel[business.fiscalization_status] ?? business.fiscalization_status}</span></td><td>{devices.length} pajisje <small>{devices.filter((device) => device.status === "active").length} aktive</small></td></tr>;
+              return <tr key={business.id}><td><strong>{business.trade_name || business.legal_name}</strong><small>{business.legal_name}</small></td><td>{business.municipality}</td><td><div style={{display:"grid",gap:4,minWidth:132}}><select aria-label={"Paketa për " + (business.trade_name || business.legal_name)} value={business.plan_package || "starter"} disabled={role !== "provider_admin" || planSaving === business.id} onChange={(event) => void updateBusinessPlan(business.id,event.target.value as "starter" | "standard" | "pro")} style={{border:"1px solid #dfe7e2",borderRadius:8,padding:"7px 8px",background:"white",color:"#18251f",fontSize:12}}><option value="starter">Starter · 10</option><option value="standard">Standard · 50</option><option value="pro">Pro · 100</option></select><small>Limit: {business.product_limit ?? 10} produkte</small></div></td><td><span className={"provider-status " + statusTone(business.fiscalization_status)}>{statusLabel[business.fiscalization_status] ?? business.fiscalization_status}</span></td><td>{devices.length} pajisje <small>{devices.filter((device) => device.status === "active").length} aktive</small></td></tr>;
             })}
-            {!filteredBusinesses.length && <tr><td colSpan={4} className="provider-empty">Nuk u gjet asnjë biznes me këtë kërkim.</td></tr>}
+            {!filteredBusinesses.length && <tr><td colSpan={5} className="provider-empty">Nuk u gjet asnjë biznes me këtë kërkim.</td></tr>}
           </tbody></table></div>
         </section>
 
