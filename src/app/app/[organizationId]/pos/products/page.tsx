@@ -146,7 +146,7 @@ export default function PosProductsPage() {
         <strong style={{ fontSize: 13 }}>Kodet fiskale ATK</strong>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10, marginTop: 8 }}>
           <label style={{ fontSize: 12 }}>Kodi i njësisë ATK<select value={form.atk_unit_code} onChange={e=>setForm(v=>({...v,atk_unit_code:e.target.value}))} style={field}><option value="">Zgjidh njësinë</option>{unitCodes.map(code=><option key={code} value={code}>{code}</option>)}</select></label>
-remove duplicate ATK tax field          <label style={{ fontSize: 12 }}>Kategoria e artikullit ATK<select value={form.atk_item_category_code} onChange={e=>setForm(v=>({...v,atk_item_category_code:e.target.value}))} style={field}><option value="">Zgjidh kategorinë ATK</option>{itemCategoryCodes.map(code=><option key={code} value={code}>{code}</option>)}</select></label>
+<label style={{ fontSize: 12 }}>Kategoria e artikullit ATK<select value={form.atk_item_category_code} onChange={e=>setForm(v=>({...v,atk_item_category_code:e.target.value}))} style={field}><option value="">Zgjidh kategorinë ATK</option>{itemCategoryCodes.map(code=><option key={code} value={code}>{code}</option>)}</select></label>
         </div>
         {(!itemCategoryCodes.length || !unitCodes.length) && <p style={{ color: "var(--muted)", fontSize: 12 }}>Listat e njësive dhe kategorive shfaqin kodet ATK të regjistruara në katalogun e biznesit. Katalogu zyrtar duhet të importohet për të ofruar listën e plotë.</p>}
       </div>
