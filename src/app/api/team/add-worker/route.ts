@@ -22,7 +22,7 @@ export async function POST(request: Request) {
   if (!organizationId || !email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || !displayName) {
     return NextResponse.json({ error: "invalid_input", detail: "Plotëso biznesin, emrin dhe email-in valid." }, { status: 400 });
   }
-  if (!["cashier", "manager", "accountant"].includes(role)) {
+  if (!["cashier", "manager", "accountant", "administrator"].includes(role)) {
     return NextResponse.json({ error: "invalid_role", detail: "Zgjidh një rol të lejuar për punëtorin." }, { status: 400 });
   }
 
@@ -30,6 +30,10 @@ export async function POST(request: Request) {
     .select("role").eq("organization_id", organizationId).eq("user_id", user.id).maybeSingle();
   if (!membership || !["owner", "administrator"].includes(membership.role)) {
     return NextResponse.json({ error: "forbidden", detail: "Vetëm pronari ose administratori mund të shtojë punëtorë." }, { status: 403 });
+  }
+
+  if (role === "administrator" && membership.role !== "owner") {
+    return NextResponse.json({ error: "role_forbidden", detail: "Vetëm pronari mund të caktojë administratorë." }, { status: 403 });
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
