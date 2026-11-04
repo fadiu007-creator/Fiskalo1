@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ArrowUpRight, Building2, Store } from "lucide-react";
 
-export default async function BusinessHome() {
+export default async function BusinessHome({ searchParams }: { searchParams: Promise<{ switch?: string }> }) {
+  const { switch: forceSwitch } = await searchParams;
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) redirect("/login");
@@ -18,7 +19,7 @@ export default async function BusinessHome() {
   if (error) throw new Error("Nuk u ngarkuan bizneset. Provo përsëri.");
   const isProvider = Boolean(providerAccess);
   if (!memberships?.length && !isProvider) redirect("/onboarding");
-  if (memberships?.length === 1 && !isProvider) redirect(`/app/${memberships[0].organization_id}`);
+  if (memberships?.length === 1 && !isProvider && forceSwitch !== "1") redirect(`/app/${memberships[0].organization_id}`);
 
   return <main className="workspace-picker">
     <header><Link href="/" className="workspace-picker-brand"><span>F</span><strong>fiskalo</strong></Link><span>{auth.user.email}</span></header>
