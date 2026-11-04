@@ -45,7 +45,9 @@ export function PrinterPanel() {
   const [selectedUsb, setSelectedUsb] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [autoPrint, setAutoPrint] = useState(false);\n\n  React.useEffect(() => { void SecureStore.getItemAsync("fiskalo-printer-android-auto").then((value) => setAutoPrint(value === "true")); }, []);
+  const [autoPrint, setAutoPrint] = useState(false);
+
+  React.useEffect(() => { void SecureStore.getItemAsync("fiskalo-printer-android-auto").then((value) => setAutoPrint(value === "true")); }, []);
 
   async function loadPrinters() {
     setBusy(true); setMessage("");
