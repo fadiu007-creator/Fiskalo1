@@ -101,6 +101,6 @@ export async function printAndroidReceipt(receipt: AndroidReceipt): Promise<"dis
   }
   const payload = base64(receiptBytes(receipt, width));
   if (transport === "bluetooth") await FiskaloAtkCrypto.printBluetooth(device, payload);
-  else await FiskaloAtkCrypto.printUsb(device, payload);
+  else await FiskaloAtkCrypto.printUsb(Number(device), payload);
   return "printed";
 }
