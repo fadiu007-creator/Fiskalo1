@@ -22,15 +22,18 @@ This is an Android-native POS client scaffold using Expo/React Native and the ex
 - SecureStore-backed Supabase auth persistence.
 - Experimental native ATK crypto module using Android Keystore P-256 key generation, local PKCS#10 CSR creation and ECDSA/SHA-256 signing of ATK Base64 payloads.
 - ATK / Siguria e POS-it panel to generate and share a CSR on the Android device. The private key remains in Android Keystore; only the public CSR is shared.
+- ATK TEST POS verification and certificate-request calls, tied to the exact saved POS installation; the returned certificate is checked against the local Android Keystore key.
+- Automatic ATK TEST coupon construction, native signing and submission after a fully paid Android POS checkout. The same one-sale-per-invoice ledger and server-side ATK checks are used as the Web POS.
 
 ## Important limitations
 
 - This is a standard business POS client, not an ATK-certified fiscal POS.
 - The Android Keystore module is source-implemented but not yet built into an APK or verified on a physical device. CSR generation and ECDSA signing are not yet verified against ATK test responses.
-- Android certificate installation/renewal/revocation, ATK verification and certificate API calls, Protobuf coupon mapping/submission, offline queue and manual reconciliation are not yet integrated into checkout.
+- Android certificate lifecycle renewal/revocation, durable offline queue and manual reconciliation are not yet integrated. Ambiguous ATK responses must be checked before any retry.
 - No offline invoice issuance, card terminal integration, barcode scanner integration or printer driver is included.
 - Card payments are recorded only after the cashier confirms that an external terminal/payment provider has accepted the payment. The app does not process card details.
-- The Android project has not yet been built or tested on a physical Android device. EAS custom builds are required for the native module; Expo Go cannot load it.
+- Android ATK onboarding and automatic coupon submission are source-implemented but have not yet been verified on a physical device or with a newly submitted Android coupon. EAS custom builds are required for the native module; Expo Go cannot load it.
+- Set `EXPO_PUBLIC_FISKALO_API_URL` to the actual deployed Fiskalo Cloudflare Worker URL. The app deliberately has no guessed fallback URL.
 
 Do not use the app to issue official fiscal coupons before ATK certification.
 

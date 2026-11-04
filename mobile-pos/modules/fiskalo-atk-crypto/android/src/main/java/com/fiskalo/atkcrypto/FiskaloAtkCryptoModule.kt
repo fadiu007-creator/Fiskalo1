@@ -14,6 +14,7 @@ import java.security.KeyPairGenerator
 import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.Signature
+import java.security.SecureRandom
 import java.security.spec.ECGenParameterSpec
 import java.security.cert.CertificateFactory
 
@@ -23,6 +24,12 @@ class FiskaloAtkCryptoModule : Module() {
 
     AsyncFunction("hasKey") { alias: String ->
       keyStore().containsAlias(normalizeAlias(alias))
+    }
+
+    AsyncFunction("createVerificationNo") {
+      val alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      val random = SecureRandom()
+      buildString(16) { repeat(16) { append(alphabet[random.nextInt(alphabet.length)]) } }
     }
 
     AsyncFunction("createCsr") { alias: String, businessName: String, nui: String, branchId: String, posId: String ->
@@ -65,9 +72,9 @@ class FiskaloAtkCryptoModule : Module() {
         .getKeySpec(pair.private, KeyInfo::class.java)
       val fingerprint = MessageDigest.getInstance("SHA-256").digest(pair.public.encoded)
         .joinToString(":") { "%02x".format(it) }
-      val pem = "-----BEGIN CERTIFICATE REQUEST-----\\n" +
-        Base64.encodeToString(csr, Base64.NO_WRAP).chunked(64).joinToString("\\n") +
-        "\\n-----END CERTIFICATE REQUEST-----"
+      val pem = "-----BEGIN CERTIFICATE REQUEST-----\n" +
+        Base64.encodeToString(csr, Base64.NO_WRAP).chunked(64).joinToString("\n") +
+        "\n-----END CERTIFICATE REQUEST-----"
       mapOf(
         "alias" to keyAlias,
         "csrPem" to pem,

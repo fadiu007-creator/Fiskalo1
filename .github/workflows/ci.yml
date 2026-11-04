@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/web-pos-checkout]
   pull_request:
     branches: [main]
 

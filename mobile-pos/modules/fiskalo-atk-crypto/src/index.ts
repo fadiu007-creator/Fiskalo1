@@ -9,6 +9,7 @@ export type AtkAndroidKeyResult = {
 
 type FiskaloAtkCryptoModuleType = {
   hasKey(alias: string): Promise<boolean>;
+  createVerificationNo(): Promise<string>;
   createCsr(alias: string, businessName: string, nui: string, branchId: string, posId: string): Promise<AtkAndroidKeyResult>;
   signBase64(alias: string, base64Payload: string): Promise<string>;
   matchesCertificate(alias: string, certificatePem: string): Promise<boolean>;
