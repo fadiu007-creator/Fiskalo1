@@ -95,12 +95,18 @@ export async function printAndroidReceipt(receipt: AndroidReceipt): Promise<"dis
   const device = await SecureStore.getItemAsync("fiskalo-printer-android-device");
   const widthValue = await SecureStore.getItemAsync("fiskalo-printer-android-width");
   const width = widthValue === "58" ? 58 : 80;
-  if (!device || (transport !== "bluetooth" && transport !== "usb")) throw new Error("Konfiguro printerin Android dhe zgjidh pajisjen para printimit automatik.");
+  const host = await SecureStore.getItemAsync("fiskalo-printer-android-host");
+  if (transport === "lan") {
+    if (!host) throw new Error("Vendos IP-në private të printerit LAN.");
+  } else if (!device || (transport !== "bluetooth" && transport !== "usb")) {
+    throw new Error("Konfiguro printerin Android dhe zgjidh pajisjen para printimit automatik.");
+  }
   if (receipt.fiscalStatus !== "accepted" || !receipt.qrPayload) {
     throw new Error("Printimi automatik u ndal: mungon QR i pranuar nga ATK TEST. Nuk u printua dokument si kupon fiskal.");
   }
   const payload = base64(receiptBytes(receipt, width));
-  if (transport === "bluetooth") await FiskaloAtkCrypto.printBluetooth(device, payload);
-  else await FiskaloAtkCrypto.printUsb(Number(device), payload);
+  if (transport === "bluetooth") await FiskaloAtkCrypto.printBluetooth(device!, payload);
+  else if (transport === "usb") await FiskaloAtkCrypto.printUsb(Number(device), payload);
+  else await FiskaloAtkCrypto.printNetwork(host!, 9100, payload);
   return "printed";
 }
