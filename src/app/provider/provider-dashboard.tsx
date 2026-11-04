@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   Activity, ArrowUpRight, Building2, CheckCircle2, CircleAlert, Cpu,
-  LayoutDashboard, Search, Settings2, ShieldCheck, Store,
+  LayoutDashboard, Search, Settings2, ShieldCheck, Store, ExternalLink, FileCheck2,
 } from "lucide-react";
 
 export type ProviderBusiness = {
@@ -16,6 +16,11 @@ export type ProviderBusiness = {
 export type ProviderPos = {
   id: string; organization_id: string; label: string; status: string;
   environment: string; last_seen_at: string | null;
+};
+export type ProviderAtkLookup = {
+  id: string; organization_id: string | null; lookup_type: string; lookup_value: string;
+  taxpayer_name: string | null; registration_status: string | null; municipality: string | null;
+  vat_status: string | null; checked_at: string;
 };
 export type ProviderSettings = {
   provider_nui: string | null; sef_code: string | null; application_id: number | null;
@@ -43,10 +48,11 @@ const inputStyle: React.CSSProperties = {
 };
 
 export default function ProviderDashboard({
-  role, userEmail, businesses, posDevices, settings, loadError,
+  role, userEmail, businesses, posDevices, settings, atkLookups, loadError,
 }: {
   role: string; userEmail: string; businesses: ProviderBusiness[];
-  posDevices: ProviderPos[]; settings: ProviderSettings | null; loadError: string;
+  posDevices: ProviderPos[]; settings: ProviderSettings | null;
+  atkLookups: ProviderAtkLookup[]; loadError: string;
 }) {
   const [search, setSearch] = useState("");
   const [config, setConfig] = useState<ProviderSettings | null>(settings);
@@ -54,6 +60,15 @@ export default function ProviderDashboard({
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [showSettings, setShowSettings] = useState(false);
+  const [atkSaving, setAtkSaving] = useState(false);
+  const [atkMessage, setAtkMessage] = useState("");
+  const [atkError, setAtkError] = useState("");
+  const [atkForm, setAtkForm] = useState({
+    organization_id: "", lookup_type: "fiscal_number", lookup_value: "",
+    fiscal_number: "", nrb: "", taxpayer_name: "", registration_status: "",
+    address: "", city: "", municipality: "", tax_center: "", vat_number: "",
+    vat_status: "", notes: "",
+  });
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const filteredBusinesses = businesses.filter((business) =>
@@ -68,6 +83,29 @@ export default function ProviderDashboard({
     await supabase.auth.signOut();
     router.replace("/login");
     router.refresh();
+  }
+
+  async function saveAtkLookup(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAtkSaving(true); setAtkError(""); setAtkMessage("");
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      setAtkSaving(false); setAtkError("Sesioni ka skaduar. Hyr përsëri."); return;
+    }
+    const { error: saveError } = await supabase.from("fiskalo_provider_atk_lookups").insert({
+      ...atkForm, organization_id: atkForm.organization_id || null, checked_by: user.id,
+      source_url: "https://apps.atk-ks.org/BizPasiveApp/VatRegist/Index",
+    });
+    setAtkSaving(false);
+    if (saveError) setAtkError("Regjistrimi nuk u ruajt: " + saveError.message);
+    else {
+      setAtkMessage("Kontrolli nga ATK u regjistrua në historikun e ofruesit.");
+      setAtkForm({ organization_id: "", lookup_type: "fiscal_number", lookup_value: "",
+        fiscal_number: "", nrb: "", taxpayer_name: "", registration_status: "",
+        address: "", city: "", municipality: "", tax_center: "", vat_number: "",
+        vat_status: "", notes: "" });
+      router.refresh();
+    }
   }
 
   async function saveSettings(event: React.FormEvent<HTMLFormElement>) {
@@ -95,6 +133,7 @@ export default function ProviderDashboard({
         <a className="provider-nav-item active" href="#overview"><LayoutDashboard size={17}/> Përmbledhja</a>
         <a className="provider-nav-item" href="#businesses"><Building2 size={17}/> Bizneset <span>{businesses.length}</span></a>
         <a className="provider-nav-item" href="#devices"><Cpu size={17}/> POS instalimet <span>{posDevices.length}</span></a>
+        <a className="provider-nav-item" href="#atk-lookup"><FileCheck2 size={17}/> Verifikimi ATK</a>
         {role !== "provider_support" && <button className="provider-nav-item" onClick={() => setShowSettings((v) => !v)}><Settings2 size={17}/> Konfigurimi ATK</button>}
         <div className="provider-sidebar-bottom">
           <div className="provider-account"><span className="provider-avatar">{userEmail.slice(0,1).toUpperCase() || "F"}</span><div><strong>{role === "provider_admin" ? "Administrator" : role === "provider_support" ? "Mbështetje" : "Përputhshmëri"}</strong><small>{userEmail}</small></div></div>
@@ -132,6 +171,49 @@ export default function ProviderDashboard({
             const business = businesses.find((item) => item.id === pos.organization_id);
             return <article key={pos.id}><div className="provider-device-top"><span className="provider-device-icon"><Cpu size={18}/></span><span className={"provider-status " + statusTone(pos.status)}>{statusLabel[pos.status] ?? pos.status}</span></div><strong>{pos.label}</strong><small>{business?.trade_name || business?.legal_name || "Biznes"}</small><div className="provider-device-foot"><span>{pos.environment.toUpperCase()}</span><span>{pos.last_seen_at ? "Aktivitet: " + new Date(pos.last_seen_at).toLocaleString("sq-XK") : "Pa aktivitet të regjistruar"}</span></div></article>;
           })}{!posDevices.length && <p className="provider-empty">Nuk ka instalime POS.</p>}</div>
+        </section>
+
+
+        <section className="provider-panel provider-settings" id="atk-lookup">
+          <div className="provider-panel-heading">
+            <div><span className="provider-eyebrow">VETËM OFRUESI</span><h3>Verifikimi i tatimpaguesit në ATK</h3>
+              <p>Kërko në faqen zyrtare të ATK-së dhe regjistro këtu rezultatet e publikuara. Nuk ka API publike të dokumentuar për kërkim automatik.</p>
+            </div>
+            <a className="provider-workspace-link" href="https://apps.atk-ks.org/BizPasiveApp/VatRegist/Index" target="_blank" rel="noopener noreferrer">Hap ATK <ExternalLink size={14}/></a>
+          </div>
+          <form onSubmit={saveAtkLookup} className="provider-settings-grid">
+            <label>Lidhe me biznesin (opsionale)
+              <select style={inputStyle} value={atkForm.organization_id} onChange={(e) => setAtkForm({...atkForm,organization_id:e.target.value})}>
+                <option value="">Pa lidhje me biznes</option>
+                {businesses.map((b) => <option key={b.id} value={b.id}>{b.trade_name || b.legal_name} · {b.municipality}</option>)}
+              </select>
+            </label>
+            <label>Kërko sipas
+              <select style={inputStyle} value={atkForm.lookup_type} onChange={(e) => setAtkForm({...atkForm,lookup_type:e.target.value})}>
+                <option value="fiscal_number">Numrit fiskal</option><option value="nrb">NRB</option><option value="vat_number">Numrit të TVSh-së</option>
+              </select>
+            </label>
+            <label>Vlera e kërkimit<input required style={inputStyle} value={atkForm.lookup_value} onChange={(e) => setAtkForm({...atkForm,lookup_value:e.target.value})}/></label>
+            <label>Emri i tatimpaguesit<input style={inputStyle} value={atkForm.taxpayer_name} onChange={(e) => setAtkForm({...atkForm,taxpayer_name:e.target.value})}/></label>
+            <label>Numri fiskal<input style={inputStyle} value={atkForm.fiscal_number} onChange={(e) => setAtkForm({...atkForm,fiscal_number:e.target.value})}/></label>
+            <label>NRB<input style={inputStyle} value={atkForm.nrb} onChange={(e) => setAtkForm({...atkForm,nrb:e.target.value})}/></label>
+            <label>Statusi i biznesit<input style={inputStyle} value={atkForm.registration_status} onChange={(e) => setAtkForm({...atkForm,registration_status:e.target.value})}/></label>
+            <label>Numri i TVSh-së<input style={inputStyle} value={atkForm.vat_number} onChange={(e) => setAtkForm({...atkForm,vat_number:e.target.value})}/></label>
+            <label>Statusi në TVSh<input style={inputStyle} value={atkForm.vat_status} onChange={(e) => setAtkForm({...atkForm,vat_status:e.target.value})}/></label>
+            <label>Adresa<input style={inputStyle} value={atkForm.address} onChange={(e) => setAtkForm({...atkForm,address:e.target.value})}/></label>
+            <label>Qyteti<input style={inputStyle} value={atkForm.city} onChange={(e) => setAtkForm({...atkForm,city:e.target.value})}/></label>
+            <label>Komuna<input style={inputStyle} value={atkForm.municipality} onChange={(e) => setAtkForm({...atkForm,municipality:e.target.value})}/></label>
+            <label>Qendra tatimore<input style={inputStyle} value={atkForm.tax_center} onChange={(e) => setAtkForm({...atkForm,tax_center:e.target.value})}/></label>
+            <label style={{gridColumn:"1 / -1"}}>Shënime<textarea style={{...inputStyle,minHeight:76}} value={atkForm.notes} onChange={(e) => setAtkForm({...atkForm,notes:e.target.value})}/></label>
+            <div className="provider-toggle" role="note"><ShieldCheck size={16}/> Ruhet si rezultat i regjistruar manualisht nga faqja zyrtare e ATK-së, jo si përgjigje API e verifikuar nga Fiskalo.</div>
+            <button className="provider-primary" disabled={atkSaving}>{atkSaving ? "Duke ruajtur…" : "Ruaj kontrollin ATK"}</button>
+          </form>
+          {(atkError || atkMessage) && <p className={"provider-feedback " + (atkError ? "bad" : "good")}>{atkError || atkMessage}</p>}
+          <div className="provider-panel-heading" style={{marginTop:24}}><div><h3>Historiku i kontrolleve</h3><p>Kontrollet e fundit të regjistruara nga ekipi i ofruesit.</p></div></div>
+          <div className="provider-table-wrap"><table className="provider-table"><thead><tr><th>Tatimpaguesi</th><th>Kërkimi</th><th>Statusi</th><th>TVSh</th><th>Kontrolluar</th></tr></thead><tbody>
+            {atkLookups.map((item) => <tr key={item.id}><td><strong>{item.taxpayer_name || "Pa emër të regjistruar"}</strong><small>{businesses.find((b) => b.id === item.organization_id)?.trade_name || businesses.find((b) => b.id === item.organization_id)?.legal_name || "Pa biznes të lidhur"}</small></td><td>{item.lookup_type === "nrb" ? "NRB" : item.lookup_type === "vat_number" ? "TVSh" : "Nr. fiskal"}: {item.lookup_value}</td><td>{item.registration_status || "—"}</td><td>{item.vat_status || "—"}</td><td>{new Date(item.checked_at).toLocaleString("sq-XK")}</td></tr>)}
+            {!atkLookups.length && <tr><td colSpan={5} className="provider-empty">Nuk ka kontrolle të regjistruara.</td></tr>}
+          </tbody></table></div>
         </section>
 
         {showSettings && <section className="provider-panel provider-settings" id="settings"><div className="provider-panel-heading"><div><span className="provider-eyebrow">VETËM OFRUESI</span><h3>Konfigurimi ATK i Fiskalo</h3><p>Application ID dhe kodi i zgjidhjes i përkasin softuerit, jo biznesit klient.</p></div><span className="provider-lock"><ShieldCheck size={16}/> {role === "provider_admin" ? "Administrator" : "Vetëm lexim"}</span></div>
