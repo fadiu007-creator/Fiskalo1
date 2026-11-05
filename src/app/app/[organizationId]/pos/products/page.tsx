@@ -10,8 +10,14 @@ type Product = {
   unit_price: number; vat_rate: number; stock_quantity: number; track_stock: boolean;
   is_active: boolean; atk_unit_code: string | null; atk_tax_code: string | null; atk_item_category_code: string | null;
 };
-const blank = { name: "", sku: "", item_type: "product", unit: "cope", pos_category: "TT", image_url: "", unit_price: "0", vat_rate: "18",
-  stock_quantity: "0", track_stock: false, atk_unit_code: "cope", atk_tax_code: "E", atk_item_category_code: "TT" };
+const blank = { name: "", sku: "", item_type: "product", unit: "CP", pos_category: "TT", image_url: "", unit_price: "0", vat_rate: "18",
+  stock_quantity: "0", track_stock: false, atk_unit_code: "CP", atk_tax_code: "E", atk_item_category_code: "TT" };
+const ATK_UNITS = [
+  ["EA", "Një (njësi)"], ["CP", "Copë"], ["LTR", "Litër"], ["SEC", "Sekondë"], ["MIN", "Minutë"], ["HUR", "Orë"], ["DAY", "Ditë"], ["MON", "Muaj"], ["ANN", "Vit"],
+  ["KGB", "Kilogram bruto"], ["KGN", "Kilogram neto"], ["TN", "Ton"], ["GRM", "Gram"], ["M4", "Vlerë monetare"], ["UDH", "Udhëtim"], ["KMT", "Kilometër"],
+  ["LM", "Metër linear"], ["MTS", "Metër katror"], ["MTV", "Metër kub"], ["MSK", "Metër për sekondë katror"], ["KËH", "Kilovat-orë"], ["NFJ", "Numër fjalësh"],
+  ["NFQ", "Numër faqesh"], ["PRQ", "Përqindje"], ["DP", "Ditë pune"], ["OP", "Orë pune"], ["PRD", "Përdorim"], ["PAL", "Palë"], ["XBX", "Kuti"], ["PK", "Pako"], ["SET", "Set"]
+] as const;
 const field: React.CSSProperties = { width: "100%", border: "1px solid var(--line)", borderRadius: 9, padding: "10px 11px", background: "white", color: "var(--ink)" };
 const primary: React.CSSProperties = { border: 0, borderRadius: 9, padding: "11px 15px", background: "var(--brand)", color: "white", fontWeight: 750, cursor: "pointer" };
 
@@ -27,12 +33,11 @@ export default function PosProductsPage() {
   const [notice, setNotice] = useState("");
   const [permissionChecked, setPermissionChecked] = useState(false);
   const [canManage, setCanManage] = useState(false);
-  const [uploadingImage, setUploadingImage] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanMessage, setScanMessage] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
   const [planInfo, setPlanInfo] = useState<{ plan_package: string; product_limit: number } | null>(null);
-  const unitCodes = Array.from(new Set(["cope", ...products.map(p => p.atk_unit_code).filter((v): v is string => Boolean(v))])).sort();
+  const legacyUnitCodes = Array.from(new Set(products.map(p => p.atk_unit_code).filter((v): v is string => Boolean(v) && !ATK_UNITS.some(([code]) => code === v)))).sort();
   const itemCategoryCodes = Array.from(new Set(["TT", ...products.map(p => p.atk_item_category_code).filter((v): v is string => Boolean(v))])).sort();
 
   const load = useCallback(async () => {
@@ -89,27 +94,12 @@ export default function PosProductsPage() {
     return () => { active = false; if (frame) window.cancelAnimationFrame(frame); stream?.getTracks().forEach(track => track.stop()); };
   }, [scanning]);
 
-  async function uploadProductImage(file: File) {
-    setError(""); setNotice("");
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) { setError("Ngarko vetëm JPG, PNG ose WebP."); return; }
-    if (file.size > 3 * 1024 * 1024) { setError("Fotoja duhet të jetë maksimumi 3 MB."); return; }
-    setUploadingImage(true);
-    const extension = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
-    const objectPath = organizationId + "/" + crypto.randomUUID() + "." + extension;
-    const { error: uploadError } = await supabase.storage.from("fiskalo-product-images").upload(objectPath, file, { contentType: file.type, upsert: false, cacheControl: "31536000" });
-    if (uploadError) { setUploadingImage(false); setError("Fotoja nuk u ngarkua: " + uploadError.message); return; }
-    const { data } = supabase.storage.from("fiskalo-product-images").getPublicUrl(objectPath);
-    setForm(current => ({ ...current, image_url: data.publicUrl }));
-    setUploadingImage(false);
-    setNotice("Fotoja u ngarkua. Ruaje produktin për ta lidhur me katalogun.");
-  }
-
   const visible = products.filter((p) => (p.name + " " + (p.sku || "")).toLowerCase().includes(search.trim().toLowerCase()));
   function edit(product: Product) {
     setEditingId(product.id);
-    setForm({ name: product.name, sku: product.sku || "", item_type: product.item_type, unit: product.atk_unit_code || product.unit || "cope", pos_category: product.atk_item_category_code || product.pos_category || "TT", image_url: product.image_url || "",
+    setForm({ name: product.name, sku: product.sku || "", item_type: product.item_type, unit: product.atk_unit_code || product.unit || "CP", pos_category: product.atk_item_category_code || product.pos_category || "TT", image_url: "",
       unit_price: String(product.unit_price), vat_rate: String(product.vat_rate), stock_quantity: String(product.stock_quantity),
-      track_stock: product.track_stock, atk_unit_code: product.atk_unit_code || product.unit || "cope", atk_tax_code: product.atk_tax_code || (Number(product.vat_rate) === 8 ? "D" : Number(product.vat_rate) === 18 ? "E" : "A"),
+      track_stock: product.track_stock, atk_unit_code: product.atk_unit_code || product.unit || "CP", atk_tax_code: product.atk_tax_code || (Number(product.vat_rate) === 8 ? "D" : Number(product.vat_rate) === 18 ? "E" : "A"),
       atk_item_category_code: product.atk_item_category_code || product.pos_category || "TT" });
     setError(""); setNotice("");
   }
@@ -130,7 +120,7 @@ export default function PosProductsPage() {
       return;
     }
     const values = { organization_id: organizationId, name: form.name.trim(), sku: form.sku.trim() || null,
-      item_type: form.item_type, unit: form.atk_unit_code.trim(), pos_category: form.atk_item_category_code.trim(), image_url: form.image_url.trim() || null, unit_price: price, vat_rate: vat,
+      item_type: form.item_type, unit: form.atk_unit_code.trim(), pos_category: form.atk_item_category_code.trim(), image_url: null, unit_price: price, vat_rate: vat,
       stock_quantity: stock, track_stock: form.item_type === "product" && form.track_stock,
       atk_unit_code: form.atk_unit_code.trim(),
       atk_tax_code: taxCode || (vat === 8 ? "D" : vat === 18 ? "E" : null),
@@ -190,22 +180,20 @@ export default function PosProductsPage() {
         <label style={{ fontSize: 12 }}>Emri<input required value={form.name} onChange={e=>setForm(v=>({...v,name:e.target.value}))} style={field}/></label>
         <label style={{ fontSize: 12 }}>SKU / Barkodi<div style={{ display: "flex", gap: 6 }}><input value={form.sku} onChange={e=>setForm(v=>({...v,sku:e.target.value}))} placeholder="Shkruaj ose skano barkodin" style={field}/><button type="button" onClick={()=>{setScanMessage("");setScanning(v=>!v);}} style={{ ...primary, whiteSpace: "nowrap", background: scanning ? "#8a3b35" : "var(--brand)" }}>{scanning ? "Ndalo" : "Skanoni"}</button></div></label>
         <label style={{ fontSize: 12 }}>Lloji<select value={form.item_type} onChange={e=>setForm(v=>({...v,item_type:e.target.value}))} style={field}><option value="product">Produkt</option><option value="service">Shërbim</option></select></label>
-        <label style={{ fontSize: 12 }}>Foto e produktit<input type="file" accept="image/jpeg,image/png,image/webp" disabled={uploadingImage} onChange={e=>{const selected=e.target.files?.[0];if(selected)void uploadProductImage(selected);e.currentTarget.value="";}} style={{ ...field, padding: 7 }}/><span style={{ display: "block", color: "var(--muted)", marginTop: 4 }}>JPG, PNG ose WebP · maksimumi 3 MB {uploadingImage ? "· Duke ngarkuar…" : ""}</span></label>
         <label style={{ fontSize: 12 }}>Çmimi (€)<input required type="number" min="0" step="0.01" value={form.unit_price} onChange={e=>setForm(v=>({...v,unit_price:e.target.value}))} style={field}/></label>
         <label style={{ fontSize: 12 }}>TVSH / trajtimi fiskal ATK<select value={`${form.vat_rate}:${form.atk_tax_code || (form.vat_rate === "8" ? "D" : form.vat_rate === "18" ? "E" : "A")}`} onChange={e=>{const [rate,code]=e.target.value.split(":");setForm(v=>({...v,vat_rate:rate,atk_tax_code:code}));}} style={field}><option value="0:A">0% — Përjashtuar nga TVSH (A)</option><option value="0:C">0% — Normë zero (C)</option><option value="8:D">8% — TVSH (D)</option><option value="18:E">18% — TVSH (E)</option></select></label>
         <label style={{ fontSize: 12 }}>Stoku<input type="number" min="0" step="0.001" value={form.stock_quantity} onChange={e=>setForm(v=>({...v,stock_quantity:e.target.value}))} style={field}/></label>
       </div>
       {scanning && <div style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 10 }}><video ref={videoRef} muted playsInline style={{ width: "100%", maxHeight: 260, objectFit: "cover", borderRadius: 8, background: "#111" }}/><p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }}>Drejto kamerën te barkodi. Nëse kamera nuk hapet, lejo qasjen ose përdor skaner USB/Bluetooth.</p></div>}
       {scanMessage && <p role="status" style={{ color: "var(--muted)", fontSize: 12, margin: 0 }}>{scanMessage}</p>}
-      {form.image_url && <div style={{ display: "flex", alignItems: "center", gap: 10 }}><img src={form.image_url} alt="Pamja e produktit" style={{ width: 76, height: 76, objectFit: "cover", borderRadius: 9, border: "1px solid var(--line)" }}/><button type="button" onClick={()=>setForm(v=>({...v,image_url:""}))} style={{ ...primary, background: "white", color: "#982d25", border: "1px solid #e4b8b4" }}>Hiqe foton</button></div>}
       {form.item_type === "product" && <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}><input type="checkbox" checked={form.track_stock} onChange={e=>setForm(v=>({...v,track_stock:e.target.checked}))}/> Menaxho stokun</label>}
       <div style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
-        <strong style={{ fontSize: 13 }}>Kodet fiskale ATK</strong><p style={{ color: "var(--muted)", fontSize: 12, margin: "4px 0 0" }}>Njësia dhe kategoria caktohen vetëm këtu, sipas kodeve që dërgohen në kuponin ATK.</p>
+        <strong style={{ fontSize: 13 }}>Kodet fiskale ATK</strong><p style={{ color: "var(--muted)", fontSize: 12, margin: "4px 0 0" }}>Njësia matëse dhe kategoria e artikullit caktohen vetëm një herë këtu. Njësitë përdorin listën e publikuar nga ATK.</p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10, marginTop: 8 }}>
-          <label style={{ fontSize: 12 }}>Njësia — kodi ATK<select required value={form.atk_unit_code} onChange={e=>setForm(v=>({...v,atk_unit_code:e.target.value}))} style={field}>{unitCodes.map(code=><option key={code} value={code}>{code}</option>)}</select></label>
+          <label style={{ fontSize: 12 }}>Njësia matëse — kodi ATK<select required value={form.atk_unit_code} onChange={e=>setForm(v=>({...v,atk_unit_code:e.target.value,unit:e.target.value}))} style={field}>{ATK_UNITS.map(([code,label])=><option key={code} value={code}>{code} — {label}</option>)}{legacyUnitCodes.map(code=><option key={code} value={code}>{code} — kod ekzistues</option>)}</select></label>
 <label style={{ fontSize: 12 }}>Kategoria e artikullit — kodi ATK<select required value={form.atk_item_category_code} onChange={e=>setForm(v=>({...v,atk_item_category_code:e.target.value}))} style={field}>{itemCategoryCodes.map(code=><option key={code} value={code}>{code}</option>)}</select></label>
         </div>
-        <p style={{ color: "var(--muted)", fontSize: 11, marginTop: 6 }}>Lista fillestare përdor vlerat e shembullit zyrtar të integrimit ATK (cope / TT) dhe ruan kodet e përdorura tashmë në katalog. Lista e plotë zyrtare duhet konfirmuar me katalogun aktual të ATK-së.</p>
+        <p style={{ color: "var(--muted)", fontSize: 11, marginTop: 6 }}>ATK publikon 31 njësi matëse në specifikacionin teknik. Për kategorinë e artikullit, dokumenti publik nuk jep tabelë të plotë kodesh; ruhet TT si vlera e shembullit të integrimit dhe kodet ekzistuese të biznesit. Nuk janë shtuar kode të pa verifikuara.</p>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button disabled={busy} type="submit" style={primary}>{busy ? "Duke ruajtur..." : editingId ? "Ruaj ndryshimet" : planInfo && products.length >= planInfo.product_limit ? "Limiti i paketës u arrit" : "Shto produktin"}</button>{editingId && <button type="button" onClick={reset} style={{ ...primary, background: "white", color: "var(--ink)", border: "1px solid var(--line)" }}>Anulo</button>}</div>
     </form>
