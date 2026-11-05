@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import PrintReportButton from "./print-button";
 
 type Props = { params: Promise<{ organizationId: string }>; searchParams: Promise<{ date?: string }> };
 const money = (value: number | string | null | undefined) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR" }).format(Number(value ?? 0));
@@ -46,7 +47,7 @@ export default async function DailyReportsPage({ params, searchParams }: Props) 
     <style>{`@media print {.no-print{display:none!important} body{background:#fff!important} main{max-width:none!important;padding:0!important} .report-card{break-inside:avoid;box-shadow:none!important;border:1px solid #bbb!important}}`}</style>
     <header className="no-print" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:22}}>
       <div><Link href={"/app/"+organizationId+"/reports"} style={{color:"var(--brand)",fontWeight:750}}>← Raportet</Link><h1 style={{fontSize:28,margin:"10px 0 4px"}}>Raporti ditor</h1><p style={{margin:0,color:"var(--muted)",fontSize:13}}>Përmbledhja e shitjeve, pagesave dhe ndërrimeve për {date}</p></div>
-      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><form><input type="date" name="date" defaultValue={date} style={{padding:"10px 12px",border:"1px solid var(--line)",borderRadius:9}}/><button style={{padding:"10px 13px",border:0,borderRadius:9,background:"var(--brand)",color:"white",fontWeight:750,marginLeft:6}}>Shfaq</button></form><button onClick={undefined as never} style={{display:"none"}}/><a href="#" onClick={(event)=>{event.preventDefault();window.print()}} style={{padding:"10px 13px",border:"1px solid var(--line)",borderRadius:9,textDecoration:"none",color:"var(--ink)",fontWeight:750}}>Printo / Ruaj PDF</a></div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><form><input type="date" name="date" defaultValue={date} style={{padding:"10px 12px",border:"1px solid var(--line)",borderRadius:9}}/><button style={{padding:"10px 13px",border:0,borderRadius:9,background:"var(--brand)",color:"white",fontWeight:750,marginLeft:6}}>Shfaq</button></form><PrintReportButton /></div>
     </header>
     <div style={{display:"flex",justifyContent:"space-between",gap:12,marginBottom:16}}><strong>Fiskalo · Raport operativ ditor</strong><span>{date}</span></div>
     {error && <p role="alert" style={{color:"#a33f36"}}>Disa të dhëna nuk u ngarkuan. {error.message}</p>}
