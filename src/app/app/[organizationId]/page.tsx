@@ -14,11 +14,10 @@ export default async function BusinessDashboard({ params }: Props) {
   if (!auth.user) redirect("/login");
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString("en-CA");
-  const [{ data: membership }, { data: organization }, { data: invoices, error: invoiceError }, { data: expenses }, { data: products }, { count: customerCount }] = await Promise.all([
+  const [{ data: membership }, { data: organization }, { data: invoices, error: invoiceError }, { data: products }, { count: customerCount }] = await Promise.all([
     supabase.from("fiskalo_organization_users").select("role").eq("organization_id", organizationId).eq("user_id", auth.user.id).maybeSingle(),
     supabase.from("fiskalo_organizations").select("legal_name,trade_name,municipality").eq("id", organizationId).maybeSingle(),
     supabase.from("fiskalo_invoices").select("id,invoice_number,issue_date,total,payment_status,fiscalization_status").eq("organization_id", organizationId).eq("status", "issued").gte("issue_date", monthStart).order("created_at", { ascending: false }).limit(100),
-    supabase.from("fiskalo_expenses").select("amount").eq("organization_id", organizationId).gte("expense_date", monthStart),
     supabase.from("fiskalo_products").select("id,stock_quantity,track_stock").eq("organization_id", organizationId).eq("is_active", true),
     supabase.from("fiskalo_customers").select("id", { count: "exact", head: true }).eq("organization_id", organizationId),
   ]);
