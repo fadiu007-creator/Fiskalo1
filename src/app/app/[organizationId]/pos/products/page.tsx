@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -27,10 +27,15 @@ export default function PosProductsPage() {
   const [notice, setNotice] = useState("");
   const [permissionChecked, setPermissionChecked] = useState(false);
   const [canManage, setCanManage] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanMessage, setScanMessage] = useState("");
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [planInfo, setPlanInfo] = useState<{ plan_package: string; product_limit: number } | null>(null);
   const unitCodes = Array.from(new Set(["cope", ...products.map(p => p.atk_unit_code).filter((v): v is string => Boolean(v))])).sort();
   const itemCategoryCodes = Array.from(new Set(products.map(p => p.atk_item_category_code).filter((v): v is string => Boolean(v)))).sort();
-  const posCategories = Array.from(new Set(products.map(p => p.pos_category.trim()).filter(Boolean))).sort((a,b) => a.localeCompare(b, "sq"));
+  const posCategories = Array.from(new Set(["Pije", "Ushqime", "Fruta dhe perime", "Bulmet", "Mish dhe peshk", "Ëmbëlsira", "Veshje", "Elektronikë", "Higjienë", "Shërbime", "Tjera", ...products.map(p => p.pos_category.trim()).filter(Boolean)])).sort((a,b) => a.localeCompare(b, "sq"));
+  const unitOptions = ["copë", "kg", "g", "l", "ml", "m", "cm", "m²", "m³", "paketë", "kuti", "shishe", "paletë", "orë", "ditë", "shërbim"];
 
   const load = useCallback(async () => {
     const { data: auth } = await supabase.auth.getUser();
@@ -48,6 +53,58 @@ export default function PosProductsPage() {
     else setProducts((data ?? []) as Product[]);
   }, [organizationId, supabase]);
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (!scanning) return;
+    let active = true;
+    let stream: MediaStream | null = null;
+    let frame = 0;
+    type Detector = { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>> };
+    type DetectorConstructor = new (options?: { formats?: string[] }) => Detector;
+    const start = async () => {
+      const DetectorClass = (window as Window & { BarcodeDetector?: DetectorConstructor }).BarcodeDetector;
+      if (!DetectorClass || !navigator.mediaDevices?.getUserMedia) {
+        setScanMessage("Skanimi me kamerë nuk mbështetet në këtë shfletues. Përdor skaner USB/Bluetooth ose shkruaje barkodin.");
+        setScanning(false); return;
+      }
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+        if (!active || !videoRef.current) { stream.getTracks().forEach(track => track.stop()); return; }
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        const detector = new DetectorClass({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39"] });
+        const scan = async () => {
+          if (!active || !videoRef.current) return;
+          try {
+            const codes = await detector.detect(videoRef.current);
+            const value = codes.find(code => code.rawValue)?.rawValue;
+            if (value) { setForm(current => ({ ...current, sku: value })); setScanMessage("U lexua barkodi: " + value); setScanning(false); return; }
+          } catch { /* Keep scanning. */ }
+          frame = window.requestAnimationFrame(scan);
+        };
+        frame = window.requestAnimationFrame(scan);
+      } catch (cameraError) {
+        setScanMessage("Kamera nuk u hap: " + (cameraError instanceof Error ? cameraError.message : "Kontrollo lejen e kamerës."));
+        setScanning(false);
+      }
+    };
+    void start();
+    return () => { active = false; if (frame) window.cancelAnimationFrame(frame); stream?.getTracks().forEach(track => track.stop()); };
+  }, [scanning]);
+
+  async function uploadProductImage(file: File) {
+    setError(""); setNotice("");
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) { setError("Ngarko vetëm JPG, PNG ose WebP."); return; }
+    if (file.size > 3 * 1024 * 1024) { setError("Fotoja duhet të jetë maksimumi 3 MB."); return; }
+    setUploadingImage(true);
+    const extension = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+    const objectPath = organizationId + "/" + crypto.randomUUID() + "." + extension;
+    const { error: uploadError } = await supabase.storage.from("fiskalo-product-images").upload(objectPath, file, { contentType: file.type, upsert: false, cacheControl: "31536000" });
+    if (uploadError) { setUploadingImage(false); setError("Fotoja nuk u ngarkua: " + uploadError.message); return; }
+    const { data } = supabase.storage.from("fiskalo-product-images").getPublicUrl(objectPath);
+    setForm(current => ({ ...current, image_url: data.publicUrl }));
+    setUploadingImage(false);
+    setNotice("Fotoja u ngarkua. Ruaje produktin për ta lidhur me katalogun.");
+  }
 
   const visible = products.filter((p) => (p.name + " " + (p.sku || "")).toLowerCase().includes(search.trim().toLowerCase()));
   function edit(product: Product) {
@@ -133,15 +190,18 @@ export default function PosProductsPage() {
       <strong>{editingId ? "Ndrysho artikullin" : "Shto artikull të ri"}</strong>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10 }}>
         <label style={{ fontSize: 12 }}>Emri<input required value={form.name} onChange={e=>setForm(v=>({...v,name:e.target.value}))} style={field}/></label>
-        <label style={{ fontSize: 12 }}>SKU / Barkodi<input value={form.sku} onChange={e=>setForm(v=>({...v,sku:e.target.value}))} style={field}/></label>
+        <label style={{ fontSize: 12 }}>SKU / Barkodi<div style={{ display: "flex", gap: 6 }}><input value={form.sku} onChange={e=>setForm(v=>({...v,sku:e.target.value}))} placeholder="Shkruaj ose skano barkodin" style={field}/><button type="button" onClick={()=>{setScanMessage("");setScanning(v=>!v);}} style={{ ...primary, whiteSpace: "nowrap", background: scanning ? "#8a3b35" : "var(--brand)" }}>{scanning ? "Ndalo" : "Skanoni"}</button></div></label>
         <label style={{ fontSize: 12 }}>Lloji<select value={form.item_type} onChange={e=>setForm(v=>({...v,item_type:e.target.value}))} style={field}><option value="product">Produkt</option><option value="service">Shërbim</option></select></label>
-        <label style={{ fontSize: 12 }}>Njësia<input value={form.unit} onChange={e=>setForm(v=>({...v,unit:e.target.value}))} style={field}/></label>
-        <label style={{ fontSize: 12 }}>Kategoria në arkë<input list="fiskalo-pos-categories" value={form.pos_category} onChange={e=>setForm(v=>({...v,pos_category:e.target.value}))} placeholder="p.sh. Pije, Veshje, Shërbime" style={field}/><datalist id="fiskalo-pos-categories">{posCategories.map(category => <option key={category} value={category}/>)}</datalist></label>
-        <label style={{ fontSize: 12 }}>Foto e produktit (URL)<input type="url" value={form.image_url} onChange={e=>setForm(v=>({...v,image_url:e.target.value}))} placeholder="https://…" style={field}/></label>
+        <label style={{ fontSize: 12 }}>Njësia<select required value={form.unit} onChange={e=>setForm(v=>({...v,unit:e.target.value}))} style={field}>{unitOptions.map(unit=><option key={unit} value={unit}>{unit}</option>)}</select></label>
+        <label style={{ fontSize: 12 }}>Kategoria në arkë<select required value={form.pos_category} onChange={e=>setForm(v=>({...v,pos_category:e.target.value}))} style={field}>{posCategories.map(category => <option key={category} value={category}>{category}</option>)}</select></label>
+        <label style={{ fontSize: 12 }}>Foto e produktit<input type="file" accept="image/jpeg,image/png,image/webp" disabled={uploadingImage} onChange={e=>{const selected=e.target.files?.[0];if(selected)void uploadProductImage(selected);e.currentTarget.value="";}} style={{ ...field, padding: 7 }}/><span style={{ display: "block", color: "var(--muted)", marginTop: 4 }}>JPG, PNG ose WebP · maksimumi 3 MB {uploadingImage ? "· Duke ngarkuar…" : ""}</span></label>
         <label style={{ fontSize: 12 }}>Çmimi (€)<input required type="number" min="0" step="0.01" value={form.unit_price} onChange={e=>setForm(v=>({...v,unit_price:e.target.value}))} style={field}/></label>
         <label style={{ fontSize: 12 }}>TVSH / trajtimi fiskal ATK<select value={`${form.vat_rate}:${form.atk_tax_code || (form.vat_rate === "8" ? "D" : form.vat_rate === "18" ? "E" : "A")}`} onChange={e=>{const [rate,code]=e.target.value.split(":");setForm(v=>({...v,vat_rate:rate,atk_tax_code:code}));}} style={field}><option value="0:A">0% — Përjashtuar nga TVSH (A)</option><option value="0:C">0% — Normë zero (C)</option><option value="8:D">8% — TVSH (D)</option><option value="18:E">18% — TVSH (E)</option></select></label>
         <label style={{ fontSize: 12 }}>Stoku<input type="number" min="0" step="0.001" value={form.stock_quantity} onChange={e=>setForm(v=>({...v,stock_quantity:e.target.value}))} style={field}/></label>
       </div>
+      {scanning && <div style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 10 }}><video ref={videoRef} muted playsInline style={{ width: "100%", maxHeight: 260, objectFit: "cover", borderRadius: 8, background: "#111" }}/><p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }}>Drejto kamerën te barkodi. Nëse kamera nuk hapet, lejo qasjen ose përdor skaner USB/Bluetooth.</p></div>}
+      {scanMessage && <p role="status" style={{ color: "var(--muted)", fontSize: 12, margin: 0 }}>{scanMessage}</p>}
+      {form.image_url && <div style={{ display: "flex", alignItems: "center", gap: 10 }}><img src={form.image_url} alt="Pamja e produktit" style={{ width: 76, height: 76, objectFit: "cover", borderRadius: 9, border: "1px solid var(--line)" }}/><button type="button" onClick={()=>setForm(v=>({...v,image_url:""}))} style={{ ...primary, background: "white", color: "#982d25", border: "1px solid #e4b8b4" }}>Hiqe foton</button></div>}
       {form.item_type === "product" && <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}><input type="checkbox" checked={form.track_stock} onChange={e=>setForm(v=>({...v,track_stock:e.target.checked}))}/> Menaxho stokun</label>}
       <div style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
         <strong style={{ fontSize: 13 }}>Kodet fiskale ATK</strong>
