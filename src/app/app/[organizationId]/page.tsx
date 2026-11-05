@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ArrowUpRight, Boxes, FileBarChart2, FileText, Plus, ReceiptText, ShoppingCart, Truck, Users, Wallet, AlertCircle, Contact, FileBarChart2 } from "lucide-react";
+import { ArrowUpRight, Boxes, FileBarChart2, FileText, Plus, ReceiptText, ShoppingCart, Truck, Wallet, AlertCircle, Contact, FileBarChart2 } from "lucide-react";
 
 type Props = { params: Promise<{ organizationId: string }> };
 const money = (n: number) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(n);
