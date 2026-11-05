@@ -1,48 +1,62 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ArrowUpRight, Boxes, FileBarChart2, FileText, Settings2, ShoppingCart, Users, Wallet, Warehouse, Truck } from "lucide-react";
+import { ArrowUpRight, Boxes, FileBarChart2, FileText, Plus, ReceiptText, ShoppingCart, Truck, Users, Wallet, AlertCircle, Contact, ChartNoAxesCombined } from "lucide-react";
 
 type Props = { params: Promise<{ organizationId: string }> };
+const money = (n: number) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(n);
+const dateLabel = (d: string) => new Date(d + "T12:00:00").toLocaleDateString("sq-XK", { day: "2-digit", month: "short" });
 
 export default async function BusinessDashboard({ params }: Props) {
   const { organizationId } = await params;
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) redirect("/login");
-
-  const [{ data: membership }, { data: organization }, invoiceCount, productCount, posCount] = await Promise.all([
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString("en-CA");
+  const [{ data: membership }, { data: organization }, { data: invoices, error: invoiceError }, { data: expenses }, { data: products }, { count: customerCount }] = await Promise.all([
     supabase.from("fiskalo_organization_users").select("role").eq("organization_id", organizationId).eq("user_id", auth.user.id).maybeSingle(),
     supabase.from("fiskalo_organizations").select("legal_name,trade_name,municipality").eq("id", organizationId).maybeSingle(),
-    supabase.from("fiskalo_invoices").select("id", { count: "exact", head: true }).eq("organization_id", organizationId),
-    supabase.from("fiskalo_products").select("id", { count: "exact", head: true }).eq("organization_id", organizationId).eq("is_active", true),
-    supabase.from("fiskalo_atk_pos_installations").select("id", { count: "exact", head: true }).eq("organization_id", organizationId),
+    supabase.from("fiskalo_invoices").select("id,invoice_number,issue_date,total,payment_status,fiscalization_status").eq("organization_id", organizationId).eq("status", "issued").gte("issue_date", monthStart).order("created_at", { ascending: false }).limit(100),
+    supabase.from("fiskalo_expenses").select("amount").eq("organization_id", organizationId).gte("expense_date", monthStart),
+    supabase.from("fiskalo_products").select("id,stock_quantity,track_stock").eq("organization_id", organizationId).eq("is_active", true),
+    supabase.from("fiskalo_customers").select("id", { count: "exact", head: true }).eq("organization_id", organizationId),
   ]);
   if (!membership || !organization) redirect("/app");
   const role = membership.role;
   const roleLabel: Record<string,string> = { owner:"Pronari", administrator:"Administrator", manager:"Menaxher", accountant:"Kontabilist", cashier:"Arkëtar" };
+  const sales = (invoices ?? []).reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
+  const expensesTotal = (expenses ?? []).reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  const unpaidCount = (invoices ?? []).filter(invoice => invoice.payment_status !== "paid").length;
+  const lowStock = (products ?? []).filter(product => product.track_stock && Number(product.stock_quantity) <= 5).length;
   const modules = [
-    ...(["owner","administrator","manager","cashier"].includes(role) ? [{ href:`/app/${organizationId}/pos`, title:"Arka / POS", description:"Regjistro shitjet, prano pagesat dhe lësho faturat.", icon:ShoppingCart, tint:"green", action:"Hap arkën" }] : []),
-    { href:`/app/${organizationId}/invoices`, title:"Faturat", description:"Gjej faturat, kontrollo pagesat dhe statusin fiskal.", icon:FileText, tint:"blue", action:"Shiko faturat" },
-    { href:`/app/${organizationId}/reports`, title:"Raportet", description:"Shitjet, TVSH-ja, pagesat, ndërrimet dhe statusi i ATK-së.", icon:FileBarChart2, tint:"violet", action:"Shiko raportet" },
-    ...(["owner","administrator","manager"].includes(role) ? [{ href:`/app/${organizationId}/pos/products`, title:"Produktet", description:"Menaxho artikujt, çmimet, TVSH-në dhe stokun.", icon:Boxes, tint:"violet", action:"Menaxho produktet" }] : []),
-    ...(["owner","administrator","manager"].includes(role) ? [{ href:`/app/${organizationId}/inventory`, title:"Inventari", description:"Kontrollo stokun, artikujt pa stok dhe historikun e lëvizjeve.", icon:Warehouse, tint:"amber", action:"Hap inventarin" }] : []),
-    ...(["owner","administrator","manager","accountant"].includes(role) ? [{ href:`/app/${organizationId}/purchases`, title:"Blerjet dhe furnitorët", description:"Regjistro hyrjet e mallit, prano stokun dhe përcjell pagesat ndaj furnitorëve.", icon:Truck, tint:"blue", action:"Menaxho blerjet" }] : []),
-    ...(["owner","administrator","manager","cashier"].includes(role) ? [{ href:`/app/${organizationId}/pos/shifts`, title:"Ndërrimet e arkës", description:"Hap arkën, regjistro lëvizjet dhe bëj mbylljen.", icon:Wallet, tint:"amber", action:"Hap ndërrimet" }] : []),
-    ...(["owner","administrator"].includes(role) ? [
-      { href:`/app/${organizationId}/team`, title:"Ekipi", description:"Shto punëtorë dhe cakto qasjet sipas rolit.", icon:Users, tint:"blue", action:"Menaxho ekipin" },
-      { href:`/app/${organizationId}/pos/setup`, title:"Konfigurimi ATK", description:"Menaxho regjistrimin e POS-it dhe verifikimin për biznesin.", icon:Settings2, tint:"green", action:"Hap konfigurimin" },
-    ] : []),
-  ];
-  return <main className="business-dashboard">
-    <section className="business-dashboard-hero"><div><span className="business-dashboard-kicker">PANELI I BIZNESIT</span><h1>{organization.trade_name || organization.legal_name}</h1><p>{organization.municipality} · {roleLabel[role] ?? role}</p></div><span className="business-role-chip">{roleLabel[role] ?? role}</span></section>
-    <section className="business-dashboard-stats">
-      <article><span>Fatura të regjistruara</span><strong>{invoiceCount.count ?? 0}</strong><small>Gjithsej në këtë biznes</small></article>
-      <article><span>Produkte aktive</span><strong>{productCount.count ?? 0}</strong><small>Artikuj në katalog</small></article>
-      <article><span>Instalime POS</span><strong>{posCount.count ?? 0}</strong><small>Pajisje të regjistruara</small></article>
+    { href:`/app/${organizationId}/pos`, title:"Regjistro shitje", detail:"Hap arkën dhe përfundo një shitje", icon:ShoppingCart, primary:true, roles:["owner","administrator","manager","cashier"] },
+    { href:`/app/${organizationId}/invoices`, title:"Shiko faturat", detail:"Kontrollo shitjet dhe pagesat", icon:FileText, roles:["owner","administrator","manager","accountant","cashier"] },
+    { href:`/app/${organizationId}/customers`, title:"Shto klient", detail:"Ruaj të dhënat e klientit", icon:Contact, roles:["owner","administrator","manager","accountant"] },
+    { href:`/app/${organizationId}/expenses`, title:"Regjistro shpenzim", detail:"Shto një shpenzim të biznesit", icon:ReceiptText, roles:["owner","administrator","manager","accountant"] },
+    { href:`/app/${organizationId}/purchases`, title:"Regjistro blerje", detail:"Faturat e furnitorëve dhe hyrjet e mallit", icon:Truck, roles:["owner","administrator","manager","accountant"] },
+    { href:`/app/${organizationId}/reports`, title:"Raportet financiare", detail:"Shitjet, TVSH-ja dhe shpenzimet", icon:ChartNoAxesCombined, roles:["owner","administrator","manager","accountant"] },
+  ].filter(item => item.roles.includes(role));
+  return <main className="qb-dashboard">
+    <section className="qb-welcome"><div><span className="qb-eyebrow">PËRMBLEDHJA E BIZNESIT</span><h1>Përshëndetje, {roleLabel[role] ?? role}</h1><p>{organization.trade_name || organization.legal_name} · {organization.municipality || "Kosovë"}</p></div><Link className="qb-primary-action" href={`/app/${organizationId}/pos`}><Plus size={17}/> Shitje e re</Link></section>
+    {invoiceError && <div className="qb-inline-alert"><AlertCircle size={16}/> Të dhënat e shitjeve nuk u ngarkuan plotësisht: {invoiceError.message}</div>}
+    <section className="qb-metric-grid" aria-label="Treguesit e muajit">
+      <article className="qb-metric"><span>Shitjet këtë muaj</span><strong>{money(sales)}</strong><small>{(invoices ?? []).length} fatura të lëshuara</small></article>
+      <article className="qb-metric"><span>Fatura për arkëtim</span><strong>{unpaidCount}</strong><small>Fatura të papaguara ose pjesërisht të paguara</small></article>
+      <article className="qb-metric"><span>Shpenzimet këtë muaj</span><strong>{money(expensesTotal)}</strong><small>{(expenses ?? []).length} shpenzime të regjistruara</small></article>
+      <article className="qb-metric"><span>Klientët</span><strong>{customerCount ?? 0}</strong><small>{lowStock ? `${lowStock} artikuj me stok të ulët` : "Regjistri i klientëve"}</small></article>
     </section>
-    <div className="business-dashboard-section-title"><div><h2>Veprimet e përditshme</h2><p>Zgjidh modulin që dëshiron të përdorësh.</p></div></div>
-    <section className="business-module-grid">{modules.map((module) => { const Icon=module.icon; return <Link key={module.href} href={module.href} className="business-module-card"><span className={"business-module-icon "+module.tint}><Icon size={21}/></span><strong>{module.title}</strong><p>{module.description}</p><span className="business-module-action">{module.action}<ArrowUpRight size={15}/></span></Link>; })}</section>
-    <footer className="business-dashboard-footer"><Link href="/app">Ndërro biznesin</Link><span>Fiskalo · Paneli i biznesit</span></footer>
+    <section className="qb-dashboard-grid">
+      <div className="qb-panel qb-actions-panel"><div className="qb-panel-heading"><div><h2>Veprimet e shpejta</h2><p>Detyrat që kryhen më shpesh në biznes.</p></div></div><div className="qb-action-grid">{modules.map(item => { const Icon=item.icon; return <Link key={item.href} href={item.href} className={"qb-action-link"+(item.primary?" primary":"")}><span><Icon size={18}/></span><div><strong>{item.title}</strong><small>{item.detail}</small></div><ArrowUpRight size={15}/></Link>; })}</div></div>
+      <aside className="qb-panel qb-attention-panel"><div className="qb-panel-heading"><div><h2>Kërkon vëmendje</h2><p>Kontrolle të dobishme për sot.</p></div></div><div className="qb-attention-list">
+        <Link href={`/app/${organizationId}/invoices`}><span className="qb-attention-icon amber"><FileText size={17}/></span><span><strong>{unpaidCount} fatura për arkëtim</strong><small>Kontrollo pagesat e mbetura</small></span><ArrowUpRight size={15}/></Link>
+        <Link href={`/app/${organizationId}/inventory`}><span className="qb-attention-icon red"><Boxes size={17}/></span><span><strong>{lowStock} artikuj me stok të ulët</strong><small>Kontrollo nivelet e inventarit</small></span><ArrowUpRight size={15}/></Link>
+        <Link href={`/app/${organizationId}/pos/setup`}><span className="qb-attention-icon green"><Wallet size={17}/></span><span><strong>Konfigurimi fiskal</strong><small>Kontrollo statusin e POS dhe ATK</small></span><ArrowUpRight size={15}/></Link>
+      </div></aside>
+    </section>
+    <section className="qb-panel qb-recent-panel"><div className="qb-panel-heading"><div><h2>Shitjet e fundit këtë muaj</h2><p>Faturat e lëshuara në këtë biznes.</p></div><Link href={`/app/${organizationId}/invoices`}>Shiko të gjitha <ArrowUpRight size={14}/></Link></div>
+      {(invoices ?? []).length ? <div className="qb-table-wrap"><table className="qb-table"><thead><tr><th>Fatura</th><th>Data</th><th>Pagesa</th><th>Fiskalizimi</th><th className="numeric">Totali</th></tr></thead><tbody>{(invoices ?? []).slice(0,6).map(invoice => <tr key={invoice.id}><td><Link href={`/app/${organizationId}/invoices/${invoice.id}`}>{invoice.invoice_number || "Draft"}</Link></td><td>{dateLabel(invoice.issue_date)}</td><td><span className={"qb-status "+(invoice.payment_status === "paid" ? "success" : "warning")}>{invoice.payment_status === "paid" ? "E paguar" : invoice.payment_status === "partial" ? "Pjesërisht" : "E papaguar"}</span></td><td>{invoice.fiscalization_status === "accepted" ? <span className="qb-status success">Pranuar nga ATK</span> : <span className="qb-status neutral">{invoice.fiscalization_status || "Jo e fiskalizuar"}</span>}</td><td className="numeric">{money(Number(invoice.total))}</td></tr>)}</tbody></table></div> : <div className="qb-empty-state"><FileText size={24}/><strong>Nuk ka shitje të regjistruara këtë muaj</strong><p>Shitja e parë mund të regjistrohet nga arka.</p><Link href={`/app/${organizationId}/pos`}>Hap arkën <ArrowUpRight size={14}/></Link></div>}
+    </section>
+    <footer className="qb-dashboard-footer"><span>Raporti për muajin aktual · Vlerat në EUR</span><Link href={`/app/${organizationId}/reports`}>Hap raportet financiare</Link></footer>
   </main>;
 }
