@@ -18,29 +18,30 @@ export default async function BusinessDashboard({ params }: Props) {
   const kosovoMonth = Number(kosovoParts.find(part => part.type === "month")?.value);
   const monthStart = `${kosovoYear}-${String(kosovoMonth).padStart(2, "0")}-01`;
   const nextMonthStart = kosovoMonth === 12 ? `${kosovoYear + 1}-01-01` : `${kosovoYear}-${String(kosovoMonth + 1).padStart(2, "0")}-01`;
-  const [{ data: membership }, { data: organization }, { data: invoices, error: invoiceError }, { count: customerCount, error: customerCountError }] = await Promise.all([
+  const [{ data: membership }, { data: organization }, { data: invoices, error: invoiceError }, { count: customerCount, error: customerCountError }, { count: unpaidInvoiceCount, error: unpaidInvoiceError }] = await Promise.all([
     supabase.from("fiskalo_organization_users").select("role").eq("organization_id", organizationId).eq("user_id", auth.user.id).maybeSingle(),
     supabase.from("fiskalo_organizations").select("legal_name,trade_name,municipality").eq("id", organizationId).maybeSingle(),
     supabase.from("fiskalo_invoices").select("id,invoice_number,issue_date,total,payment_status,fiscalization_status").eq("organization_id", organizationId).eq("status", "issued").gte("issue_date", monthStart).lt("issue_date", nextMonthStart).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(100),
     supabase.from("fiskalo_customers").select("id", { count: "exact", head: true }).eq("organization_id", organizationId),
+    supabase.from("fiskalo_invoices").select("id", { count: "exact", head: true }).eq("organization_id", organizationId).eq("status", "issued").neq("payment_status", "paid"),
   ]);
   if (!membership || !organization) redirect("/app");
   const role = membership.role;
   const roleLabel: Record<string,string> = { owner:"Pronari", administrator:"Administrator", manager:"Menaxher", accountant:"Kontabilist", cashier:"Arkëtar" };
   const canViewFinance = ["owner", "administrator", "manager", "accountant"].includes(role);
-  let financialInvoices: { total: number; payment_status: string }[] = [];
-  let financialExpenses: { amount: number }[] = [];
+  let financialInvoices: number[] = [];
+  let financialExpenses: number[] = [];
   let financialDataError = "";
   let productDataError = "";
   if (canViewFinance) {
     let invoiceOffset = 0;
     while (true) {
-      const { data, error } = await supabase.from("fiskalo_invoices").select("total,payment_status")
+      const { data, error } = await supabase.from("fiskalo_invoices").select("total")
         .eq("organization_id", organizationId).eq("status", "issued").gte("issue_date", monthStart).lt("issue_date", nextMonthStart)
         .order("issue_date", { ascending: true }).order("id", { ascending: true })
         .range(invoiceOffset, invoiceOffset + 999);
       if (error) { financialDataError = error.message; break; }
-      financialInvoices = financialInvoices.concat((data ?? []).map(row => ({ total: Number(row.total || 0), payment_status: row.payment_status })));
+      financialInvoices = financialInvoices.concat((data ?? []).map(row => Math.round(Number(row.total || 0) * 100)));
       if ((data ?? []).length < 1000) break;
       invoiceOffset += 1000;
     }
@@ -51,7 +52,7 @@ export default async function BusinessDashboard({ params }: Props) {
         .order("expense_date", { ascending: true }).order("id", { ascending: true })
         .range(expenseOffset, expenseOffset + 999);
       if (error) { financialDataError = financialDataError || error.message; break; }
-      financialExpenses = financialExpenses.concat((data ?? []).map(row => ({ amount: Number(row.amount || 0) })));
+      financialExpenses = financialExpenses.concat((data ?? []).map(row => Math.round(Number(row.amount || 0) * 100)));
       if ((data ?? []).length < 1000) break;
       expenseOffset += 1000;
     }
@@ -67,9 +68,9 @@ export default async function BusinessDashboard({ params }: Props) {
     if ((data ?? []).length < 1000) break;
     productOffset += 1000;
   }
-  const sales = financialInvoices.reduce((sum, invoice) => sum + invoice.total, 0);
-  const expensesTotal = financialExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-  const unpaidCount = financialInvoices.filter(invoice => invoice.payment_status !== "paid").length;
+  const sales = financialInvoices.reduce((sum, invoiceCents) => sum + invoiceCents, 0) / 100;
+  const expensesTotal = financialExpenses.reduce((sum, expenseCents) => sum + expenseCents, 0) / 100;
+  const unpaidCount = unpaidInvoiceCount ?? 0;
   const lowStock = (products ?? []).filter(product => product.track_stock && Number(product.stock_quantity) <= 5).length;
   const modules = [
     { href:`/app/${organizationId}/pos`, title:"Regjistro shitje", detail:"Hap arkën dhe përfundo një shitje", icon:ShoppingCart, primary:true, roles:["owner","administrator","manager","cashier"] },
@@ -81,10 +82,10 @@ export default async function BusinessDashboard({ params }: Props) {
   ].filter(item => item.roles.includes(role));
   return <main className="qb-dashboard">
     <section className="qb-welcome"><div><span className="qb-eyebrow">PËRMBLEDHJA E BIZNESIT</span><h1>Përshëndetje, {roleLabel[role] ?? role}</h1><p>{organization.trade_name || organization.legal_name} · {organization.municipality || "Kosovë"}</p></div>{["owner", "administrator", "manager", "cashier"].includes(role) && <Link className="qb-primary-action" href={`/app/${organizationId}/pos`}><Plus size={17}/> Shitje e re</Link>}</section>
-    {(invoiceError || financialDataError || productDataError || customerCountError) && <div className="qb-inline-alert"><AlertCircle size={16}/> Disa të dhëna nuk u ngarkuan plotësisht: {invoiceError?.message || financialDataError || productDataError || customerCountError?.message}</div>}
+    {(invoiceError || financialDataError || productDataError || customerCountError || unpaidInvoiceError) && <div className="qb-inline-alert"><AlertCircle size={16}/> Disa të dhëna nuk u ngarkuan plotësisht: {invoiceError?.message || financialDataError || productDataError || customerCountError?.message || unpaidInvoiceError?.message}</div>}
     <section className="qb-metric-grid" aria-label="Treguesit e muajit">
       {canViewFinance && <article className="qb-metric"><span>Shitjet këtë muaj</span><strong>{financialDataError ? "—" : money(sales)}</strong><small>{financialDataError ? "Të dhënat nuk u verifikuan" : `${financialInvoices.length} fatura të lëshuara`}</small></article>}
-      {canViewFinance && <article className="qb-metric"><span>Fatura për arkëtim</span><strong>{financialDataError ? "—" : unpaidCount}</strong><small>{financialDataError ? "Të dhënat nuk u verifikuan" : "Fatura të papaguara ose pjesërisht të paguara"}</small></article>}
+      {canViewFinance && <article className="qb-metric"><span>Fatura për arkëtim</span><strong>{unpaidInvoiceError ? "—" : unpaidCount}</strong><small>{unpaidInvoiceError ? "Të dhënat nuk u verifikuan" : "Fatura të papaguara ose pjesërisht të paguara"}</small></article>}
       {canViewFinance && <article className="qb-metric"><span>Shpenzimet këtë muaj</span><strong>{financialDataError ? "—" : money(expensesTotal)}</strong><small>{financialDataError ? "Të dhënat nuk u verifikuan" : "Shpenzime të regjistruara në muajin aktual"}</small></article>}
       {!canViewFinance && <article className="qb-metric"><span>Produktet aktive</span><strong>{productDataError ? "—" : products.length}</strong><small>{productDataError ? "Stoku nuk u verifikua" : `${lowStock} artikuj me stok të ulët`}</small></article>}
       <article className="qb-metric"><span>Klientët</span><strong>{customerCountError ? "—" : customerCount ?? 0}</strong><small>{customerCountError ? "Numri nuk u verifikua" : "Regjistri i klientëve"}</small></article>
@@ -92,7 +93,7 @@ export default async function BusinessDashboard({ params }: Props) {
     <section className="qb-dashboard-grid">
       <div className="qb-panel qb-actions-panel"><div className="qb-panel-heading"><div><h2>Veprimet e shpejta</h2><p>Detyrat që kryhen më shpesh në biznes.</p></div></div><div className="qb-action-grid">{modules.map(item => { const Icon=item.icon; return <Link key={item.href} href={item.href} className={"qb-action-link"+(item.primary?" primary":"")}><span><Icon size={18}/></span><div><strong>{item.title}</strong><small>{item.detail}</small></div><ArrowUpRight size={15}/></Link>; })}</div></div>
       <aside className="qb-panel qb-attention-panel"><div className="qb-panel-heading"><div><h2>Kërkon vëmendje</h2><p>Kontrolle të dobishme për sot.</p></div></div><div className="qb-attention-list">
-        {canViewFinance && <Link href={`/app/${organizationId}/invoices`}><span className="qb-attention-icon amber"><FileText size={17}/></span><span><strong>{unpaidCount} fatura për arkëtim</strong><small>Kontrollo pagesat e mbetura</small></span><ArrowUpRight size={15}/></Link>}
+        {canViewFinance && <Link href={`/app/${organizationId}/invoices`}><span className="qb-attention-icon amber"><FileText size={17}/></span><span><strong>{unpaidInvoiceError ? "Arkëtimet nuk u verifikuan" : `${unpaidCount} fatura për arkëtim`}</strong><small>Kontrollo pagesat e mbetura</small></span><ArrowUpRight size={15}/></Link>}
         {!["cashier", "accountant"].includes(role) && <Link href={`/app/${organizationId}/inventory`}><span className="qb-attention-icon red"><Boxes size={17}/></span><span><strong>{productDataError ? "Stoku nuk u verifikua" : `${lowStock} artikuj me stok të ulët`}</strong><small>Kontrollo nivelet e inventarit</small></span><ArrowUpRight size={15}/></Link>}
         {["owner", "administrator"].includes(role) && <Link href={`/app/${organizationId}/pos/setup`}><span className="qb-attention-icon green"><Wallet size={17}/></span><span><strong>Konfigurimi fiskal</strong><small>Kontrollo statusin e POS dhe ATK</small></span><ArrowUpRight size={15}/></Link>}
       </div></aside>
