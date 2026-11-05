@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeftRight, Boxes, Building2, FileBarChart2, FileText, LayoutDashboard, LogOut, PackagePlus, ReceiptText, Settings2, ShoppingCart, Users, Wallet, UserCircle, Warehouse, Truck, Contact, ChartNoAxesCombined } from "lucide-react";
+import { ArrowLeftRight, Boxes, Building2, FileBarChart2, FileText, LayoutDashboard, LogOut, ReceiptText, Settings2, ShoppingCart, Users, Wallet, UserCircle, Warehouse, Truck, Contact, ChartNoAxesCombined } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { ReactNode } from "react";
 
