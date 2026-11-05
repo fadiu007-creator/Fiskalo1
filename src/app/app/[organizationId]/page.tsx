@@ -18,11 +18,10 @@ export default async function BusinessDashboard({ params }: Props) {
   const kosovoMonth = Number(kosovoParts.find(part => part.type === "month")?.value);
   const monthStart = `${kosovoYear}-${String(kosovoMonth).padStart(2, "0")}-01`;
   const nextMonthStart = kosovoMonth === 12 ? `${kosovoYear + 1}-01-01` : `${kosovoYear}-${String(kosovoMonth + 1).padStart(2, "0")}-01`;
-  const [{ data: membership }, { data: organization }, { data: invoices, error: invoiceError }, { data: products }, { count: customerCount }] = await Promise.all([
+  const [{ data: membership }, { data: organization }, { data: invoices, error: invoiceError }, { count: customerCount }] = await Promise.all([
     supabase.from("fiskalo_organization_users").select("role").eq("organization_id", organizationId).eq("user_id", auth.user.id).maybeSingle(),
     supabase.from("fiskalo_organizations").select("legal_name,trade_name,municipality").eq("id", organizationId).maybeSingle(),
     supabase.from("fiskalo_invoices").select("id,invoice_number,issue_date,total,payment_status,fiscalization_status").eq("organization_id", organizationId).eq("status", "issued").gte("issue_date", monthStart).lt("issue_date", nextMonthStart).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(100),
-    supabase.from("fiskalo_products").select("id,stock_quantity,track_stock").eq("organization_id", organizationId).eq("is_active", true),
     supabase.from("fiskalo_customers").select("id", { count: "exact", head: true }).eq("organization_id", organizationId),
   ]);
   if (!membership || !organization) redirect("/app");
@@ -32,28 +31,40 @@ export default async function BusinessDashboard({ params }: Props) {
   let financialInvoices: { total: number; payment_status: string }[] = [];
   let financialExpenses: { amount: number }[] = [];
   let financialDataError = "";
-  let invoiceOffset = 0;
-  while (true) {
-    const { data, error } = await supabase.from("fiskalo_invoices").select("total,payment_status")
-      .eq("organization_id", organizationId).eq("status", "issued").gte("issue_date", monthStart).lt("issue_date", nextMonthStart)
-      .order("issue_date", { ascending: true }).order("id", { ascending: true })
-      .range(invoiceOffset, invoiceOffset + 999);
-    if (error) { financialDataError = error.message; break; }
-    financialInvoices = financialInvoices.concat((data ?? []).map(row => ({ total: Number(row.total || 0), payment_status: row.payment_status })));
-    if ((data ?? []).length < 1000) break;
-    invoiceOffset += 1000;
-  }
   if (canViewFinance) {
+    let invoiceOffset = 0;
+    while (true) {
+      const { data, error } = await supabase.from("fiskalo_invoices").select("total,payment_status")
+        .eq("organization_id", organizationId).eq("status", "issued").gte("issue_date", monthStart).lt("issue_date", nextMonthStart)
+        .order("issue_date", { ascending: true }).order("id", { ascending: true })
+        .range(invoiceOffset, invoiceOffset + 999);
+      if (error) { financialDataError = error.message; break; }
+      financialInvoices = financialInvoices.concat((data ?? []).map(row => ({ total: Number(row.total || 0), payment_status: row.payment_status })));
+      if ((data ?? []).length < 1000) break;
+      invoiceOffset += 1000;
+    }
     let expenseOffset = 0;
     while (true) {
       const { data, error } = await supabase.from("fiskalo_expenses").select("amount")
         .eq("organization_id", organizationId).gte("expense_date", monthStart).lt("expense_date", nextMonthStart)
+        .order("expense_date", { ascending: true }).order("id", { ascending: true })
         .range(expenseOffset, expenseOffset + 999);
       if (error) { financialDataError = financialDataError || error.message; break; }
       financialExpenses = financialExpenses.concat((data ?? []).map(row => ({ amount: Number(row.amount || 0) })));
       if ((data ?? []).length < 1000) break;
       expenseOffset += 1000;
     }
+  }
+  let products: { id: string; stock_quantity: number; track_stock: boolean }[] = [];
+  let productOffset = 0;
+  while (true) {
+    const { data, error } = await supabase.from("fiskalo_products").select("id,stock_quantity,track_stock")
+      .eq("organization_id", organizationId).eq("is_active", true)
+      .order("id", { ascending: true }).range(productOffset, productOffset + 999);
+    if (error) { financialDataError = financialDataError || error.message; break; }
+    products = products.concat((data ?? []).map(row => ({ id: row.id, stock_quantity: Number(row.stock_quantity || 0), track_stock: row.track_stock })));
+    if ((data ?? []).length < 1000) break;
+    productOffset += 1000;
   }
   const sales = financialInvoices.reduce((sum, invoice) => sum + invoice.total, 0);
   const expensesTotal = financialExpenses.reduce((sum, expense) => sum + expense.amount, 0);
@@ -71,10 +82,10 @@ export default async function BusinessDashboard({ params }: Props) {
     <section className="qb-welcome"><div><span className="qb-eyebrow">PËRMBLEDHJA E BIZNESIT</span><h1>Përshëndetje, {roleLabel[role] ?? role}</h1><p>{organization.trade_name || organization.legal_name} · {organization.municipality || "Kosovë"}</p></div>{["owner", "administrator", "manager", "cashier"].includes(role) && <Link className="qb-primary-action" href={`/app/${organizationId}/pos`}><Plus size={17}/> Shitje e re</Link>}</section>
     {(invoiceError || financialDataError) && <div className="qb-inline-alert"><AlertCircle size={16}/> Të dhënat financiare nuk u ngarkuan plotësisht: {invoiceError?.message || financialDataError}</div>}
     <section className="qb-metric-grid" aria-label="Treguesit e muajit">
-      {canViewFinance && <article className="qb-metric"><span>Shitjet këtë muaj</span><strong>{money(sales)}</strong><small>{financialInvoices.length} fatura të lëshuara</small></article>}
-      {canViewFinance && <article className="qb-metric"><span>Fatura për arkëtim</span><strong>{unpaidCount}</strong><small>Fatura të papaguara ose pjesërisht të paguara</small></article>}
-      {canViewFinance && <article className="qb-metric"><span>Shpenzimet këtë muaj</span><strong>{money(expensesTotal)}</strong><small>Shpenzime të regjistruara në muajin aktual</small></article>}
-      {!canViewFinance && <article className="qb-metric"><span>Produktet aktive</span><strong>{(products ?? []).length}</strong><small>{lowStock} artikuj me stok të ulët</small></article>}
+      {canViewFinance && <article className="qb-metric"><span>Shitjet këtë muaj</span><strong>{financialDataError ? "—" : money(sales)}</strong><small>{financialDataError ? "Të dhënat nuk u verifikuan" : `${financialInvoices.length} fatura të lëshuara`}</small></article>}
+      {canViewFinance && <article className="qb-metric"><span>Fatura për arkëtim</span><strong>{financialDataError ? "—" : unpaidCount}</strong><small>{financialDataError ? "Të dhënat nuk u verifikuan" : "Fatura të papaguara ose pjesërisht të paguara"}</small></article>}
+      {canViewFinance && <article className="qb-metric"><span>Shpenzimet këtë muaj</span><strong>{financialDataError ? "—" : money(expensesTotal)}</strong><small>{financialDataError ? "Të dhënat nuk u verifikuan" : "Shpenzime të regjistruara në muajin aktual"}</small></article>}
+      {!canViewFinance && <article className="qb-metric"><span>Produktet aktive</span><strong>{financialDataError ? "—" : products.length}</strong><small>{financialDataError ? "Të dhënat nuk u verifikuan" : `${lowStock} artikuj me stok të ulët`}</small></article>}
       <article className="qb-metric"><span>Klientët</span><strong>{customerCount ?? 0}</strong><small>Regjistri i klientëve</small></article>
     </section>
     <section className="qb-dashboard-grid">
