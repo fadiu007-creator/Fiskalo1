@@ -59,6 +59,11 @@ export default async function DailyReportsPage({ params, searchParams }: Props) 
       {paymentRows.map(row=><div key={row.method} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid var(--line)"}}><span>{row.method==="cash"?"Para në dorë":row.method==="card"?"Kartelë":"Transfer bankar"}</span><strong>{money(row.amount)}</strong></div>)}
     </section>
     <section className="report-card" style={{background:"white",border:"1px solid var(--line)",borderRadius:12,padding:17,marginBottom:14}}>
+      <h2 style={{fontSize:16,margin:"0 0 8px"}}>Raporti X · Gjendja e arkës</h2>
+      <p style={{fontSize:11,color:"var(--muted)",margin:"0 0 10px"}}>Pamje statistikore e brendshme për ndërrimet e kësaj date; nuk është raport tatimor i ATK-së.</p>
+      {shifts.filter(row=>row.status==="open").length ? shifts.filter(row=>row.status==="open").map(row=><div key={row.id} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid var(--line)"}}><span>Ndërrim aktiv · {new Date(row.opened_at).toLocaleTimeString("sq-XK")}</span><strong>{money(row.opening_cash)} para fillestare</strong></div>) : <p style={{fontSize:13,color:"var(--muted)",margin:0}}>Nuk ka ndërrim aktiv në këtë datë.</p>}
+    </section>
+    <section className="report-card" style={{background:"white",border:"1px solid var(--line)",borderRadius:12,padding:17,marginBottom:14}}>
       <h2 style={{fontSize:16,margin:"0 0 10px"}}>Ndërrimet e arkës</h2>
       <p style={{fontSize:13,color:"var(--muted)"}}>Të mbyllura: {closed.length} · Të hapura: {shifts.filter(row=>row.status==="open").length} · Diferenca: {money(sum(closed.map(row=>row.cash_difference)))}</p>
       <div style={{overflowX:"auto"}}><table className="data-table"><thead><tr><th>Hapja</th><th>Mbyllja</th><th>Arka e pritur</th><th>Arka e numëruar</th><th>Diferenca</th></tr></thead><tbody>{shifts.map(row=><tr key={row.id}><td>{new Date(row.opened_at).toLocaleTimeString("sq-XK")}</td><td>{row.closed_at?new Date(row.closed_at).toLocaleTimeString("sq-XK"):"Hapur"}</td><td>{money(row.expected_cash)}</td><td>{money(row.counted_cash)}</td><td>{money(row.cash_difference)}</td></tr>)}</tbody></table></div>
