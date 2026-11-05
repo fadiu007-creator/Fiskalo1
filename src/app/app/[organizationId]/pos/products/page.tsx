@@ -10,7 +10,7 @@ type Product = {
   unit_price: number; vat_rate: number; stock_quantity: number; track_stock: boolean;
   is_active: boolean; atk_unit_code: string | null; atk_tax_code: string | null; atk_item_category_code: string | null;
 };
-const blank = { name: "", sku: "", item_type: "product", unit: "copë", pos_category: "Tjera", image_url: "", unit_price: "0", vat_rate: "18",
+const blank = { name: "", sku: "", item_type: "product", unit: "cope", pos_category: "TT", image_url: "", unit_price: "0", vat_rate: "18",
   stock_quantity: "0", track_stock: false, atk_unit_code: "", atk_tax_code: "E", atk_item_category_code: "" };
 const field: React.CSSProperties = { width: "100%", border: "1px solid var(--line)", borderRadius: 9, padding: "10px 11px", background: "white", color: "var(--ink)" };
 const primary: React.CSSProperties = { border: 0, borderRadius: 9, padding: "11px 15px", background: "var(--brand)", color: "white", fontWeight: 750, cursor: "pointer" };
@@ -32,10 +32,8 @@ export default function PosProductsPage() {
   const [scanMessage, setScanMessage] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
   const [planInfo, setPlanInfo] = useState<{ plan_package: string; product_limit: number } | null>(null);
-  const unitCodes = Array.from(new Set(["cope", ...products.map(p => p.atk_unit_code).filter((v): v is string => Boolean(v))])).sort();
-  const itemCategoryCodes = Array.from(new Set(products.map(p => p.atk_item_category_code).filter((v): v is string => Boolean(v)))).sort();
-  const posCategories = Array.from(new Set(["Pije", "Ushqime", "Fruta dhe perime", "Bulmet", "Mish dhe peshk", "Ëmbëlsira", "Veshje", "Elektronikë", "Higjienë", "Shërbime", "Tjera", ...products.map(p => p.pos_category.trim()).filter(Boolean)])).sort((a,b) => a.localeCompare(b, "sq"));
-  const unitOptions = ["copë", "kg", "g", "l", "ml", "m", "cm", "m²", "m³", "paketë", "kuti", "shishe", "paletë", "orë", "ditë", "shërbim"];
+  const unitCodes = Array.from(new Set(["cope", ...products.map(p => p.atk_unit_code || p.unit).filter((v): v is string => Boolean(v))])).sort();
+  const itemCategoryCodes = Array.from(new Set(["TT", ...products.map(p => p.atk_item_category_code || p.pos_category).filter((v): v is string => Boolean(v))])).sort();
 
   const load = useCallback(async () => {
     const { data: auth } = await supabase.auth.getUser();
@@ -109,10 +107,10 @@ export default function PosProductsPage() {
   const visible = products.filter((p) => (p.name + " " + (p.sku || "")).toLowerCase().includes(search.trim().toLowerCase()));
   function edit(product: Product) {
     setEditingId(product.id);
-    setForm({ name: product.name, sku: product.sku || "", item_type: product.item_type, unit: product.unit || "copë", pos_category: product.pos_category || "Tjera", image_url: product.image_url || "",
+    setForm({ name: product.name, sku: product.sku || "", item_type: product.item_type, unit: product.atk_unit_code || product.unit || "cope", pos_category: product.atk_item_category_code || product.pos_category || "TT", image_url: product.image_url || "",
       unit_price: String(product.unit_price), vat_rate: String(product.vat_rate), stock_quantity: String(product.stock_quantity),
-      track_stock: product.track_stock, atk_unit_code: product.atk_unit_code || "", atk_tax_code: product.atk_tax_code || (Number(product.vat_rate) === 8 ? "D" : Number(product.vat_rate) === 18 ? "E" : "A"),
-      atk_item_category_code: product.atk_item_category_code || "" });
+      track_stock: product.track_stock, atk_unit_code: product.atk_unit_code || product.unit || "cope", atk_tax_code: product.atk_tax_code || (Number(product.vat_rate) === 8 ? "D" : Number(product.vat_rate) === 18 ? "E" : "A"),
+      atk_item_category_code: product.atk_item_category_code || product.pos_category || "TT" });
     setError(""); setNotice("");
   }
   function reset() { setEditingId(""); setForm(blank); }
@@ -132,11 +130,11 @@ export default function PosProductsPage() {
       return;
     }
     const values = { organization_id: organizationId, name: form.name.trim(), sku: form.sku.trim() || null,
-      item_type: form.item_type, unit: form.unit.trim() || "copë", pos_category: form.pos_category, image_url: form.image_url.trim() || null, unit_price: price, vat_rate: vat,
+      item_type: form.item_type, unit: form.atk_unit_code.trim(), pos_category: form.atk_item_category_code.trim(), image_url: form.image_url.trim() || null, unit_price: price, vat_rate: vat,
       stock_quantity: stock, track_stock: form.item_type === "product" && form.track_stock,
-      atk_unit_code: form.atk_unit_code.trim() || (form.unit.trim().toLowerCase() === "copë" ? "cope" : null),
+      atk_unit_code: form.atk_unit_code.trim(),
       atk_tax_code: taxCode || (vat === 8 ? "D" : vat === 18 ? "E" : null),
-      atk_item_category_code: form.atk_item_category_code.trim() || null };
+      atk_item_category_code: form.atk_item_category_code.trim() };
     if (!editingId && planInfo && products.length >= planInfo.product_limit) {
       setBusy(false);
       setError(`Paketa ${planInfo.plan_package} lejon maksimum ${planInfo.product_limit} produkte. Përmirëso paketën për të shtuar produkte të tjera.`);
@@ -192,8 +190,6 @@ export default function PosProductsPage() {
         <label style={{ fontSize: 12 }}>Emri<input required value={form.name} onChange={e=>setForm(v=>({...v,name:e.target.value}))} style={field}/></label>
         <label style={{ fontSize: 12 }}>SKU / Barkodi<div style={{ display: "flex", gap: 6 }}><input value={form.sku} onChange={e=>setForm(v=>({...v,sku:e.target.value}))} placeholder="Shkruaj ose skano barkodin" style={field}/><button type="button" onClick={()=>{setScanMessage("");setScanning(v=>!v);}} style={{ ...primary, whiteSpace: "nowrap", background: scanning ? "#8a3b35" : "var(--brand)" }}>{scanning ? "Ndalo" : "Skanoni"}</button></div></label>
         <label style={{ fontSize: 12 }}>Lloji<select value={form.item_type} onChange={e=>setForm(v=>({...v,item_type:e.target.value}))} style={field}><option value="product">Produkt</option><option value="service">Shërbim</option></select></label>
-        <label style={{ fontSize: 12 }}>Njësia<select required value={form.unit} onChange={e=>setForm(v=>({...v,unit:e.target.value}))} style={field}>{unitOptions.map(unit=><option key={unit} value={unit}>{unit}</option>)}</select></label>
-        <label style={{ fontSize: 12 }}>Kategoria në arkë<select required value={form.pos_category} onChange={e=>setForm(v=>({...v,pos_category:e.target.value}))} style={field}>{posCategories.map(category => <option key={category} value={category}>{category}</option>)}</select></label>
         <label style={{ fontSize: 12 }}>Foto e produktit<input type="file" accept="image/jpeg,image/png,image/webp" disabled={uploadingImage} onChange={e=>{const selected=e.target.files?.[0];if(selected)void uploadProductImage(selected);e.currentTarget.value="";}} style={{ ...field, padding: 7 }}/><span style={{ display: "block", color: "var(--muted)", marginTop: 4 }}>JPG, PNG ose WebP · maksimumi 3 MB {uploadingImage ? "· Duke ngarkuar…" : ""}</span></label>
         <label style={{ fontSize: 12 }}>Çmimi (€)<input required type="number" min="0" step="0.01" value={form.unit_price} onChange={e=>setForm(v=>({...v,unit_price:e.target.value}))} style={field}/></label>
         <label style={{ fontSize: 12 }}>TVSH / trajtimi fiskal ATK<select value={`${form.vat_rate}:${form.atk_tax_code || (form.vat_rate === "8" ? "D" : form.vat_rate === "18" ? "E" : "A")}`} onChange={e=>{const [rate,code]=e.target.value.split(":");setForm(v=>({...v,vat_rate:rate,atk_tax_code:code}));}} style={field}><option value="0:A">0% — Përjashtuar nga TVSH (A)</option><option value="0:C">0% — Normë zero (C)</option><option value="8:D">8% — TVSH (D)</option><option value="18:E">18% — TVSH (E)</option></select></label>
@@ -204,18 +200,18 @@ export default function PosProductsPage() {
       {form.image_url && <div style={{ display: "flex", alignItems: "center", gap: 10 }}><img src={form.image_url} alt="Pamja e produktit" style={{ width: 76, height: 76, objectFit: "cover", borderRadius: 9, border: "1px solid var(--line)" }}/><button type="button" onClick={()=>setForm(v=>({...v,image_url:""}))} style={{ ...primary, background: "white", color: "#982d25", border: "1px solid #e4b8b4" }}>Hiqe foton</button></div>}
       {form.item_type === "product" && <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}><input type="checkbox" checked={form.track_stock} onChange={e=>setForm(v=>({...v,track_stock:e.target.checked}))}/> Menaxho stokun</label>}
       <div style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
-        <strong style={{ fontSize: 13 }}>Kodet fiskale ATK</strong>
+        <strong style={{ fontSize: 13 }}>Kodet fiskale ATK</strong><p style={{ color: "var(--muted)", fontSize: 12, margin: "4px 0 0" }}>Njësia dhe kategoria caktohen vetëm këtu, sipas kodeve që dërgohen në kuponin ATK.</p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10, marginTop: 8 }}>
-          <label style={{ fontSize: 12 }}>Kodi i njësisë ATK<select value={form.atk_unit_code} onChange={e=>setForm(v=>({...v,atk_unit_code:e.target.value}))} style={field}><option value="">Zgjidh njësinë</option>{unitCodes.map(code=><option key={code} value={code}>{code}</option>)}</select></label>
-<label style={{ fontSize: 12 }}>Kategoria e artikullit ATK<select value={form.atk_item_category_code} onChange={e=>setForm(v=>({...v,atk_item_category_code:e.target.value}))} style={field}><option value="">Zgjidh kategorinë ATK</option>{itemCategoryCodes.map(code=><option key={code} value={code}>{code}</option>)}</select></label>
+          <label style={{ fontSize: 12 }}>Njësia — kodi ATK<select required value={form.atk_unit_code} onChange={e=>setForm(v=>({...v,atk_unit_code:e.target.value}))} style={field}>{unitCodes.map(code=><option key={code} value={code}>{code}</option>)}</select></label>
+<label style={{ fontSize: 12 }}>Kategoria e artikullit — kodi ATK<select required value={form.atk_item_category_code} onChange={e=>setForm(v=>({...v,atk_item_category_code:e.target.value}))} style={field}>{itemCategoryCodes.map(code=><option key={code} value={code}>{code}</option>)}</select></label>
         </div>
-        {(!itemCategoryCodes.length || !unitCodes.length) && <p style={{ color: "var(--muted)", fontSize: 12 }}>Listat e njësive dhe kategorive shfaqin kodet ATK të regjistruara në katalogun e biznesit. Katalogu zyrtar duhet të importohet për të ofruar listën e plotë.</p>}
+        <p style={{ color: "var(--muted)", fontSize: 11, marginTop: 6 }}>Lista fillestare përdor vlerat e shembullit zyrtar të integrimit ATK (cope / TT) dhe ruan kodet e përdorura tashmë në katalog. Lista e plotë zyrtare duhet konfirmuar me katalogun aktual të ATK-së.</p>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button disabled={busy} type="submit" style={primary}>{busy ? "Duke ruajtur..." : editingId ? "Ruaj ndryshimet" : planInfo && products.length >= planInfo.product_limit ? "Limiti i paketës u arrit" : "Shto produktin"}</button>{editingId && <button type="button" onClick={reset} style={{ ...primary, background: "white", color: "var(--ink)", border: "1px solid var(--line)" }}>Anulo</button>}</div>
     </form>
     <input aria-label="Kërko produkt" placeholder="Kërko sipas emrit ose SKU..." value={search} onChange={e=>setSearch(e.target.value)} style={{ ...field, marginBottom: 12 }}/>
     <div style={{ display: "grid", gap: 8 }}>{visible.map(product=><div key={product.id} style={{ background: "white", border: "1px solid var(--line)", borderRadius: 10, padding: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-      <div><strong>{product.name}</strong><div style={{ color: "var(--muted)", fontSize: 12 }}>{product.pos_category || "Tjera"} · {product.sku || "Pa SKU"} · {product.item_type === "service" ? "Shërbim" : "Produkt"} · TVSH {product.vat_rate}% · {Number(product.unit_price).toFixed(2)} € · {product.atk_unit_code && product.atk_tax_code && product.atk_item_category_code ? "Kodet ATK të plotësuara" : "Mungojnë kodet ATK"}</div></div>
+      <div><strong>{product.name}</strong><div style={{ color: "var(--muted)", fontSize: 12 }}>{product.atk_item_category_code || product.pos_category || "Pa kategori"} · {product.sku || "Pa SKU"} · {product.item_type === "service" ? "Shërbim" : "Produkt"} · TVSH {product.vat_rate}% · {Number(product.unit_price).toFixed(2)} € · {product.atk_unit_code && product.atk_tax_code && product.atk_item_category_code ? "Kodet ATK të plotësuara" : "Mungojnë kodet ATK"}</div></div>
       <div style={{ display: "flex", gap: 7 }}><button type="button" onClick={()=>edit(product)} style={{ ...primary, background: "white", color: "var(--ink)", border: "1px solid var(--line)" }}>Ndrysho</button><button type="button" disabled={busy} onClick={()=>void toggleActive(product)} style={{ ...primary, background: product.is_active ? "#8a3b35" : "var(--brand)" }}>{product.is_active ? "Çaktivizo" : "Aktivizo"}</button><button type="button" disabled={busy} onClick={()=>void deleteProduct(product)} style={{ ...primary, background: "white", color: "#982d25", border: "1px solid #e4b8b4" }}>Fshije</button></div>
     </div>)}
     {!visible.length && <p style={{ color: "var(--muted)" }}>Nuk ka artikuj. Shto produktin e parë më lart.</p>}</div>
