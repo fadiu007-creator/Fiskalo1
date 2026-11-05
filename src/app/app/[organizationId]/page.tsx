@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ArrowUpRight, Boxes, FileBarChart2, FileText, Plus, ReceiptText, ShoppingCart, Truck, Users, Wallet, AlertCircle, Contact, ChartNoAxesCombined } from "lucide-react";
+import { ArrowUpRight, Boxes, FileBarChart2, FileText, Plus, ReceiptText, ShoppingCart, Truck, Users, Wallet, AlertCircle, Contact, FileBarChart2 } from "lucide-react";
 
 type Props = { params: Promise<{ organizationId: string }> };
 const money = (n: number) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(n);
@@ -21,7 +21,7 @@ export default async function BusinessDashboard({ params }: Props) {
   const [{ data: membership }, { data: organization }, { data: invoices, error: invoiceError }, { data: products }, { count: customerCount }] = await Promise.all([
     supabase.from("fiskalo_organization_users").select("role").eq("organization_id", organizationId).eq("user_id", auth.user.id).maybeSingle(),
     supabase.from("fiskalo_organizations").select("legal_name,trade_name,municipality").eq("id", organizationId).maybeSingle(),
-    supabase.from("fiskalo_invoices").select("id,invoice_number,issue_date,total,payment_status,fiscalization_status").eq("organization_id", organizationId).eq("status", "issued").gte("issue_date", monthStart).order("created_at", { ascending: false }).limit(100),
+    supabase.from("fiskalo_invoices").select("id,invoice_number,issue_date,total,payment_status,fiscalization_status").eq("organization_id", organizationId).eq("status", "issued").gte("issue_date", monthStart).lt("issue_date", nextMonthStart).order("created_at", { ascending: false }).limit(100),
     supabase.from("fiskalo_products").select("id,stock_quantity,track_stock").eq("organization_id", organizationId).eq("is_active", true),
     supabase.from("fiskalo_customers").select("id", { count: "exact", head: true }).eq("organization_id", organizationId),
   ]);
@@ -64,7 +64,7 @@ export default async function BusinessDashboard({ params }: Props) {
     { href:`/app/${organizationId}/customers`, title:"Shto klient", detail:"Ruaj të dhënat e klientit", icon:Contact, roles:["owner","administrator","manager","accountant"] },
     { href:`/app/${organizationId}/expenses`, title:"Regjistro shpenzim", detail:"Shto një shpenzim të biznesit", icon:ReceiptText, roles:["owner","administrator","manager","accountant"] },
     { href:`/app/${organizationId}/purchases`, title:"Regjistro blerje", detail:"Faturat e furnitorëve dhe hyrjet e mallit", icon:Truck, roles:["owner","administrator","manager","accountant"] },
-    { href:`/app/${organizationId}/reports`, title:"Raportet financiare", detail:"Shitjet, TVSH-ja dhe shpenzimet", icon:ChartNoAxesCombined, roles:["owner","administrator","manager","accountant"] },
+    { href:`/app/${organizationId}/reports`, title:"Raportet financiare", detail:"Shitjet, TVSH-ja dhe shpenzimet", icon:FileBarChart2, roles:["owner","administrator","manager","accountant"] },
   ].filter(item => item.roles.includes(role));
   return <main className="qb-dashboard">
     <section className="qb-welcome"><div><span className="qb-eyebrow">PËRMBLEDHJA E BIZNESIT</span><h1>Përshëndetje, {roleLabel[role] ?? role}</h1><p>{organization.trade_name || organization.legal_name} · {organization.municipality || "Kosovë"}</p></div>{["owner", "administrator", "manager", "cashier"].includes(role) && <Link className="qb-primary-action" href={`/app/${organizationId}/pos`}><Plus size={17}/> Shitje e re</Link>}</section>
