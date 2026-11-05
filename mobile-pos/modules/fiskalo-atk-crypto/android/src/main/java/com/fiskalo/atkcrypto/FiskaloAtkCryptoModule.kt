@@ -1,5 +1,16 @@
 package com.fiskalo.atkcrypto
 
+import android.Manifest
+import android.app.PendingIntent
+import android.bluetooth.BluetoothManager
+import android.content.Context
+import android.content.Intent
+import android.hardware.usb.UsbConstants
+import android.hardware.usb.UsbManager
+import android.os.Build
+import java.net.InetSocketAddress
+import java.net.Socket
+import java.util.UUID
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyInfo
 import android.security.keystore.KeyProperties
@@ -14,6 +25,7 @@ import java.security.KeyPairGenerator
 import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.Signature
+import java.security.SecureRandom
 import java.security.spec.ECGenParameterSpec
 import java.security.cert.CertificateFactory
 
@@ -23,6 +35,12 @@ class FiskaloAtkCryptoModule : Module() {
 
     AsyncFunction("hasKey") { alias: String ->
       keyStore().containsAlias(normalizeAlias(alias))
+    }
+
+    AsyncFunction("createVerificationNo") {
+      val alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      val random = SecureRandom()
+      buildString(16) { repeat(16) { append(alphabet[random.nextInt(alphabet.length)]) } }
     }
 
     AsyncFunction("createCsr") { alias: String, businessName: String, nui: String, branchId: String, posId: String ->
@@ -65,9 +83,9 @@ class FiskaloAtkCryptoModule : Module() {
         .getKeySpec(pair.private, KeyInfo::class.java)
       val fingerprint = MessageDigest.getInstance("SHA-256").digest(pair.public.encoded)
         .joinToString(":") { "%02x".format(it) }
-      val pem = "-----BEGIN CERTIFICATE REQUEST-----\\n" +
-        Base64.encodeToString(csr, Base64.NO_WRAP).chunked(64).joinToString("\\n") +
-        "\\n-----END CERTIFICATE REQUEST-----"
+      val pem = "-----BEGIN CERTIFICATE REQUEST-----\n" +
+        Base64.encodeToString(csr, Base64.NO_WRAP).chunked(64).joinToString("\n") +
+        "\n-----END CERTIFICATE REQUEST-----"
       mapOf(
         "alias" to keyAlias,
         "csrPem" to pem,
@@ -92,6 +110,146 @@ class FiskaloAtkCryptoModule : Module() {
       val certificate = CertificateFactory.getInstance("X.509").generateCertificate(ByteArrayInputStream(certificateBytes))
       val localCertificate = keyStore().getCertificate(normalizeAlias(alias)) ?: return@AsyncFunction false
       MessageDigest.isEqual(certificate.publicKey.encoded, localCertificate.publicKey.encoded)
+    }
+
+    AsyncFunction("requestBluetoothPermission") {
+      val activity = appContext.currentActivity
+      if (activity == null) false
+      else if (Build.VERSION.SDK_INT < 31) true
+      else if (activity.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == android.content.pm.PackageManager.PERMISSION_GRANTED) true
+      else {
+        activity.requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 7331)
+        false
+      }
+    }
+
+    AsyncFunction("listBluetoothPrinters") {
+      val context = appContext.reactContext ?: throw IllegalStateException("Android context is unavailable.")
+      if (Build.VERSION.SDK_INT >= 31 && context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+        throw IllegalStateException("Grant Nearby devices permission, then refresh paired printers.")
+      val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+        ?: throw IllegalStateException("This Android device does not support Bluetooth.")
+      adapter.bondedDevices.map { device ->
+        mapOf("name" to (device.name ?: "Bluetooth printer"), "address" to device.address)
+      }.sortedBy { it["name"].toString() }
+    }
+
+    AsyncFunction("printBluetooth") { address: String, dataBase64: String ->
+      val context = appContext.reactContext ?: throw IllegalStateException("Android context is unavailable.")
+      if (Build.VERSION.SDK_INT >= 31 && context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+        throw IllegalStateException("Grant Nearby devices permission, then retry printing.")
+      require(address.matches(Regex("(?i)[0-9a-f]{2}(:[0-9a-f]{2}){5}"))) { "Select a paired Bluetooth printer." }
+      val bytes = Base64.decode(dataBase64, Base64.DEFAULT)
+      require(bytes.isNotEmpty() && bytes.size <= 262144) { "Print data must be between 1 byte and 256 KB." }
+      val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+        ?: throw IllegalStateException("Bluetooth is not available.")
+      val device = adapter.bondedDevices.firstOrNull { it.address.equals(address, true) }
+        ?: throw IllegalStateException("Pair the printer in Android Bluetooth settings first.")
+      val socket = device.createRfcommSocketToServiceRecord(UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"))
+      try {
+        adapter.cancelDiscovery()
+        socket.connect()
+        socket.outputStream.use { stream -> stream.write(bytes); stream.flush() }
+      } finally { runCatching { socket.close() } }
+      mapOf("printed" to true, "transport" to "bluetooth-classic")
+    }
+
+    AsyncFunction("listUsbPrinters") {
+      val context = appContext.reactContext ?: throw IllegalStateException("Android context is unavailable.")
+      val manager = context.getSystemService(Context.USB_SERVICE) as UsbManager
+      manager.deviceList.values.map { device ->
+        mapOf(
+          "deviceId" to device.deviceId,
+          "deviceName" to device.deviceName,
+          "manufacturerName" to (device.manufacturerName ?: ""),
+          "productName" to (device.productName ?: "USB printer"),
+          "vendorId" to device.vendorId,
+          "productId" to device.productId,
+          "hasPermission" to manager.hasPermission(device)
+        )
+      }
+    }
+
+    AsyncFunction("requestUsbPermission") { deviceId: Int ->
+      val context = appContext.reactContext ?: throw IllegalStateException("Android context is unavailable.")
+      val manager = context.getSystemService(Context.USB_SERVICE) as UsbManager
+      val device = manager.deviceList.values.firstOrNull { it.deviceId == deviceId }
+        ?: throw IllegalArgumentException("USB device was not found.")
+      if (!manager.hasPermission(device)) {
+        val intent = Intent("com.fiskalo.pos.USB_PERMISSION").setPackage(context.packageName)
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0
+        val permissionIntent = PendingIntent.getBroadcast(context, deviceId, intent, flags)
+        manager.requestPermission(device, permissionIntent)
+      }
+      mapOf("permissionGranted" to manager.hasPermission(device), "permissionDialogRequested" to !manager.hasPermission(device))
+    }
+
+    AsyncFunction("printUsb") { deviceId: Int, dataBase64: String ->
+      val context = appContext.reactContext ?: throw IllegalStateException("Android context is unavailable.")
+      val manager = context.getSystemService(Context.USB_SERVICE) as UsbManager
+      val device = manager.deviceList.values.firstOrNull { it.deviceId == deviceId }
+        ?: throw IllegalArgumentException("USB printer was not found. Reconnect it and refresh.")
+      if (!manager.hasPermission(device)) {
+        val intent = Intent("com.fiskalo.pos.USB_PERMISSION").setPackage(context.packageName)
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0
+        manager.requestPermission(device, PendingIntent.getBroadcast(context, deviceId, intent, flags))
+        throw IllegalStateException("USB_PERMISSION_REQUESTED: approve the Android USB prompt, then tap print again.")
+      }
+      val bytes = Base64.decode(dataBase64, Base64.DEFAULT)
+      require(bytes.isNotEmpty() && bytes.size <= 262144) { "Print data must be between 1 byte and 256 KB." }
+      val connection = manager.openDevice(device) ?: throw IllegalStateException("Android could not open the USB printer.")
+      try {
+        var selectedInterface: android.hardware.usb.UsbInterface? = null
+        var selectedEndpoint: android.hardware.usb.UsbEndpoint? = null
+        for (interfaceIndex in 0 until device.interfaceCount) {
+          val candidate: android.hardware.usb.UsbInterface = device.getInterface(interfaceIndex)
+          for (endpointIndex in 0 until candidate.endpointCount) {
+            val endpoint: android.hardware.usb.UsbEndpoint = candidate.getEndpoint(endpointIndex)
+            if (endpoint.direction == UsbConstants.USB_DIR_OUT &&
+              endpoint.type == UsbConstants.USB_ENDPOINT_XFER_BULK) {
+              selectedInterface = candidate
+              selectedEndpoint = endpoint
+              break
+            }
+          }
+          if (selectedInterface != null) break
+        }
+        val usbInterface = selectedInterface
+          ?: throw IllegalStateException("No USB bulk-output endpoint was found. This printer may need a vendor driver.")
+        val outputEndpoint = selectedEndpoint
+          ?: throw IllegalStateException("No USB bulk-output endpoint was found. This printer may need a vendor driver.")
+        if (!connection.claimInterface(usbInterface, true)) throw IllegalStateException("Could not claim the USB printer interface.")
+        try {
+          var offset = 0
+          while (offset < bytes.size) {
+            val length = minOf(16384, bytes.size - offset)
+            val chunk = bytes.copyOfRange(offset, offset + length)
+            val sent = connection.bulkTransfer(outputEndpoint, chunk, chunk.size, 5000)
+            if (sent <= 0) throw IllegalStateException("USB printer stopped accepting data.")
+            offset += sent
+          }
+        } finally { connection.releaseInterface(usbInterface) }
+      } finally { connection.close() }
+      mapOf("printed" to true, "transport" to "usb")
+    }
+
+    AsyncFunction("printNetwork") { host: String, port: Int, dataBase64: String ->
+      require(port == 9100) { "For safety, raw LAN printing is restricted to TCP port 9100." }
+      val parts = host.split(".").mapNotNull { it.toIntOrNull() }
+      require(parts.size == 4 && parts.all { it in 0..255 }) { "Enter the printer's private IPv4 address." }
+      val privateAddress = parts[0] == 10 ||
+        (parts[0] == 172 && parts[1] in 16..31) ||
+        (parts[0] == 192 && parts[1] == 168) ||
+        (parts[0] == 169 && parts[1] == 254)
+      require(privateAddress) { "Only private local-network printer addresses are allowed." }
+      val bytes = Base64.decode(dataBase64, Base64.DEFAULT)
+      require(bytes.isNotEmpty() && bytes.size <= 262144) { "Print data must be between 1 byte and 256 KB." }
+      Socket().use { socket ->
+        socket.connect(InetSocketAddress(host, port), 5000)
+        socket.soTimeout = 5000
+        socket.getOutputStream().use { stream -> stream.write(bytes); stream.flush() }
+      }
+      mapOf("printed" to true, "transport" to "lan-9100")
     }
 
     AsyncFunction("deleteKey") { alias: String ->

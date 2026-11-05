@@ -34,6 +34,9 @@ The installer creates a per-user application directory and desktop shortcut. It 
 | POST | /api/v1/atk/test/verify | Verify registered test taxpayer/POS with ATK |
 | POST | /api/v1/atk/test/sign-csr | Request ATK test certificate and check public-key match |
 | POST | /api/v1/atk/test/coupon | Sign, queue and submit an ATK test coupon |
+| GET | /api/v1/printers | Enumerate installed Windows printers |
+| POST | /api/v1/printers/test | Print a non-fiscal ESC/POS test receipt (58/80 mm) |
+| POST | /api/v1/printers/print | Send ESC/POS bytes to a Windows queue or private LAN printer on TCP 9100 |
 | GET | /api/v1/queue | Read queue metadata; never returns signed payloads |
 | POST | /api/v1/queue/reconcile | Operator-controlled resolution of uncertain submissions |
 
@@ -85,7 +88,7 @@ Do not choose not_found_confirmed when ATK is unavailable, when the search is in
 - Not ATK-certified; production fiscalization is disabled.
 - Foreground process only; no Windows service, auto-start, persistent pairing session or updater.
 - Windows x64 only for DPAPI-backed signing and queue protection.
-- No printer/cash drawer/card terminal integration.
+- Thermal receipt printing is supported through installed Windows printer queues (USB or Bluetooth devices installed in Windows) and private LAN printers using raw TCP port 9100. Android app printing is a separate Bluetooth Classic SPP path. Android USB direct printing, cash drawer and card terminal integration are not included.
 - Browser checkout and Android app issue internal Fiskalo invoices; invoice-to-ATK mapping is a core milestone and is not yet automatically wired to checkout.
 - Android does not yet have an ATK signing agent or Android Keystore implementation.
 - No test taxpayer, ATK test certificate or coupon submission has been supplied/performed in this development batch.

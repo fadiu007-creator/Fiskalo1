@@ -3,7 +3,7 @@ import { createClient as createCookieClient } from "@/lib/supabase/server";
 
 export async function getAtkRequestContext(request: Request) {
   const authorization = request.headers.get("authorization") ?? "";
-  const bearer = authorization.match(/^Bearer\\s+(.+)$/i)?.[1];
+  const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
   let supabase;
   if (bearer) {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -25,6 +25,7 @@ export async function authorizeAtkOrganization(
   userId: string,
   organizationId: string,
   taxpayerNui: string,
+  allowedRoles: string[] = ["owner", "administrator"],
 ) {
   const { data: membership, error: membershipError } = await supabase
     .from("fiskalo_organization_users")
@@ -32,13 +33,13 @@ export async function authorizeAtkOrganization(
     .eq("organization_id", organizationId)
     .eq("user_id", userId)
     .maybeSingle();
-  if (membershipError || !membership || !["owner", "administrator"].includes(membership.role)) {
-    return { ok: false as const, status: 403, detail: "Only a business owner or administrator can run ATK test onboarding." };
+  if (membershipError || !membership || !allowedRoles.includes(membership.role)) {
+    return { ok: false as const, status: 403, detail: "This account does not have permission for this ATK operation." };
   }
 
   const { data: organization, error: organizationError } = await supabase
     .from("fiskalo_organizations")
-    .select("nui,legal_name")
+    .select("nui,legal_name,municipality")
     .eq("id", organizationId)
     .single();
   if (organizationError || !organization || String(organization.nui) !== taxpayerNui) {

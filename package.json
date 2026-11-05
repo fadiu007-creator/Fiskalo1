@@ -15,19 +15,24 @@
   "dependencies": {
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.114.0",
-    "next": "15.5.28",
+    "next": "15.5.29",
     "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "lucide-react": "^0.468.0",
+    "qrcode-generator": "2.0.4"
   },
   "devDependencies": {
     "@types/node": "22.18.0",
     "@types/react": "19.1.0",
     "@types/react-dom": "19.1.0",
     "eslint": "9.35.0",
-    "eslint-config-next": "15.5.28",
+    "eslint-config-next": "15.5.29",
     "typescript": "5.9.2",
     "@eslint/eslintrc": "3.3.1",
-    "@opennextjs/cloudflare": "latest",
+    "@opennextjs/cloudflare": "1.20.16",
     "wrangler": "latest"
+  },
+  "overrides": {
+    "@aws-sdk/credential-provider-ini": "3.973.19"
   }
 }

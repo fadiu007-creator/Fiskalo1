@@ -1,4 +1,4 @@
-import { authorizeAtkOrganization, getAtkRequestContext, positiveInteger } from "@/lib/atk/server-auth";
+import { getAtkRequestContext, positiveInteger } from "@/lib/atk/server-auth";
 
 export async function POST(request: Request) {
   let body: Record<string, unknown>;
@@ -9,6 +9,7 @@ export async function POST(request: Request) {
   if (authError || !user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   const organizationId = typeof body.organizationId === "string" ? body.organizationId : "";
+  const posInstallationId = typeof body.posInstallationId === "string" ? body.posInstallationId : "";
   const nui = typeof body.nui === "string" ? body.nui : String(body.nui ?? "");
   const businessName = typeof body.businessName === "string" ? body.businessName.trim() : "";
   const verificationCode = typeof body.verificationCode === "string" ? body.verificationCode.trim() : "";
@@ -16,12 +17,38 @@ export async function POST(request: Request) {
   const branchId = positiveInteger(body.branchId);
   const posId = positiveInteger(body.posId);
   const applicationId = positiveInteger(body.applicationId);
-  if (!organizationId || !/^\\d{9}$/.test(nui) || !businessName || !verificationCode ||
-      !csrPem.startsWith("-----BEGIN CERTIFICATE REQUEST-----") || !branchId || !posId || !applicationId) {
-    return Response.json({ error: "invalid_certificate_request", detail: "Verified business identity, NUI, verification code, CSR, branch ID, POS ID and Application ID are required." }, { status: 400 });
+  if (!organizationId || !posInstallationId || !/^\d{9}$/.test(nui) || !businessName || !verificationCode ||
+      !csrPem.startsWith("-----BEGIN CERTIFICATE REQUEST-----") ||
+      !csrPem.includes("-----END CERTIFICATE REQUEST-----") || csrPem.length > 20000 ||
+      !branchId || !posId || !applicationId) {
+    return Response.json({ error: "invalid_certificate_request", detail: "Verified business identity, POS installation, NUI, verification code, CSR, branch ID, POS ID and Application ID are required." }, { status: 400 });
   }
-  const authorization = await authorizeAtkOrganization(supabase, user.id, organizationId, nui);
-  if (!authorization.ok) return Response.json({ error: "organization_not_authorized", detail: authorization.detail }, { status: authorization.status });
+
+  // Initial ATK verification remains owner/admin-only. Staff can provision a
+  // local key only after the exact POS has a matching saved verification.
+  const { data: membership, error: membershipError } = await supabase
+    .from("fiskalo_organization_users").select("role")
+    .eq("organization_id", organizationId).eq("user_id", user.id).maybeSingle();
+  if (membershipError || !membership || !["owner", "administrator", "manager", "cashier"].includes(membership.role)) {
+    return Response.json({ error: "organization_not_authorized", detail: "This account cannot provision an ATK POS certificate." }, { status: 403 });
+  }
+  const [{ data: organization, error: organizationError }, { data: pos, error: posError }, { data: verification, error: verificationError }] = await Promise.all([
+    supabase.from("fiskalo_organizations").select("nui").eq("id", organizationId).single(),
+    supabase.from("fiskalo_atk_pos_installations").select("id,environment,atk_branch_id,pos_id")
+      .eq("id", posInstallationId).eq("organization_id", organizationId).maybeSingle(),
+    supabase.from("fiskalo_atk_pos_verifications").select("nui,atk_branch_id,pos_id,application_id,verification_code,business_name")
+      .eq("organization_id", organizationId).eq("pos_installation_id", posInstallationId).maybeSingle(),
+  ]);
+  if (organizationError || !organization || String(organization.nui) !== nui ||
+      posError || !pos || pos.environment !== "test" ||
+      Number(pos.atk_branch_id) !== branchId || Number(pos.pos_id) !== posId ||
+      verificationError || !verification || verification.nui !== nui ||
+      Number(verification.atk_branch_id) !== branchId || Number(verification.pos_id) !== posId ||
+      Number(verification.application_id) !== applicationId ||
+      verification.verification_code !== verificationCode ||
+      (verification.business_name && verification.business_name !== businessName)) {
+    return Response.json({ error: "pos_verification_mismatch", detail: "A matching saved ATK TEST verification is required before a device certificate can be issued." }, { status: 403 });
+  }
 
   try {
     const response = await fetch("https://fiskalizimi-test.atk-ks.org/ca/signcsr", {
