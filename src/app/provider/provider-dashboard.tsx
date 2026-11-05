@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   Activity, ArrowUpRight, Building2, CheckCircle2, CircleAlert, Cpu,
-  LayoutDashboard, Search, Settings2, ShieldCheck, Store, ExternalLink, FileCheck2,
+  LayoutDashboard, Search, Settings2, ShieldCheck, Store, ExternalLink, FileCheck2, LogOut,
 } from "lucide-react";
 
 export type ProviderBusiness = {
@@ -65,6 +65,8 @@ export default function ProviderDashboard({
   const [atkSaving, setAtkSaving] = useState(false);
   const [atkMessage, setAtkMessage] = useState("");
   const [atkError, setAtkError] = useState("");
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState("");
   const [atkForm, setAtkForm] = useState({
     organization_id: "", lookup_type: "fiscal_number", lookup_value: "",
     fiscal_number: "", nrb: "", taxpayer_name: "", registration_status: "",
@@ -82,9 +84,17 @@ export default function ProviderDashboard({
   const productionPos = posDevices.filter((pos) => pos.environment === "production").length;
 
   async function signOut() {
-    await supabase.auth.signOut();
-    router.replace("/login");
-    router.refresh();
+    if (signingOut) return;
+    setSigningOut(true); setSignOutError("");
+    try {
+      const { error: signOutFailure } = await supabase.auth.signOut();
+      if (signOutFailure) throw signOutFailure;
+      router.replace("/login");
+      router.refresh();
+    } catch (failure) {
+      setSignOutError(failure instanceof Error ? failure.message : "Dalja nga llogaria dështoi. Provo përsëri.");
+      setSigningOut(false);
+    }
   }
 
   async function updateBusinessPlan(organizationId: string, plan: "starter" | "standard" | "pro") {
@@ -162,10 +172,10 @@ export default function ProviderDashboard({
       </aside>
 
       <main className="provider-main" id="overview">
-        <header className="provider-topbar"><div><span className="provider-eyebrow">MENAXHIM I PLATFORMËS</span><h1>Qendra e ofruesit</h1></div><div className="provider-top-actions"><Link href="/app" className="provider-workspace-link">Hap bizneset <ArrowUpRight size={14}/></Link><span className="provider-live"><i/> Hapësira e ofruesit</span><span className="provider-user-chip">{userEmail}</span></div></header>
+        <header className="provider-topbar"><div><span className="provider-eyebrow">MENAXHIM I PLATFORMËS</span><h1>Qendra e ofruesit</h1></div><div className="provider-top-actions"><Link href="/app" className="provider-workspace-link">Hap bizneset <ArrowUpRight size={14}/></Link><span className="provider-live"><i/> Hapësira e ofruesit</span><span className="provider-user-chip">{userEmail}</span><button type="button" className="provider-top-signout" onClick={() => void signOut()} disabled={signingOut}><LogOut size={15}/>{signingOut ? "Duke dalë…" : "Dil"}</button></div></header>
         <section className="provider-welcome"><div><span className="provider-eyebrow">PANELI I OFRUESIT</span><h2>Kontrollo Fiskalo nga një vend.</h2><p>Menaxho bizneset kliente, instalimet POS dhe konfigurimin e softuerit fiskal.</p></div><div className="provider-welcome-mark"><ShieldCheck size={42}/><span>Qasje e ndarë</span></div></section>
 
-        {loadError && <div className="provider-alert bad"><CircleAlert size={17}/> Nuk u ngarkuan të gjitha të dhënat: {loadError}</div>}
+        {signOutError && <div className="provider-alert bad" role="alert"><CircleAlert size={17}/> Dalja nga llogaria dështoi: {signOutError}</div>}{loadError && <div className="provider-alert bad"><CircleAlert size={17}/> Nuk u ngarkuan të gjitha të dhënat: {loadError}</div>}
         <section className="provider-stats">
           <article><span className="provider-stat-icon"><Store size={19}/></span><small>Biznese kliente</small><strong>{moneyless(businesses.length)}</strong><em>Organizata të regjistruara</em></article>
           <article><span className="provider-stat-icon"><Cpu size={19}/></span><small>Instalime POS</small><strong>{moneyless(posDevices.length)}</strong><em>{testPos} TEST · {productionPos} PRODUCTION</em></article>

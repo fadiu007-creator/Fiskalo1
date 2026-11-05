@@ -374,3 +374,16 @@ input::placeholder, textarea::placeholder { color: #9aa69f; }
 @media (min-width: 761px) and (max-width: 1050px) {
   .fiskalo-pos .pos-layout { grid-template-columns:minmax(0,1.2fr) minmax(290px,.8fr) !important; }
 }
+
+
+/* Provider account actions stay reachable on narrow screens. */
+.provider-top-signout{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid #d7e3dc;border-radius:9px;background:#fff;color:#24543d;padding:9px 12px;font-size:11px;font-weight:800;white-space:nowrap;cursor:pointer}
+.provider-top-signout:hover{background:#edf7f1;border-color:#b8d7c5}
+.provider-top-signout:disabled{opacity:.65;cursor:wait}
+.provider-top-actions{flex-wrap:wrap}
+@media(max-width:760px){
+  .provider-topbar{align-items:flex-start;gap:10px}
+  .provider-top-actions{justify-content:flex-end;gap:8px}
+  .provider-top-signout{padding:8px 10px}
+  .provider-sidebar-bottom{display:none}
+}

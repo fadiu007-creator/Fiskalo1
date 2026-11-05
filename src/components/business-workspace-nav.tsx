@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeftRight, Boxes, Building2, FileText, LayoutDashboard, Settings2, ShoppingCart, Users, Wallet, UserCircle, LogOut } from "lucide-react";
+import { ArrowLeftRight, Boxes, Building2, FileBarChart2, FileText, LayoutDashboard, Settings2, ShoppingCart, Users, Wallet, UserCircle, LogOut, Warehouse } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 const items = [
   { path: "", label: "Përmbledhja", icon: LayoutDashboard, roles: ["owner","administrator","manager","accountant","cashier"] },
-  { path: "/pos", label: "Arka / POS", icon: ShoppingCart, roles: ["owner","administrator","manager","accountant","cashier"] },
+  { path: "/pos", label: "Arka / POS", icon: ShoppingCart, roles: ["owner","administrator","manager","cashier"] },
   { path: "/invoices", label: "Faturat", icon: FileText, roles: ["owner","administrator","manager","accountant","cashier"] },
+  { path: "/reports", label: "Raportet", icon: FileBarChart2, roles: ["owner","administrator","manager","accountant"] },
   { path: "/pos/products", label: "Produktet", icon: Boxes, roles: ["owner","administrator","manager"] },
+  { path: "/inventory", label: "Inventari", icon: Warehouse, roles: ["owner","administrator","manager"] },
   { path: "/pos/shifts", label: "Ndërrimet", icon: Wallet, roles: ["owner","administrator","manager","cashier"] },
   { path: "/team", label: "Ekipi", icon: Users, roles: ["owner","administrator"] },
   { path: "/pos/setup", label: "ATK", icon: Settings2, roles: ["owner","administrator"] },
