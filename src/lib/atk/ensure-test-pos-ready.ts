@@ -51,9 +51,10 @@ async function runEnsureATKTestPosReady(
 
   const applicationStorageKey = "fiskalo-atk-application-id:" + organizationId;
   const savedApplicationId = window.localStorage.getItem(applicationStorageKey);
-  // 929645146946 was an old placeholder, not the application ID supplied for this ATK TEST account.
   const configuredApplicationId = Number(providerApplicationId ?? 0);
-  let applicationId = configuredApplicationId > 0 ? configuredApplicationId : Number(savedApplicationId && savedApplicationId !== "929645146946" ? savedApplicationId : "457818860373");
+  let applicationId = configuredApplicationId > 0
+    ? configuredApplicationId
+    : Number(savedApplicationId && savedApplicationId !== "929645146946" ? savedApplicationId : 0);
   const orderedPositions = [...positions]
     .filter((candidate) => candidate.status !== "suspended" && candidate.status !== "revoked")
     .sort((a, b) => Number(a.atk_branch_id) - Number(b.atk_branch_id) || Number(a.pos_id) - Number(b.pos_id));
@@ -64,14 +65,15 @@ async function runEnsureATKTestPosReady(
     .in("pos_installation_id", orderedPositions.map((candidate) => candidate.id));
   if (savedError) throw new Error("Verifikimet e ruajtura të POS-it nuk u lexuan: " + savedError.message);
   const verificationByPos = new Map((savedVerifications ?? []).map((row) => [row.pos_installation_id, row]));
-  // Cashiers/managers cannot read provider-wide settings. Reuse the exact
-  // Application ID saved with this POS verification instead of failing POS login.
-  if (providerApplicationIdError || configuredApplicationId <= 0) {
-    const savedForBusiness = orderedPositions
-      .map((candidate) => verificationByPos.get(candidate.id))
-      .find((row) => row && row.nui === String(org.nui) &&
-        Number.isSafeInteger(Number(row.application_id)) && Number(row.application_id) > 0);
-    if (savedForBusiness) applicationId = Number(savedForBusiness.application_id);
+
+  // Prefer the exact Application ID returned by the verified POS record. Never
+  // silently substitute a sample/default identifier into a live ATK request.
+  const savedForBusiness = orderedPositions
+    .map((candidate) => verificationByPos.get(candidate.id))
+    .find((row) => row && row.nui === String(org.nui) &&
+      Number.isSafeInteger(Number(row.application_id)) && Number(row.application_id) > 0);
+  if ((providerApplicationIdError || configuredApplicationId <= 0) && savedForBusiness) {
+    applicationId = Number(savedForBusiness.application_id);
   }
   const validVerifiedPositions = orderedPositions.filter((candidate) => {
     const row = verificationByPos.get(candidate.id);
@@ -95,13 +97,14 @@ async function runEnsureATKTestPosReady(
       Number(saved.atk_branch_id) === Number(pos.atk_branch_id) &&
       Number(saved.pos_id) === Number(pos.pos_id) &&
       saved.verification_code && Number.isSafeInteger(Number(saved.application_id)) &&
-      Number(saved.application_id) > 0) {
+      Number(saved.application_id) > 0 &&
+      (!applicationId || Number(saved.application_id) === applicationId)) {
     businessName = saved.business_name || String(org.legal_name || "");
     verificationCode = saved.verification_code;
     applicationId = Number(saved.application_id);
   } else {
     if (!Number.isSafeInteger(applicationId) || applicationId <= 0) {
-      throw new Error("Application ID mungon. Ruaje ID-në e aplikimit në konfigurimin ATK.");
+      throw new Error("Application ID mungon. Ruaje ID-në e saktë të aplikimit ATK në konfigurimin e ofruesit ose verifiko POS-in për ta ruajtur.");
     }
     const verifyResponse = await fetch("/api/atk/test/verify", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -119,7 +122,7 @@ async function runEnsureATKTestPosReady(
     businessName = String(verifyData.businessName || "");
     verificationCode = String(verifyData.verificationCode || "");
     if (!businessName || !verificationCode) throw new Error("ATK nuk ktheu business_name dhe verification_code.");
-    window.localStorage.setItem("fiskalo-atk-application-id:" + organizationId, String(applicationId));
+    window.localStorage.setItem(applicationStorageKey, String(applicationId));
   }
 
   if (await hasBrowserPosCertificate(keyId)) {
