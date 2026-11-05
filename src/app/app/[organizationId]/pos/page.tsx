@@ -399,16 +399,16 @@ export default function WebPosPage() {
   if (loading) return <main style={{ maxWidth: 1200, margin: "0 auto", padding: 24 }}>Duke hapur POS...</main>;
   if (userRole === "accountant") return <main style={{ maxWidth: 720, margin: "40px auto", padding: 24 }}><h1>Qasje vetëm për lexim financiar</h1><p style={{ color: "var(--muted)", lineHeight: 1.6 }}>Roli Kontabilist mund t’i kontrollojë faturat dhe të dhënat financiare, por nuk mund të përdorë arkën e shitjeve.</p><Link href={`/app/${organizationId}/invoices`} style={{ color: "var(--brand)", fontWeight: 750 }}>Hap faturat</Link></main>;
 
-  return <main className="fiskalo-pos" style={{ maxWidth: 1440, margin: "0 auto", padding: "22px clamp(12px,3vw,28px) 50px" }}>
-    <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
-      <div><h1 style={{ margin: "8px 0 0", fontSize: 28 }}>Arka</h1><div style={{ color: "var(--muted)", fontSize: 13 }}>Zgjedh produktet, shto në porosi dhe prano pagesën. Totali llogaritet vetë.</div></div>
+  return <main className="fiskalo-pos hybrid-pos" style={{ maxWidth: 1440, margin: "0 auto", padding: "22px clamp(12px,3vw,28px) 50px" }}>
+    <header className="hybrid-pos-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
+      <div><span className="pos-kicker">KASA / SHITJE E SHPEJTË</span><h1 style={{ margin: "8px 0 0", fontSize: 28 }}>Pika e shitjes</h1><div className="pos-header-subtitle" style={{ color: "var(--muted)", fontSize: 13 }}>Zgjidh produktet me një prekje. Shporta dhe pagesa përditësohen automatikisht.</div></div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Link href={`/app/${organizationId}/pos/shifts`} style={{ ...secondary, textDecoration: "none" }}>Ndërrimi i arkës</Link>{["owner", "administrator", "manager"].includes(userRole) && <Link href={`/app/${organizationId}/pos/products`} style={{ ...secondary, textDecoration: "none" }}>Produktet</Link>}{isManagement && <Link href={`/app/${organizationId}/pos/setup`} style={{ ...secondary, textDecoration: "none" }}><Settings2 size={15} /> Konfiguro ATK</Link>}
         {userRole !== "cashier" && <Link href={`/app/${organizationId}`} style={{ ...secondary, textDecoration: "none" }}>Paneli i biznesit</Link>}<button style={secondary} onClick={() => void load()}><RefreshCw size={15} /> Rifresko</button></div>
     </header>
     <ThermalPrinterSettings />
     <div role="status" style={{ marginBottom: 12, border: "1px solid var(--line)", borderRadius: 10, padding: "10px 12px", color: "var(--muted)", fontSize: 13 }}>{["owner", "administrator"].includes(userRole) ? atkSetupNotice : "Arka është gati për përdorim. Konfigurimi dhe certifikata ATK TEST menaxhohen nga pronari ose administratori."}</div>
     {!activeShiftId && <div role="status" style={{ marginBottom: 12, border: "1px solid #e8c98d", background: "#fff9ed", borderRadius: 10, padding: 13, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}><div><strong>Hape ndërrimin para pagesave me para në dorë</strong><div style={{ fontSize: 12, marginTop: 3 }}>Kjo lidh çdo pagesë me arkën e arkëtarit dhe mundëson barazimin e saktë në fund të ndërrimit.</div></div><Link href={`/app/${organizationId}/pos/shifts`} style={{ ...button, textDecoration: "none" }}>Hap arkën</Link></div>}
-    <nav aria-label="POS dhe faturat" style={{ display: "flex", gap: 8, marginBottom: 14, borderBottom: "1px solid var(--line)", paddingBottom: 10 }}><button aria-pressed={activeView === "pos"} onClick={() => setActiveView("pos")} style={{ ...(activeView === "pos" ? button : secondary) }}><ShoppingCart size={15} /> Shitje</button><button aria-pressed={activeView === "invoices"} onClick={() => setActiveView("invoices")} style={{ ...(activeView === "invoices" ? button : secondary) }}><FileText size={15} /> Faturat <span className="status-pill">{invoices.length}</span></button></nav>
+    <nav className="pos-mode-tabs" aria-label="POS dhe faturat" style={{ display: "flex", gap: 8, marginBottom: 14, borderBottom: "1px solid var(--line)", paddingBottom: 10 }}><button aria-pressed={activeView === "pos"} onClick={() => setActiveView("pos")} style={{ ...(activeView === "pos" ? button : secondary) }}><ShoppingCart size={15} /> Shitje</button><button aria-pressed={activeView === "invoices"} onClick={() => setActiveView("invoices")} style={{ ...(activeView === "invoices" ? button : secondary) }}><FileText size={15} /> Faturat <span className="status-pill">{invoices.length}</span></button></nav>
     {offlineDrafts.length > 0 && <section style={{ ...panel, marginBottom: 14, borderColor: "#d8c49a" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <div><strong>Porositë e ruajtura në këtë pajisje</strong><div style={{ color: "var(--muted)", fontSize: 12 }}>Draftet ruhen lokalisht në shfletues dhe mund të rikthehen pas rilidhjes.</div></div>
@@ -441,21 +441,23 @@ export default function WebPosPage() {
       </div>}
     </div>}
     <div className="pos-layout" style={{ display: activeView === "pos" ? "grid" : "none", gridTemplateColumns: "minmax(0,1.55fr) minmax(310px,0.85fr)", gap: 14, alignItems: "start" }}>
-      <section style={panel}>
-        <input ref={searchRef} aria-label="Kërko produkt ose skano barkod" placeholder="Kërko produkt ose skano barkod / SKU..." value={search} onChange={(event) => { setSearch(event.target.value); setError(""); }} onKeyDown={handleProductSearchKeyDown} style={{ ...field, marginBottom: 12 }} />
+      <section className="pos-catalog-panel" style={panel}>
+        <div className="pos-catalog-heading"><div><span className="pos-kicker">MENUJA</span><h2>Çfarë po porosit klienti?</h2><p>Prek një produkt për ta shtuar në shportë</p></div><span className="pos-live-count">{visibleProducts.length} produkte</span></div>
+        <input className="pos-search-input" ref={searchRef} aria-label="Kërko produkt ose skano barkod" placeholder="Kërko produkt ose skano barkod / SKU..." value={search} onChange={(event) => { setSearch(event.target.value); setError(""); }} onKeyDown={handleProductSearchKeyDown} style={{ ...field, marginBottom: 12 }} />
         <div className="pos-categories" aria-label="Kategoritë e produkteve">{categories.map((category) => <button key={category} type="button" aria-pressed={selectedCategory === category} onClick={() => setActiveCategory(category)} className={selectedCategory === category ? "pos-category active" : "pos-category"}>{category}</button>)}</div>
         <div className="pos-product-grid">
           {visibleProducts.map((product) => <button key={product.id} type="button" onClick={() => addProduct(product)} className="pos-product-card">
-            <div className="pos-product-image" role="img" aria-label={product.name + " — " + (product.atk_item_category_code || product.pos_category || "TT")}><span className="pos-product-placeholder">{categoryVisual(product.atk_item_category_code || product.pos_category || "TT").icon}</span><small className="pos-product-category-code">{categoryVisual(product.atk_item_category_code || product.pos_category || "TT").label} · {product.atk_item_category_code || product.pos_category || "TT"}</small></div>
+            <div className="pos-product-image" aria-label={product.name}>{product.image_url ? <img src={product.image_url} alt="" loading="lazy" /> : <span className="pos-product-placeholder">{categoryVisual(product.atk_item_category_code || product.pos_category || "TT").icon}</span>}<span className="pos-product-add"><Plus size={17}/></span></div>
+            <span className="pos-product-category-code">{categoryVisual(product.atk_item_category_code || product.pos_category || "TT").label}</span>
             <span className="pos-product-name">{product.name}</span>
             <span className="pos-product-price">{money(Number(product.unit_price) * (1 + Number(product.vat_rate) / 100))}</span>
-            <small>{product.track_stock ? "Stok: " + product.stock_quantity : "Shto në porosi"}</small>
+            <small className="pos-product-stock">{product.track_stock ? (product.stock_quantity > 0 ? "Në stok · " + product.stock_quantity : "Pa stok") : "Gati për porosi"}</small>
           </button>)}
           {!visibleProducts.length && <p style={{ color: "var(--muted)" }}>Nuk u gjetën produkte aktive.</p>}
         </div>
       </section>
-      <aside style={{ ...panel, position: "sticky", top: 12 }}>
-        <h2 style={{ margin: "0 0 12px", fontSize: 19, display: "flex", alignItems: "center", gap: 8 }}><ShoppingCart size={18} /> Shporta <span className="status-pill">{lines.length}</span></h2>
+      <aside className="pos-cart-panel" style={{ ...panel, position: "sticky", top: 12 }}>
+        <div className="pos-cart-heading"><div><span className="pos-kicker">POROSIA AKTUALE</span><h2><ShoppingCart size={19} /> Shporta</h2></div><span className="pos-cart-count">{lines.length} artikuj</span></div>
         <div style={{ display: "grid", gap: 10, maxHeight: "42vh", overflowY: "auto" }}>
           {lines.map((line) => <div key={line.productId} style={{ borderBottom: "1px solid var(--line)", paddingBottom: 9 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><strong>{line.product!.name}</strong><strong>{money(line.lineTotal)}</strong></div>
@@ -468,7 +470,7 @@ export default function WebPosPage() {
           </div>)}
           {!lines.length && <p className="cart-empty" style={{ color: "var(--muted)", textAlign: "center", padding: 20 }}>Shporta është bosh.<br/>Zgjidh produktet për të filluar.</p>}
         </div>
-        <div style={{ borderTop: "1px solid var(--line)", marginTop: 12, paddingTop: 12, display: "grid", gap: 8 }}>
+        <div className="pos-cart-summary" style={{ borderTop: "1px solid var(--line)", marginTop: 12, paddingTop: 12, display: "grid", gap: 8 }}>
           <div style={{ display: "flex", justifyContent: "space-between" }}><span>Nëntotali pa TVSH</span><strong>{money(subtotal)}</strong></div>
           <div style={{ display: "flex", justifyContent: "space-between" }}><span>TVSH</span><strong>{money(vatTotal)}</strong></div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 20 }}><strong>Totali</strong><strong>{money(total)}</strong></div>
@@ -486,7 +488,7 @@ export default function WebPosPage() {
             Konfirmoj se pagesa është pranuar. Fiskalo nuk proceson pagesa me kartelë.
           </label>}
           <button disabled={busy || !cart.length} onClick={() => void saveCurrentOrderDraft()} style={{ ...secondary, width: "100%" }}>Ruaj porosinë në këtë pajisje</button>
-          <button disabled={busy || !lines.length} onClick={() => void completeSale()} style={{ ...button, width: "100%", opacity: busy || !lines.length ? 0.55 : 1 }}>{busy ? "Duke regjistruar..." : paymentMethod === "credit" ? "Lësho faturën" : "Përfundo shitjen · " + money(total)}</button>
+          <button className="pos-checkout-button" disabled={busy || !lines.length} onClick={() => void completeSale()} style={{ ...button, width: "100%", opacity: busy || !lines.length ? 0.55 : 1 }}>{busy ? "Duke regjistruar..." : paymentMethod === "credit" ? "Lësho faturën" : "Përfundo shitjen · " + money(total)}</button>
           <button disabled={busy || !cart.length} onClick={() => { setCart([]); setConfirmedPayment(false); }} style={{ ...secondary, width: "100%" }}>Pastro shportën</button>
         </div>
       </aside>
