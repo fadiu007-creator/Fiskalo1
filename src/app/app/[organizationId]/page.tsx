@@ -21,7 +21,7 @@ export default async function BusinessDashboard({ params }: Props) {
   const [{ data: membership }, { data: organization }, { data: invoices, error: invoiceError }, { data: products }, { count: customerCount }] = await Promise.all([
     supabase.from("fiskalo_organization_users").select("role").eq("organization_id", organizationId).eq("user_id", auth.user.id).maybeSingle(),
     supabase.from("fiskalo_organizations").select("legal_name,trade_name,municipality").eq("id", organizationId).maybeSingle(),
-    supabase.from("fiskalo_invoices").select("id,invoice_number,issue_date,total,payment_status,fiscalization_status").eq("organization_id", organizationId).eq("status", "issued").gte("issue_date", monthStart).lt("issue_date", nextMonthStart).order("created_at", { ascending: false }).limit(100),
+    supabase.from("fiskalo_invoices").select("id,invoice_number,issue_date,total,payment_status,fiscalization_status").eq("organization_id", organizationId).eq("status", "issued").gte("issue_date", monthStart).lt("issue_date", nextMonthStart).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(100),
     supabase.from("fiskalo_products").select("id,stock_quantity,track_stock").eq("organization_id", organizationId).eq("is_active", true),
     supabase.from("fiskalo_customers").select("id", { count: "exact", head: true }).eq("organization_id", organizationId),
   ]);
@@ -36,6 +36,7 @@ export default async function BusinessDashboard({ params }: Props) {
   while (true) {
     const { data, error } = await supabase.from("fiskalo_invoices").select("total,payment_status")
       .eq("organization_id", organizationId).eq("status", "issued").gte("issue_date", monthStart).lt("issue_date", nextMonthStart)
+      .order("issue_date", { ascending: true }).order("id", { ascending: true })
       .range(invoiceOffset, invoiceOffset + 999);
     if (error) { financialDataError = error.message; break; }
     financialInvoices = financialInvoices.concat((data ?? []).map(row => ({ total: Number(row.total || 0), payment_status: row.payment_status })));
@@ -87,6 +88,6 @@ export default async function BusinessDashboard({ params }: Props) {
     {canViewFinance && <section className="qb-panel qb-recent-panel"><div className="qb-panel-heading"><div><h2>Shitjet e fundit këtë muaj</h2><p>Faturat e lëshuara në këtë biznes.</p></div><Link href={`/app/${organizationId}/invoices`}>Shiko të gjitha <ArrowUpRight size={14}/></Link></div>
       {(invoices ?? []).length ? <div className="qb-table-wrap"><table className="qb-table"><thead><tr><th>Fatura</th><th>Data</th><th>Pagesa</th><th>Fiskalizimi</th><th className="numeric">Totali</th></tr></thead><tbody>{(invoices ?? []).slice(0,6).map(invoice => <tr key={invoice.id}><td><Link href={`/app/${organizationId}/invoices/${invoice.id}`}>{invoice.invoice_number || "Draft"}</Link></td><td>{dateLabel(invoice.issue_date)}</td><td><span className={"qb-status "+(invoice.payment_status === "paid" ? "success" : "warning")}>{invoice.payment_status === "paid" ? "E paguar" : invoice.payment_status === "partial" ? "Pjesërisht" : "E papaguar"}</span></td><td>{invoice.fiscalization_status === "accepted" ? <span className="qb-status success">Pranuar nga ATK</span> : <span className="qb-status neutral">{invoice.fiscalization_status || "Jo e fiskalizuar"}</span>}</td><td className="numeric">{money(Number(invoice.total))}</td></tr>)}</tbody></table></div> : <div className="qb-empty-state"><FileText size={24}/><strong>Nuk ka shitje të regjistruara këtë muaj</strong><p>Shitja e parë mund të regjistrohet nga arka.</p><Link href={`/app/${organizationId}/pos`}>Hap arkën <ArrowUpRight size={14}/></Link></div>}
     </section>}
-    <footer className="qb-dashboard-footer"><span>Raporti për muajin aktual · Vlerat në EUR</span><Link href={`/app/${organizationId}/reports`}>Hap raportet financiare</Link></footer>
+    <footer className="qb-dashboard-footer"><span>Raporti për muajin aktual · Vlerat në EUR</span>{canViewFinance && <Link href={`/app/${organizationId}/reports`}>Hap raportet financiare</Link>}</footer>
   </main>;
 }
