@@ -17,6 +17,7 @@ Implemented:
 - Inventory deduction, audited manual stock adjustments, and stock movement records
 - Supplier register, purchase drafts, atomic stock receiving, supplier payment ledger and outstanding balances
 - Date-filtered management reports and CSV exports
+- Daily operational sales/payment/cashier report with date selection and print-to-PDF; explicitly distinguished from an official ATK Z/tax report
 - ATK preparation foundation: taxpayer fiscalization-number profile, test POS registry, fiscal document/event schema and provider production lock
 - Provider-only ATK public taxpayer lookup capture and audit history (manual capture; no unsupported ATK API scraping)
 - Responsive browser POS for product search, cart, invoice issue and confirmed/manual payment ledger posting
@@ -36,6 +37,7 @@ Recent migrations applied to the existing `zikos` project include:
 
 Not yet part of this MVP:
 - Certified ATK EFS fiscalization and electronic submission
+- Official ATK Z/tax report generation and submission, and ATK periodic tax-report submission (must follow the current SEF technical contract; internal daily report is not an ATK filing)
 - Android-native ATK signing/certificate support (current local signing agent is Windows-only)
 - Certified fiscal receipt/QR workflow and hardware integrations
 - Accountant multi-client workspace
