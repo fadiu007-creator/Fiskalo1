@@ -5,7 +5,7 @@ import PrintReportButton from "./print-button";
 
 type Props = { params: Promise<{ organizationId: string }>; searchParams: Promise<{ date?: string }> };
 const money = (value: number | string | null | undefined) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR" }).format(Number(value ?? 0));
-const validDate = (value?: string) => value && /^\\d{4}-\\d{2}-\\d{2}$/.test(value) ? value : new Date().toISOString().slice(0,10);
+const validDate = (value?: string) => value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : new Date().toISOString().slice(0,10);
 
 export default async function DailyReportsPage({ params, searchParams }: Props) {
   const { organizationId } = await params;
