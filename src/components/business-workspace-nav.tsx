@@ -27,7 +27,7 @@ const groups: NavGroup[] = [
     { path: "/inventory", label: "Inventari", icon: Warehouse, roles: managers },
   ]},
   { label: "FINANCAT DHE EKIPI", items: [
-    { path: "/reports", label: "Raportet", icon: ChartNoAxesCombined, roles: finance },
+    { path: "/reports", label: "Raportet", icon: FileBarChart2, roles: finance },
     { path: "/pos/shifts", label: "Ndërrimet e arkës", icon: Wallet, roles: ["owner", "administrator", "manager", "cashier"] },
     { path: "/team", label: "Ekipi", icon: Users, roles: ["owner", "administrator"] },
     { path: "/pos/setup", label: "Konfigurimi ATK", icon: Settings2, roles: ["owner", "administrator"] },
