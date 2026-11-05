@@ -87,6 +87,17 @@ begin
     raise exception 'An ATK-accepted original sale is required before creating a cancellation or return';
   end if;
 
+  if exists (
+    select 1 from public.fiskalo_invoice_adjustments a
+    where a.original_invoice_id = invoice_row.id and a.status <> 'voided'
+      and not exists (
+        select 1 from public.fiskalo_invoice_adjustment_items ai
+        where ai.adjustment_id = a.id
+      )
+  ) then
+    raise exception 'An earlier amount-only adjustment request must be voided or reviewed before item-level adjustments can continue';
+  end if;
+
   if adjustment_kind = 'cancel' and exists (
     select 1 from public.fiskalo_invoice_adjustments
     where original_invoice_id = invoice_row.id and status <> 'voided'
@@ -137,8 +148,19 @@ begin
       raise exception 'A cancellation must include the full quantity of every original invoice item';
     end if;
 
-    net_value := round(invoice_item.line_subtotal * requested_quantity / invoice_item.quantity, 2);
-    vat_value := round(invoice_item.line_vat * requested_quantity / invoice_item.quantity, 2);
+    if requested_quantity = remaining_quantity then
+      select
+        invoice_item.line_subtotal - coalesce(sum(ai.net_amount),0),
+        invoice_item.line_vat - coalesce(sum(ai.vat_amount),0)
+        into net_value, vat_value
+        from public.fiskalo_invoice_adjustment_items ai
+        join public.fiskalo_invoice_adjustments a
+          on a.id = ai.adjustment_id and a.organization_id = ai.organization_id
+        where ai.original_invoice_item_id = invoice_item.id and a.status <> 'voided';
+    else
+      net_value := round(invoice_item.line_subtotal * requested_quantity / invoice_item.quantity, 2);
+      vat_value := round(invoice_item.line_vat * requested_quantity / invoice_item.quantity, 2);
+    end if;
     total_value := net_value + vat_value;
     if total_value <= 0 then raise exception 'Adjustment item total must be greater than zero'; end if;
     calculated_total := calculated_total + total_value;
@@ -173,8 +195,25 @@ begin
       where ii.id = (requested_item->>'invoice_item_id')::uuid
         and ii.invoice_id = invoice_row.id;
     requested_quantity := (requested_item->>'quantity')::numeric;
-    net_value := round(invoice_item.line_subtotal * requested_quantity / invoice_item.quantity, 2);
-    vat_value := round(invoice_item.line_vat * requested_quantity / invoice_item.quantity, 2);
+    select invoice_item.quantity - coalesce(sum(ai.quantity),0)
+      into remaining_quantity
+      from public.fiskalo_invoice_adjustment_items ai
+      join public.fiskalo_invoice_adjustments a
+        on a.id = ai.adjustment_id and a.organization_id = ai.organization_id
+      where ai.original_invoice_item_id = invoice_item.id and a.status <> 'voided';
+    if requested_quantity = remaining_quantity then
+      select
+        invoice_item.line_subtotal - coalesce(sum(ai.net_amount),0),
+        invoice_item.line_vat - coalesce(sum(ai.vat_amount),0)
+        into net_value, vat_value
+        from public.fiskalo_invoice_adjustment_items ai
+        join public.fiskalo_invoice_adjustments a
+          on a.id = ai.adjustment_id and a.organization_id = ai.organization_id
+        where ai.original_invoice_item_id = invoice_item.id and a.status <> 'voided';
+    else
+      net_value := round(invoice_item.line_subtotal * requested_quantity / invoice_item.quantity, 2);
+      vat_value := round(invoice_item.line_vat * requested_quantity / invoice_item.quantity, 2);
+    end if;
     total_value := net_value + vat_value;
     insert into public.fiskalo_invoice_adjustment_items (
       organization_id, adjustment_id, original_invoice_item_id, product_id,
