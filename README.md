@@ -86,8 +86,9 @@ Apply migrations in order:
 Required public environment variables:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` (server-only; required for creating worker Auth accounts from the business team page)
 
-For local development, copy `.env.example` to `.env.local` and fill in those values. Never commit service-role keys, signing keys, or production credentials. The service-role key is not required by the current client MVP.
+For local development, copy `.env.example` to `.env.local` and fill in those values. Never commit service-role keys, signing keys, or production credentials. The service-role key is used only by the server-side `/api/team/add-worker` route. Never expose it through a `NEXT_PUBLIC_` variable, commit its value, or send it to the browser.
 
 Configure the Supabase Auth site URL and redirect allow-list to include the deployed Fiskalo origin and `/auth/callback`, plus `/reset-password` as a recovery destination.
 
@@ -107,7 +108,7 @@ The repository contains `wrangler.jsonc` and `open-next.config.ts`.
 - Deploy: `npm run deploy`
 - Generate Worker types: `npm run cf-typegen`
 
-Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` as Cloudflare Worker environment variables before deployment. Cloudflare deployment also requires GitHub Actions secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, plus build secrets `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. For a first-time Worker creation, the token needs Workers Admin access; if the Worker already exists, Workers Editor is sufficient. Add Workers Routes Write only if deployment also changes a custom domain/route. Set the two Supabase values as Worker runtime variables in the Cloudflare dashboard as well. Then run the manual `Deploy Fiskalo to Cloudflare Workers` workflow from GitHub Actions.
+Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` as Cloudflare Worker environment variables before deployment. Add the Supabase project's service-role key as a GitHub Actions repository secret named `SUPABASE_SERVICE_ROLE_KEY`; the deploy workflow syncs it to the Worker as an encrypted Cloudflare secret before deployment. If this secret is absent, worker-account creation returns the explicit server-configuration error. Cloudflare deployment also requires GitHub Actions secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, plus build secrets `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. For a first-time Worker creation, the token needs Workers Admin access; if the Worker already exists, Workers Editor is sufficient. Add Workers Routes Write only if deployment also changes a custom domain/route. Set the two Supabase values as Worker runtime variables in the Cloudflare dashboard as well. Then run the manual `Deploy Fiskalo to Cloudflare Workers` workflow from GitHub Actions.
 
 ## Provider workspace and ATK taxpayer checks
 
