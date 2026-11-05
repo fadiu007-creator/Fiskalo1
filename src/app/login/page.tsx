@@ -54,7 +54,7 @@ export default function LoginPage() {
         </form>
         <p style={{ marginTop: 14, fontSize: 13 }}><Link href="/forgot-password" style={{ color: "var(--brand)", fontWeight: 700 }}>Ke harruar fjalëkalimin?</Link></p>
         <p style={{ marginTop: 20, fontSize: 13, color: "var(--muted)" }}>Nuk ke llogari? <Link href="/register" style={{ color: "var(--brand)", fontWeight: 700 }}>Regjistro biznesin</Link></p>
-        <p style={{ marginTop: 10, fontSize: 13, color: "var(--muted)" }}>Je pjesë e ekipit të Fiskalo? <Link href="/provider" style={{ color: "var(--brand)", fontWeight: 700 }}>Hyr në hapësirën e ofruesit</Link>. Përdor të njëjtin email dhe fjalëkalim; paneli hapet sipas rolit të llogarisë.
+        <p style={{ marginTop: 10, fontSize: 13, color: "var(--muted)" }}>Je pjesë e ekipit të Fiskalo? <Link href="/provider" style={{ color: "var(--brand)", fontWeight: 700 }}>Hyr në hapësirën e ofruesit</Link>. Përdor të njëjtin email dhe fjalëkalim; paneli hapet sipas rolit të llogarisë.</p>
       </section>
     </main>
   );
