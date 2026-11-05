@@ -200,18 +200,17 @@ begin
       join public.fiskalo_invoice_adjustments a
         on a.id = ai.adjustment_id and a.organization_id = ai.organization_id
       where ai.original_invoice_item_id = invoice_item.id and a.status <> 'voided';
-    if requested_quantity = remaining_quantity then
-      select
-        invoice_item.line_subtotal - coalesce(sum(ai.net_amount),0),
-        invoice_item.line_vat - coalesce(sum(ai.vat_amount),0)
-        into net_value, vat_value
-        from public.fiskalo_invoice_adjustment_items ai
-        join public.fiskalo_invoice_adjustments a
-          on a.id = ai.adjustment_id and a.organization_id = ai.organization_id
-        where ai.original_invoice_item_id = invoice_item.id and a.status <> 'voided';
-    else
-      net_value := round(invoice_item.line_subtotal * requested_quantity / invoice_item.quantity, 2);
-      vat_value := round(invoice_item.line_vat * requested_quantity / invoice_item.quantity, 2);
+    select
+      invoice_item.line_subtotal - coalesce(sum(ai.net_amount),0),
+      invoice_item.line_vat - coalesce(sum(ai.vat_amount),0)
+      into net_value, vat_value
+      from public.fiskalo_invoice_adjustment_items ai
+      join public.fiskalo_invoice_adjustments a
+        on a.id = ai.adjustment_id and a.organization_id = ai.organization_id
+      where ai.original_invoice_item_id = invoice_item.id and a.status <> 'voided';
+    if requested_quantity < remaining_quantity then
+      net_value := round(net_value * requested_quantity / remaining_quantity, 2);
+      vat_value := round(vat_value * requested_quantity / remaining_quantity, 2);
     end if;
     total_value := net_value + vat_value;
     insert into public.fiskalo_invoice_adjustment_items (
