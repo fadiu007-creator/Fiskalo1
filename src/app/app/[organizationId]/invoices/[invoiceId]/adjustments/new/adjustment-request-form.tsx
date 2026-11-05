@@ -9,6 +9,9 @@ type InvoiceItem = {
   quantity: number;
   line_subtotal: number;
   line_vat: number;
+  remainingQuantity: number;
+  remainingNet: number;
+  remainingVat: number;
 };
 
 type Props = {
@@ -25,7 +28,7 @@ const money = (value: number) => new Intl.NumberFormat("sq-XK", { style: "curren
 
 export default function AdjustmentRequestForm(props: Props) {
   const [quantities, setQuantities] = useState<Record<string, string>>(() =>
-    Object.fromEntries(props.items.map((item) => [item.id, props.kind === "cancel" ? String(item.quantity) : "0"]))
+    Object.fromEntries(props.items.map((item) => [item.id, props.kind === "cancel" ? String(item.remainingQuantity) : "0"]))
   );
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -35,10 +38,15 @@ export default function AdjustmentRequestForm(props: Props) {
   const selectedItems = useMemo(() => props.items.flatMap((item) => {
     const quantity = Number(quantities[item.id] || 0);
     if (!Number.isFinite(quantity) || quantity <= 0) return [];
-    const ratio = quantity / Number(item.quantity);
-    const net = Math.round(Number(item.line_subtotal) * ratio * 100) / 100;
-    const vat = Math.round(Number(item.line_vat) * ratio * 100) / 100;
-    return [{ invoice_item_id: item.id, quantity, net, vat, total: net + vat, remaining: Number(item.quantity) }];
+    const remainingQuantity = Number(item.remainingQuantity);
+    const ratio = quantity / remainingQuantity;
+    const net = quantity === remainingQuantity
+      ? Number(item.remainingNet)
+      : Math.round(Number(item.remainingNet) * ratio * 100) / 100;
+    const vat = quantity === remainingQuantity
+      ? Number(item.remainingVat)
+      : Math.round(Number(item.remainingVat) * ratio * 100) / 100;
+    return [{ invoice_item_id: item.id, quantity, net, vat, total: net + vat, remaining: remainingQuantity }];
   }), [props.items, quantities]);
   const amount = Math.round(selectedItems.reduce((sum, item) => sum + item.total, 0) * 100) / 100;
   const quantityInvalid = selectedItems.some((item) => item.quantity > item.remaining) ||
@@ -84,9 +92,9 @@ export default function AdjustmentRequestForm(props: Props) {
     <div style={{display:"grid",gap:8}}>
       <strong style={{fontSize:13}}>{props.kind === "cancel" ? "Artikujt për anulim" : "Zgjidh artikujt dhe sasitë për kthim"}</strong>
       {props.items.map((item) => <label key={item.id} style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) 112px",gap:10,alignItems:"center",padding:"10px 0",borderBottom:"1px solid var(--line)",fontSize:12}}>
-        <span><strong>{item.description}</strong><br/><span style={{color:"var(--muted)"}}>Sasia origjinale: {item.quantity} · Vlera: {money(Number(item.line_subtotal)+Number(item.line_vat))}</span></span>
+        <span><strong>{item.description}</strong><br/><span style={{color:"var(--muted)"}}>Sasia e mbetur: {item.remainingQuantity} · Vlera e mbetur: {money(Number(item.remainingNet)+Number(item.remainingVat))}</span></span>
         <span style={{display:"grid",gap:4}}>Sasia
-          <input aria-label={"Sasia për " + item.description} required={props.kind === "cancel"} type="number" min={props.kind === "cancel" ? item.quantity : 0} max={item.quantity} step="0.001"
+          <input aria-label={"Sasia për " + item.description} required={props.kind === "cancel"} type="number" min={props.kind === "cancel" ? item.quantity : 0} max={item.remainingQuantity} step="0.001"
             value={quantities[item.id]} readOnly={props.kind === "cancel"}
             onChange={(event) => setQuantities((current) => ({...current,[item.id]:event.target.value}))}
             style={{width:"100%",padding:9,border:"1px solid var(--line)",borderRadius:8,fontSize:14}}/>
