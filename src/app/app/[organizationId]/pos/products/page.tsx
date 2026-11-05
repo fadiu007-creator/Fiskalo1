@@ -30,6 +30,7 @@ export default function PosProductsPage() {
   const [planInfo, setPlanInfo] = useState<{ plan_package: string; product_limit: number } | null>(null);
   const unitCodes = Array.from(new Set(["cope", ...products.map(p => p.atk_unit_code).filter((v): v is string => Boolean(v))])).sort();
   const itemCategoryCodes = Array.from(new Set(products.map(p => p.atk_item_category_code).filter((v): v is string => Boolean(v)))).sort();
+  const posCategories = Array.from(new Set(products.map(p => p.pos_category.trim()).filter(Boolean))).sort((a,b) => a.localeCompare(b, "sq"));
 
   const load = useCallback(async () => {
     const { data: auth } = await supabase.auth.getUser();
@@ -135,7 +136,7 @@ export default function PosProductsPage() {
         <label style={{ fontSize: 12 }}>SKU / Barkodi<input value={form.sku} onChange={e=>setForm(v=>({...v,sku:e.target.value}))} style={field}/></label>
         <label style={{ fontSize: 12 }}>Lloji<select value={form.item_type} onChange={e=>setForm(v=>({...v,item_type:e.target.value}))} style={field}><option value="product">Produkt</option><option value="service">Shërbim</option></select></label>
         <label style={{ fontSize: 12 }}>Njësia<input value={form.unit} onChange={e=>setForm(v=>({...v,unit:e.target.value}))} style={field}/></label>
-        <label style={{ fontSize: 12 }}>Kategoria në arkë<select value={form.pos_category} onChange={e=>setForm(v=>({...v,pos_category:e.target.value}))} style={field}><option>Burgerë</option><option>Menu</option><option>Pije</option><option>Shtesa</option><option>Ëmbëlsira</option><option>Tjera</option></select></label>
+        <label style={{ fontSize: 12 }}>Kategoria në arkë<input list="fiskalo-pos-categories" value={form.pos_category} onChange={e=>setForm(v=>({...v,pos_category:e.target.value}))} placeholder="p.sh. Pije, Veshje, Shërbime" style={field}/><datalist id="fiskalo-pos-categories">{posCategories.map(category => <option key={category} value={category}/>)}</datalist></label>
         <label style={{ fontSize: 12 }}>Foto e produktit (URL)<input type="url" value={form.image_url} onChange={e=>setForm(v=>({...v,image_url:e.target.value}))} placeholder="https://…" style={field}/></label>
         <label style={{ fontSize: 12 }}>Çmimi (€)<input required type="number" min="0" step="0.01" value={form.unit_price} onChange={e=>setForm(v=>({...v,unit_price:e.target.value}))} style={field}/></label>
         <label style={{ fontSize: 12 }}>TVSH / trajtimi fiskal ATK<select value={`${form.vat_rate}:${form.atk_tax_code || (form.vat_rate === "8" ? "D" : form.vat_rate === "18" ? "E" : "A")}`} onChange={e=>{const [rate,code]=e.target.value.split(":");setForm(v=>({...v,vat_rate:rate,atk_tax_code:code}));}} style={field}><option value="0:A">0% — Përjashtuar nga TVSH (A)</option><option value="0:C">0% — Normë zero (C)</option><option value="8:D">8% — TVSH (D)</option><option value="18:E">18% — TVSH (E)</option></select></label>
