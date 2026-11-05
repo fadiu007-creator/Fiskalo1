@@ -67,9 +67,9 @@ No internal toggle, test certificate, fabricated code, or successful TEST coupon
 | Paid Web POS Sale coupon creation and TEST submission | Implemented; runbook records four accepted TEST Sale documents |
 | ATK response/transaction ID storage and duplicate-sale guard | Implemented for Sale flow |
 | Ambiguous ATK response state | Implemented as pending/reconciliation-required; do not blindly retry |
-| Cancel and Return ATK submission | Not yet implemented end-to-end; current invoice adjustment form records an internal request only |
+| Cancel and Return ATK submission | Not yet implemented end-to-end; item-level return/cancellation quantities, proportional net/VAT amounts, residual rounding and audit ledger are now recorded internally, but no signed correction coupon is submitted to ATK |
 | Complete encrypted offline journal and automatic recovery | Partial foundation; not certified or verified against ATK recovery requirements |
-| Android key/coupon workflow | Experimental module; physical-device build, certificate and ATK submission tests remain |
+| Android key/coupon workflow | Standalone internal-test APK build succeeds; physical-device certificate, ATK submission and printer tests remain |
 | Complete official X/Z report submission for SEF | Not established by the inspected public SEF sample; do not claim implemented or required without current ATK confirmation |
 | Internal daily sales/payment/shift/fiscal status report | Implemented; internal management report only |
 | POS Agent and production-grade key custody | Not complete |
