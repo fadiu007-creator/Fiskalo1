@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeftRight, Boxes, Building2, FileBarChart2, FileText, LayoutDashboard, Settings2, ShoppingCart, Users, Wallet, UserCircle, LogOut, Warehouse } from "lucide-react";
+import { ArrowLeftRight, Boxes, Building2, FileBarChart2, FileText, LayoutDashboard, Settings2, ShoppingCart, Users, Wallet, UserCircle, LogOut, Warehouse, Truck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 const items = [
@@ -12,6 +12,7 @@ const items = [
   { path: "/reports", label: "Raportet", icon: FileBarChart2, roles: ["owner","administrator","manager","accountant"] },
   { path: "/pos/products", label: "Produktet", icon: Boxes, roles: ["owner","administrator","manager"] },
   { path: "/inventory", label: "Inventari", icon: Warehouse, roles: ["owner","administrator","manager"] },
+  { path: "/purchases", label: "Blerjet", icon: Truck, roles: ["owner","administrator","manager","accountant"] },
   { path: "/pos/shifts", label: "Ndërrimet", icon: Wallet, roles: ["owner","administrator","manager","cashier"] },
   { path: "/team", label: "Ekipi", icon: Users, roles: ["owner","administrator"] },
   { path: "/pos/setup", label: "ATK", icon: Settings2, roles: ["owner","administrator"] },
