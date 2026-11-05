@@ -24,7 +24,8 @@ const secondary: React.CSSProperties = { border: "1px solid var(--line)", border
 const money = (n: number) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR" }).format(n);
 const createPosRequestId = () => { if (typeof crypto.randomUUID === "function") return crypto.randomUUID(); const bytes = crypto.getRandomValues(new Uint8Array(16)); bytes[6] = (bytes[6] & 0x0f) | 0x40; bytes[8] = (bytes[8] & 0x3f) | 0x80; const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(""); return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`; };
 const roundMoney = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
-const categoryVisual = (code: string) => ({ TT: { icon: "▦", label: "Mallra" } }[code] ?? { icon: "◇", label: "Artikull" });
+const CATEGORY_VISUALS: Record<string, { icon: string; label: string }> = { TT: { icon: "▦", label: "Mallra" } };
+const categoryVisual = (code: string) => CATEGORY_VISUALS[code] ?? { icon: "◇", label: "Artikull" };
 
 export default function WebPosPage() {
   const params = useParams<{ organizationId: string }>();
@@ -445,7 +446,7 @@ export default function WebPosPage() {
         <div className="pos-categories" aria-label="Kategoritë e produkteve">{categories.map((category) => <button key={category} type="button" aria-pressed={selectedCategory === category} onClick={() => setActiveCategory(category)} className={selectedCategory === category ? "pos-category active" : "pos-category"}>{category}</button>)}</div>
         <div className="pos-product-grid">
           {visibleProducts.map((product) => <button key={product.id} type="button" onClick={() => addProduct(product)} className="pos-product-card">
-            <div className="pos-product-image" role="img" aria-label={product.name + " — " + (product.atk_item_category_code || product.pos_category || "TT")}><span className="pos-product-placeholder">{categoryVisual(product.atk_item_category_code || product.pos_category || "TT").icon}</span><small className="pos-product-category-code">{product.atk_item_category_code || product.pos_category || "TT"}</small></div>
+            <div className="pos-product-image" role="img" aria-label={product.name + " — " + (product.atk_item_category_code || product.pos_category || "TT")}><span className="pos-product-placeholder">{categoryVisual(product.atk_item_category_code || product.pos_category || "TT").icon}</span><small className="pos-product-category-code">{categoryVisual(product.atk_item_category_code || product.pos_category || "TT").label} · {product.atk_item_category_code || product.pos_category || "TT"}</small></div>
             <span className="pos-product-name">{product.name}</span>
             <span className="pos-product-price">{money(Number(product.unit_price) * (1 + Number(product.vat_rate) / 100))}</span>
             <small>{product.track_stock ? "Stok: " + product.stock_quantity : "Shto në porosi"}</small>
