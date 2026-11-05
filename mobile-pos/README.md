@@ -16,8 +16,8 @@ This is an Android-native POS client scaffold using Expo/React Native and the ex
 1. Copy `.env.example` to `.env`.
 2. Set the Fiskalo Supabase project URL and publishable key. Never put a service-role key in the app.
 3. From this folder run `npm install`.
-4. Run `npx expo start` and open the project on an Android device with Expo Go.
-5. Expo Go supports ordinary POS screens only. The local ATK crypto module requires a custom native build; create an installable internal-test APK with `npx eas-cli build --platform android --profile preview`.
+4. For JavaScript development, connect the Android phone by USB, enable USB debugging, verify it with `adb devices`, then run `adb reverse tcp:8081 tcp:8081` and `npx expo start --localhost`. A debug native build requires Metro to be running.
+5. Do not use Expo Go for the complete POS: the local ATK crypto module requires a custom native build. Install the GitHub Actions artifact `fiskalo-android-pos-internal-test-apk` for standalone device testing; it embeds the JavaScript bundle and should launch without Metro.
 
 ## Implemented
 
