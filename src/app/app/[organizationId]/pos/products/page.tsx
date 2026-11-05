@@ -59,39 +59,50 @@ export default function PosProductsPage() {
   useEffect(() => {
     if (!scanning) return;
     let active = true;
-    let stream: MediaStream | null = null;
-    let frame = 0;
-    type Detector = { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>> };
-    type DetectorConstructor = new (options?: { formats?: string[] }) => Detector;
-    const start = async () => {
-      const DetectorClass = (window as Window & { BarcodeDetector?: DetectorConstructor }).BarcodeDetector;
-      if (!DetectorClass || !navigator.mediaDevices?.getUserMedia) {
-        setScanMessage("Skanimi me kamerë nuk mbështetet në këtë shfletues. Përdor skaner USB/Bluetooth ose shkruaje barkodin.");
-        setScanning(false); return;
+    let controls: { stop: () => void } | null = null;
+    const startScanner = async () => {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setScanMessage("Kamera nuk është e disponueshme. Hape Fiskalo në Chrome përmes HTTPS dhe lejo qasjen në kamerë.");
+        setScanning(false);
+        return;
       }
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
-        if (!active || !videoRef.current) { stream.getTracks().forEach(track => track.stop()); return; }
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        const detector = new DetectorClass({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39"] });
-        const scan = async () => {
-          if (!active || !videoRef.current) return;
-          try {
-            const codes = await detector.detect(videoRef.current);
-            const value = codes.find(code => code.rawValue)?.rawValue;
-            if (value) { setForm(current => ({ ...current, sku: value })); setScanMessage("U lexua barkodi: " + value); setScanning(false); return; }
-          } catch { /* Keep scanning. */ }
-          frame = window.requestAnimationFrame(scan);
-        };
-        frame = window.requestAnimationFrame(scan);
+        const { BrowserMultiFormatReader } = await import("@zxing/browser");
+        if (!active || !videoRef.current) return;
+        const reader = new BrowserMultiFormatReader();
+        controls = await reader.decodeFromConstraints(
+          { audio: false, video: { facingMode: { ideal: "environment" } } },
+          videoRef.current,
+          (result) => {
+            if (!active || !result) return;
+            const value = result.getText().trim();
+            if (!value) return;
+            setForm(current => ({ ...current, sku: value }));
+            setScanMessage("U lexua barkodi: " + value);
+            setScanning(false);
+          }
+        );
+        if (!active) controls.stop();
       } catch (cameraError) {
-        setScanMessage("Kamera nuk u hap: " + (cameraError instanceof Error ? cameraError.message : "Kontrollo lejen e kamerës."));
+        const message = cameraError instanceof Error ? cameraError.message : "";
+        const permissionDenied = /denied|permission|notallowed/i.test(message);
+        setScanMessage(permissionDenied
+          ? "Qasja në kamerë u refuzua. Aktivizo Camera permission për këtë faqe në cilësimet e shfletuesit dhe provo përsëri."
+          : "Kamera nuk u hap. Kontrollo lejen e kamerës, mbylli aplikacionet që e përdorin dhe provo në Chrome përmes HTTPS.");
         setScanning(false);
       }
     };
-    void start();
-    return () => { active = false; if (frame) window.cancelAnimationFrame(frame); stream?.getTracks().forEach(track => track.stop()); };
+    void startScanner();
+    return () => {
+      active = false;
+      controls?.stop();
+      const video = videoRef.current;
+      if (video) {
+        const stream = video.srcObject;
+        if (stream instanceof MediaStream) stream.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+      }
+    };
   }, [scanning]);
 
   const visible = products.filter((p) => (p.name + " " + (p.sku || "")).toLowerCase().includes(search.trim().toLowerCase()));
@@ -186,7 +197,7 @@ export default function PosProductsPage() {
         <label style={{ fontSize: 12 }}>TVSH / trajtimi fiskal ATK<select value={`${form.vat_rate}:${form.atk_tax_code || (form.vat_rate === "8" ? "D" : form.vat_rate === "18" ? "E" : "A")}`} onChange={e=>{const [rate,code]=e.target.value.split(":");setForm(v=>({...v,vat_rate:rate,atk_tax_code:code}));}} style={field}><option value="0:A">0% — Përjashtuar nga TVSH (A)</option><option value="0:C">0% — Normë zero (C)</option><option value="8:D">8% — TVSH (D)</option><option value="18:E">18% — TVSH (E)</option></select></label>
         <label style={{ fontSize: 12 }}>Stoku {form.item_type === "service" || !form.track_stock ? "(i pakufizuar)" : ""}<input type="number" min="0" step="0.001" value={form.stock_quantity} disabled={form.item_type !== "product" || !form.track_stock} onChange={e=>setForm(v=>({...v,stock_quantity:e.target.value}))} placeholder={form.item_type !== "product" || !form.track_stock ? "Pa limit" : "Sasia në stok"} style={{ ...field, background: form.item_type !== "product" || !form.track_stock ? "#f2f5f3" : "white", color: form.item_type !== "product" || !form.track_stock ? "var(--muted)" : "var(--ink)", cursor: form.item_type !== "product" || !form.track_stock ? "not-allowed" : "text" }}/>{form.item_type === "product" && !form.track_stock && <small style={{ color: "var(--muted)" }}>Stok i pakufizuar — nuk kontrollohet sasia.</small>}{form.item_type === "service" && <small style={{ color: "var(--muted)" }}>Stoku nuk aplikohet për shërbime.</small>}</label>
       </div>
-      {scanning && <div style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 10 }}><video ref={videoRef} muted playsInline style={{ width: "100%", maxHeight: 260, objectFit: "cover", borderRadius: 8, background: "#111" }}/><p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }}>Drejto kamerën te barkodi. Nëse kamera nuk hapet, lejo qasjen ose përdor skaner USB/Bluetooth.</p></div>}
+      {scanning && <div style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 10 }}><video ref={videoRef} muted playsInline style={{ width: "100%", maxHeight: 260, objectFit: "cover", borderRadius: 8, background: "#111" }}/><p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }}>Drejto kamerën e pasme te barkodi dhe mbaje të qëndrueshme. Mbështeten barkodet EAN-13, EAN-8, UPC dhe Code 128. Nëse kërkohet, lejo qasjen në kamerë për këtë faqe.</p></div>}
       {scanMessage && <p role="status" style={{ color: "var(--muted)", fontSize: 12, margin: 0 }}>{scanMessage}</p>}
       {form.item_type === "product" && <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}><input type="checkbox" checked={form.track_stock} onChange={e=>setForm(v=>({...v,track_stock:e.target.checked,stock_quantity:e.target.checked ? v.stock_quantity : "0"}))}/> Menaxho stokun</label>}
       <div style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
