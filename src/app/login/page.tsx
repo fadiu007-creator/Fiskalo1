@@ -18,9 +18,14 @@ export default function LoginPage() {
     setMessage("");
     try {
       const supabase = createClient();
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      router.replace("/app");
+      const { data: providerAccess } = await supabase
+        .from("fiskalo_provider_users")
+        .select("role")
+        .eq("user_id", data.user.id)
+        .maybeSingle();
+      router.replace(providerAccess ? "/provider" : "/app");
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Hyrja nuk u realizua.");
@@ -49,6 +54,7 @@ export default function LoginPage() {
         </form>
         <p style={{ marginTop: 14, fontSize: 13 }}><Link href="/forgot-password" style={{ color: "var(--brand)", fontWeight: 700 }}>Ke harruar fjalëkalimin?</Link></p>
         <p style={{ marginTop: 20, fontSize: 13, color: "var(--muted)" }}>Nuk ke llogari? <Link href="/register" style={{ color: "var(--brand)", fontWeight: 700 }}>Regjistro biznesin</Link></p>
+        <p style={{ marginTop: 10, fontSize: 13, color: "var(--muted)" }}>Je pjesë e ekipit të Fiskalo? <Link href="/provider" style={{ color: "var(--brand)", fontWeight: 700 }}>Hyr në hapësirën e ofruesit</Link>. Përdor të njëjtin email dhe fjalëkalim; paneli hapet sipas rolit të llogarisë.
       </section>
     </main>
   );
