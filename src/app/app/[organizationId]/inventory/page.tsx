@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ArrowLeft, AlertTriangle, Boxes, PackageCheck, Warehouse } from "lucide-react";
+import StockAdjustment from "./stock-adjustment";
 
 type Props = { params: Promise<{ organizationId: string }> };
 type Product = { id: string; name: string; sku: string | null; pos_category: string; stock_quantity: number; track_stock: boolean; unit: string; is_active: boolean };
@@ -47,9 +48,9 @@ export default async function InventoryPage({ params }: Props) {
     </section>
     <section style={{ background: "white", border: "1px solid var(--line)", borderRadius: 14, padding: 16, marginBottom: 16 }}>
       <h2 style={{ margin: "0 0 12px", fontSize: 17 }}>Gjendja e stokut</h2>
-      <div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Produkti</th><th>Kategoria</th><th>SKU / Barkodi</th><th>Gjendja</th><th>Statusi</th></tr></thead><tbody>
-        {tracked.map((product) => <tr key={product.id}><td><strong>{product.name}</strong></td><td>{product.pos_category || "Tjera"}</td><td>{product.sku || "—"}</td><td>{number(Number(product.stock_quantity))} {product.unit || "copë"}</td><td><span className="status-pill" style={Number(product.stock_quantity) <= 0 ? { background: "#fff0ee", color: "#a23b31" } : { background: "#e8f6ee", color: "#17633f" }}>{Number(product.stock_quantity) <= 0 ? "Pa stok" : "Në stok"}</span></td></tr>)}
-        {!tracked.length && <tr><td colSpan={5}>Nuk ka produkte me gjurmim të stokut aktiv.</td></tr>}
+      <div style={{ overflowX: "auto" }}><table className="data-table"><thead><tr><th>Produkti</th><th>Kategoria</th><th>SKU / Barkodi</th><th>Gjendja</th><th>Rregullimi</th><th>Statusi</th></tr></thead><tbody>
+        {tracked.map((product) => <tr key={product.id}><td><strong>{product.name}</strong></td><td>{product.pos_category || "Tjera"}</td><td>{product.sku || "—"}</td><td>{number(Number(product.stock_quantity))} {product.unit || "copë"}</td><td><StockAdjustment productId={product.id} productName={product.name}/></td><td><span className="status-pill" style={Number(product.stock_quantity) <= 0 ? { background: "#fff0ee", color: "#a23b31" } : { background: "#e8f6ee", color: "#17633f" }}>{Number(product.stock_quantity) <= 0 ? "Pa stok" : "Në stok"}</span></td></tr>)}
+        {!tracked.length && <tr><td colSpan={6}>Nuk ka produkte me gjurmim të stokut aktiv.</td></tr>}
       </tbody></table></div>
     </section>
     <section style={{ background: "white", border: "1px solid var(--line)", borderRadius: 14, padding: 16 }}>
