@@ -5,7 +5,23 @@ import PrintReportButton from "./print-button";
 
 type Props = { params: Promise<{ organizationId: string }>; searchParams: Promise<{ date?: string }> };
 const money = (value: number | string | null | undefined) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR" }).format(Number(value ?? 0));
-const validDate = (value?: string) => value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : new Date().toISOString().slice(0,10);
+const kosovoDate = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Belgrade", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
+  return part("year") + "-" + part("month") + "-" + part("day");
+};
+const dateBoundary = (date: string) => {
+  const [year, month, day] = date.split("-").map(Number);
+  const next = new Date(Date.UTC(year, month - 1, day + 1));
+  const nextDate = next.getUTCFullYear() + "-" + String(next.getUTCMonth() + 1).padStart(2, "0") + "-" + String(next.getUTCDate()).padStart(2, "0");
+  const offset = (value: string) => {
+    const probe = new Date(value + "T12:00:00Z");
+    const zone = new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Belgrade", timeZoneName: "longOffset" }).formatToParts(probe).find((item) => item.type === "timeZoneName")?.value ?? "GMT+01:00";
+    return zone.replace("GMT", "");
+  };
+  return { start: date + "T00:00:00" + offset(date), end: nextDate + "T00:00:00" + offset(nextDate) };
+};
+const validDate = (value?: string) => value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : kosovoDate();
 
 export default async function DailyReportsPage({ params, searchParams }: Props) {
   const { organizationId } = await params;
@@ -18,17 +34,25 @@ export default async function DailyReportsPage({ params, searchParams }: Props) 
     .eq("organization_id", organizationId).eq("user_id", auth.user.id).maybeSingle();
   if (!membership || !["owner","administrator","manager","accountant"].includes(membership.role)) redirect("/app/"+organizationId);
 
+  const bounds = dateBoundary(date);
   const [invoiceResult, shiftResult, fiscalResult] = await Promise.all([
     supabase.from("fiskalo_invoices").select("id,invoice_number,issue_date,subtotal,vat_total,total,payment_status,fiscalization_status")
       .eq("organization_id",organizationId).eq("status","issued").eq("issue_date",date).order("issue_date",{ascending:true}).limit(2000),
     supabase.from("fiskalo_cashier_shifts").select("id,status,opening_cash,expected_cash,counted_cash,cash_difference,opened_at,closed_at")
-      .eq("organization_id",organizationId).gte("opened_at",date+"T00:00:00").lt("opened_at",date+"T23:59:59.999").order("opened_at",{ascending:true}).limit(500),
+      .eq("organization_id",organizationId)
+      .or("and(opened_at.gte." + bounds.start + ",opened_at.lt." + bounds.end + "),and(closed_at.gte." + bounds.start + ",closed_at.lt." + bounds.end + ")")
+      .order("opened_at",{ascending:true}).limit(500),
     supabase.from("fiskalo_atk_fiscal_documents").select("id,status,document_type,total,atk_transaction_id,last_error,occurred_at")
-      .eq("organization_id",organizationId).gte("occurred_at",date+"T00:00:00").lt("occurred_at",date+"T23:59:59.999").order("occurred_at",{ascending:true}).limit(2000)
+      .eq("organization_id",organizationId).gte("occurred_at",bounds.start).lt("occurred_at",bounds.end).order("occurred_at",{ascending:true}).limit(2000)
   ]);
   const invoices = invoiceResult.data ?? [];
   const shifts = shiftResult.data ?? [];
   const fiscalDocs = fiscalResult.data ?? [];
+  const shiftIds = shifts.map((row) => row.id);
+  const { data: cashMovements, error: movementError } = shiftIds.length
+    ? await supabase.from("fiskalo_cash_movements").select("cashier_shift_id,movement_type,amount,note,created_at")
+        .eq("organization_id", organizationId).in("cashier_shift_id", shiftIds).gte("created_at", bounds.start).lt("created_at", bounds.end)
+    : { data: [] as Array<{cashier_shift_id:string;movement_type:string;amount:number;note:string;created_at:string}>, error: null };
   const invoiceIds = invoices.map(row=>row.id);
   const { data: payments } = invoiceIds.length
     ? await supabase.from("fiskalo_invoice_payments").select("invoice_id,amount,payment_method").in("invoice_id",invoiceIds)
@@ -42,7 +66,9 @@ export default async function DailyReportsPage({ params, searchParams }: Props) 
   const fiscalAccepted = fiscalDocs.filter(row=>row.status==="accepted").length;
   const fiscalPending = fiscalDocs.filter(row=>["queued","offline_pending","submitted"].includes(row.status)).length;
   const fiscalRejected = fiscalDocs.filter(row=>row.status==="rejected").length;
-  const error = invoiceResult.error || shiftResult.error || fiscalResult.error;
+  const cashIn = sum((cashMovements ?? []).filter(row => row.movement_type === "cash_in").map(row => row.amount));
+  const cashOut = sum((cashMovements ?? []).filter(row => row.movement_type === "cash_out").map(row => row.amount));
+  const error = invoiceResult.error || shiftResult.error || fiscalResult.error || movementError;
   return <main style={{maxWidth:1050,margin:"0 auto",padding:"24px clamp(15px,3vw,28px) 56px"}}>
     <style>{`@media print {.no-print{display:none!important} body{background:#fff!important} main{max-width:none!important;padding:0!important} .report-card{break-inside:avoid;box-shadow:none!important;border:1px solid #bbb!important}}`}</style>
     <header className="no-print" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:22}}>
@@ -62,6 +88,9 @@ export default async function DailyReportsPage({ params, searchParams }: Props) 
       <h2 style={{fontSize:16,margin:"0 0 8px"}}>Raporti X · Gjendja e arkës</h2>
       <p style={{fontSize:11,color:"var(--muted)",margin:"0 0 10px"}}>Pamje statistikore e brendshme për ndërrimet e kësaj date; nuk është raport tatimor i ATK-së.</p>
       {shifts.filter(row=>row.status==="open").length ? shifts.filter(row=>row.status==="open").map(row=><div key={row.id} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid var(--line)"}}><span>Ndërrim aktiv · {new Date(row.opened_at).toLocaleTimeString("sq-XK")}</span><strong>{money(row.opening_cash)} para fillestare</strong></div>) : <p style={{fontSize:13,color:"var(--muted)",margin:0}}>Nuk ka ndërrim aktiv në këtë datë.</p>}
+      <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0"}}><span>Hyrje në arkë</span><strong>{money(cashIn)}</strong></div>
+      <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0"}}><span>Dalje nga arka</span><strong>{money(cashOut)}</strong></div>
+      <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderTop:"1px solid var(--line)"}}><span>Lëvizja neto e parasë</span><strong>{money(cashIn-cashOut)}</strong></div>
     </section>
     <section className="report-card" style={{background:"white",border:"1px solid var(--line)",borderRadius:12,padding:17,marginBottom:14}}>
       <h2 style={{fontSize:16,margin:"0 0 10px"}}>Ndërrimet e arkës</h2>
