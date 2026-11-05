@@ -6,7 +6,7 @@ import { printAndroidReceipt } from "./src/thermalReceipt";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import * as SecureStore from "expo-secure-store";
 import { supabase } from "./src/supabase";
-import { encodeAtkBase64, encodeAtkPosCoupon } from "../src/lib/atk/protobuf";
+import { encodeAtkBase64, encodeAtkPosCoupon } from "./src/lib/atk/protobuf";
 
 type Org = { organization_id: string; role: string; fiskalo_organizations: { legal_name: string; municipality: string; nui: string } | null };
 type Product = {
