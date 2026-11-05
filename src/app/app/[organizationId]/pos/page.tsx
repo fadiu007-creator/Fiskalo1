@@ -135,10 +135,11 @@ export default function WebPosPage() {
   }, [organizationId, supabase, userRole]);
 
   const visibleInvoices = invoices.filter((invoice) => `${invoice.invoice_number ?? ""} ${invoice.status} ${invoice.payment_status} ${invoice.issue_date}`.toLocaleLowerCase().includes(invoiceSearch.trim().toLocaleLowerCase()));
-  const categories = ["Të gjitha", "Burgerë", "Menu", "Pije", "Shtesa", "Ëmbëlsira", "Tjera"];
+  const categories = ["Të gjitha", ...Array.from(new Set(products.map((product) => (product.pos_category || "Tjera").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "sq"))];
+  const selectedCategory = categories.includes(activeCategory) ? activeCategory : "Të gjitha";
   const visibleProducts = products.filter((product) => {
     const q = search.trim().toLocaleLowerCase();
-    const matchesCategory = activeCategory === "Të gjitha" || (product.pos_category || "Tjera") === activeCategory;
+    const matchesCategory = selectedCategory === "Të gjitha" || (product.pos_category || "Tjera") === selectedCategory;
     const matchesSearch = !q || product.name.toLocaleLowerCase().includes(q) || (product.sku ?? "").toLocaleLowerCase().includes(q);
     return matchesCategory && matchesSearch;
   });
@@ -440,10 +441,10 @@ export default function WebPosPage() {
     <div className="pos-layout" style={{ display: activeView === "pos" ? "grid" : "none", gridTemplateColumns: "minmax(0,1.55fr) minmax(310px,0.85fr)", gap: 14, alignItems: "start" }}>
       <section style={panel}>
         <input ref={searchRef} aria-label="Kërko produkt ose skano barkod" placeholder="Kërko produkt ose skano barkod / SKU..." value={search} onChange={(event) => { setSearch(event.target.value); setError(""); }} onKeyDown={handleProductSearchKeyDown} style={{ ...field, marginBottom: 12 }} />
-        <div className="pos-categories" aria-label="Kategoritë e produkteve">{categories.map((category) => <button key={category} type="button" aria-pressed={activeCategory === category} onClick={() => setActiveCategory(category)} className={activeCategory === category ? "pos-category active" : "pos-category"}>{category}</button>)}</div>
+        <div className="pos-categories" aria-label="Kategoritë e produkteve">{categories.map((category) => <button key={category} type="button" aria-pressed={selectedCategory === category} onClick={() => setActiveCategory(category)} className={selectedCategory === category ? "pos-category active" : "pos-category"}>{category}</button>)}</div>
         <div className="pos-product-grid">
           {visibleProducts.map((product) => <button key={product.id} type="button" onClick={() => addProduct(product)} className="pos-product-card">
-            <div className="pos-product-image" role="img" aria-label={product.name} style={{ backgroundImage: product.image_url ? "url(" + product.image_url + ")" : undefined }}>{!product.image_url && <span>{(product.pos_category || "Tjera") === "Pije" ? "🥤" : (product.pos_category || "Tjera") === "Ëmbëlsira" ? "🍰" : (product.pos_category || "Tjera") === "Shtesa" ? "🍟" : "🍔"}</span>}</div>
+            <div className="pos-product-image" role="img" aria-label={product.name} style={{ backgroundImage: product.image_url ? "url(" + product.image_url + ")" : undefined }}>{!product.image_url && <span className="pos-product-placeholder">{product.name.trim().slice(0, 2).toLocaleUpperCase("sq")}</span>}</div>
             <span className="pos-product-name">{product.name}</span>
             <span className="pos-product-price">{money(Number(product.unit_price) * (1 + Number(product.vat_rate) / 100))}</span>
             <small>{product.track_stock ? "Stok: " + product.stock_quantity : "Shto në porosi"}</small>

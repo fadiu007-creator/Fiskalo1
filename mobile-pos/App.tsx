@@ -10,7 +10,7 @@ import { encodeAtkBase64, encodeAtkPosCoupon } from "./src/lib/atk/protobuf";
 
 type Org = { organization_id: string; role: string; fiskalo_organizations: { legal_name: string; municipality: string; nui: string } | null };
 type Product = {
-  id: string; name: string; sku: string | null; unit_price: number; vat_rate: number;
+  id: string; name: string; sku: string | null; pos_category: string; unit_price: number; vat_rate: number;
   stock_quantity: number; track_stock: boolean; item_type: string; is_active: boolean;
   atk_unit_code: string | null; atk_tax_code: string | null; atk_item_category_code: string | null;
 };
@@ -51,6 +51,7 @@ export default function App() {
   const [openingCash, setOpeningCash] = useState("0");
   const [countedCash, setCountedCash] = useState("");
   const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState("Të gjitha");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -94,7 +95,7 @@ export default function App() {
     if (org.role === "accountant") { setError("Roli Kontabilist mund t’i kontrollojë faturat, por nuk mund të përdorë arkën e shitjeve."); return; }
     setBusy(true); setError(""); setMessage("");
     const { data: p, error: pError } = await supabase.from("fiskalo_products")
-      .select("id,name,sku,unit_price,vat_rate,stock_quantity,track_stock,item_type,is_active,atk_unit_code,atk_tax_code,atk_item_category_code")
+      .select("id,name,sku,pos_category,unit_price,vat_rate,stock_quantity,track_stock,item_type,is_active,atk_unit_code,atk_tax_code,atk_item_category_code")
       .eq("organization_id", org.organization_id).eq("is_active", true).order("name");
     const { data: c, error: cError } = await supabase.from("fiskalo_customers")
       .select("id,name").eq("organization_id", org.organization_id).order("name");
@@ -574,7 +575,9 @@ export default function App() {
     setSignedIn(false); setOrganizations([]); setOrganizationId(""); setOrganizationNui(""); setCart([]);
   }
 
-  const filtered = products.filter((p) => p.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()) || (p.sku ?? "").toLocaleLowerCase().includes(search.toLocaleLowerCase()));
+  const categories = ["Të gjitha", ...Array.from(new Set(products.map((p) => (p.pos_category || "Tjera").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "sq"))];
+  const selectedCategory = categories.includes(activeCategory) ? activeCategory : "Të gjitha";
+  const filtered = products.filter((p) => (selectedCategory === "Të gjitha" || (p.pos_category || "Tjera") === selectedCategory) && (p.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()) || (p.sku ?? "").toLocaleLowerCase().includes(search.toLocaleLowerCase())));
 
   return <SafeAreaView style={{ flex:  1, backgroundColor: "#f4f7f6" }}>
     <ExpoStatusBar style="dark" />
@@ -637,7 +640,10 @@ export default function App() {
             <Action label={busy ? "Duke hapur..." : "Hap ndërrimin"} disabled={busy} onPress={() => void openCashierShift()} />
           </>}
         </View>}
-        <TextInput placeholder="Kërko produkt / SKU" value={search} onChangeText={setSearch} style={inputStyle} />
+        <TextInput placeholder="Kërko ose skano barkod / SKU" value={search} onChangeText={setSearch} onSubmitEditing={() => { const code = search.trim().toLocaleLowerCase(); const match = products.find((p) => p.is_active && (p.sku ?? "").trim().toLocaleLowerCase() === code); if (match) { add(match); setSearch(""); } else if (code) setError("Nuk u gjet produkt me këtë barkod ose SKU."); }} returnKeyType="search" style={inputStyle} />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8, marginBottom: 4, maxHeight: 42 }} contentContainerStyle={{ gap: 7 }}>
+          {categories.map((category) => <TouchableOpacity key={category} onPress={() => setActiveCategory(category)} accessibilityRole="button" accessibilityState={{ selected: selectedCategory === category }} style={{ paddingHorizontal: 13, paddingVertical: 9, borderRadius: 20, backgroundColor: selectedCategory === category ? brand : "#eaf0ed" }}><Text style={{ color: selectedCategory === category ? "white" : ink, fontSize: 12, fontWeight: "700" }}>{category}</Text></TouchableOpacity>)}
+        </ScrollView>
       </View>
       <View style={{ flex: 1 }}>
         <FlatList
@@ -647,7 +653,7 @@ export default function App() {
           contentContainerStyle={{ padding: 8 }}
           renderItem={({ item }) => <TouchableOpacity onPress={() => add(item)} style={{ flex: 1, margin: 5, minHeight: 94, padding: 12, backgroundColor: "white", borderRadius: 10, borderWidth: 1, borderColor: line, justifyContent: "space-between" }}>
             <Text style={{ color: ink, fontWeight: "700" }}>{item.name}</Text>
-            <Text style={{ color: brand, fontWeight: "900", fontSize: 16 }}>{money(Number(item.unit_price))}</Text>
+            <Text style={{ color: brand, fontWeight: "900", fontSize: 16 }}>{money(Number(item.unit_price) * (1 + Number(item.vat_rate) / 100))}</Text>
             <Text style={{ color: "#687773", fontSize: 11 }}>{item.track_stock ? "Stok: " + item.stock_quantity : item.item_type === "service" ? "Shërbim" : "Pa stok"}</Text>
           </TouchableOpacity>}
           ListEmptyComponent={<Text style={{ textAlign: "center", color: "#687773", margin: 24 }}>Nuk ka produkte aktive.</Text>}
