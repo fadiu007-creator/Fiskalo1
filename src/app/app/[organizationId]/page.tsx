@@ -25,9 +25,35 @@ export default async function BusinessDashboard({ params }: Props) {
   if (!membership || !organization) redirect("/app");
   const role = membership.role;
   const roleLabel: Record<string,string> = { owner:"Pronari", administrator:"Administrator", manager:"Menaxher", accountant:"Kontabilist", cashier:"Arkëtar" };
-  const sales = (invoices ?? []).reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
-  const expensesTotal = (expenses ?? []).reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-  const unpaidCount = (invoices ?? []).filter(invoice => invoice.payment_status !== "paid").length;
+  const canViewFinance = ["owner", "administrator", "manager", "accountant"].includes(role);
+  let financialInvoices: { total: number; payment_status: string }[] = [];
+  let financialExpenses: { amount: number }[] = [];
+  let financialDataError = "";
+  let invoiceOffset = 0;
+  while (true) {
+    const { data, error } = await supabase.from("fiskalo_invoices").select("total,payment_status")
+      .eq("organization_id", organizationId).eq("status", "issued").gte("issue_date", monthStart)
+      .range(invoiceOffset, invoiceOffset + 999);
+    if (error) { financialDataError = error.message; break; }
+    financialInvoices = financialInvoices.concat((data ?? []).map(row => ({ total: Number(row.total || 0), payment_status: row.payment_status })));
+    if ((data ?? []).length < 1000) break;
+    invoiceOffset += 1000;
+  }
+  if (canViewFinance) {
+    let expenseOffset = 0;
+    while (true) {
+      const { data, error } = await supabase.from("fiskalo_expenses").select("amount")
+        .eq("organization_id", organizationId).gte("expense_date", monthStart)
+        .range(expenseOffset, expenseOffset + 999);
+      if (error) { financialDataError = financialDataError || error.message; break; }
+      financialExpenses = financialExpenses.concat((data ?? []).map(row => ({ amount: Number(row.amount || 0) })));
+      if ((data ?? []).length < 1000) break;
+      expenseOffset += 1000;
+    }
+  }
+  const sales = financialInvoices.reduce((sum, invoice) => sum + invoice.total, 0);
+  const expensesTotal = financialExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+  const unpaidCount = financialInvoices.filter(invoice => invoice.payment_status !== "paid").length;
   const lowStock = (products ?? []).filter(product => product.track_stock && Number(product.stock_quantity) <= 5).length;
   const modules = [
     { href:`/app/${organizationId}/pos`, title:"Regjistro shitje", detail:"Hap arkën dhe përfundo një shitje", icon:ShoppingCart, primary:true, roles:["owner","administrator","manager","cashier"] },
@@ -38,12 +64,12 @@ export default async function BusinessDashboard({ params }: Props) {
     { href:`/app/${organizationId}/reports`, title:"Raportet financiare", detail:"Shitjet, TVSH-ja dhe shpenzimet", icon:ChartNoAxesCombined, roles:["owner","administrator","manager","accountant"] },
   ].filter(item => item.roles.includes(role));
   return <main className="qb-dashboard">
-    <section className="qb-welcome"><div><span className="qb-eyebrow">PËRMBLEDHJA E BIZNESIT</span><h1>Përshëndetje, {roleLabel[role] ?? role}</h1><p>{organization.trade_name || organization.legal_name} · {organization.municipality || "Kosovë"}</p></div><Link className="qb-primary-action" href={`/app/${organizationId}/pos`}><Plus size={17}/> Shitje e re</Link></section>
-    {invoiceError && <div className="qb-inline-alert"><AlertCircle size={16}/> Të dhënat e shitjeve nuk u ngarkuan plotësisht: {invoiceError.message}</div>}
+    <section className="qb-welcome"><div><span className="qb-eyebrow">PËRMBLEDHJA E BIZNESIT</span><h1>Përshëndetje, {roleLabel[role] ?? role}</h1><p>{organization.trade_name || organization.legal_name} · {organization.municipality || "Kosovë"}</p></div>{["owner", "administrator", "manager", "cashier"].includes(role) && <Link className="qb-primary-action" href={`/app/${organizationId}/pos`}><Plus size={17}/> Shitje e re</Link>}</section>
+    {(invoiceError || financialDataError) && <div className="qb-inline-alert"><AlertCircle size={16}/> Të dhënat financiare nuk u ngarkuan plotësisht: {invoiceError?.message || financialDataError}</div>}
     <section className="qb-metric-grid" aria-label="Treguesit e muajit">
       <article className="qb-metric"><span>Shitjet këtë muaj</span><strong>{money(sales)}</strong><small>{(invoices ?? []).length} fatura të lëshuara</small></article>
       <article className="qb-metric"><span>Fatura për arkëtim</span><strong>{unpaidCount}</strong><small>Fatura të papaguara ose pjesërisht të paguara</small></article>
-      <article className="qb-metric"><span>Shpenzimet këtë muaj</span><strong>{money(expensesTotal)}</strong><small>{(expenses ?? []).length} shpenzime të regjistruara</small></article>
+      {canViewFinance && <article className="qb-metric"><span>Shpenzimet këtë muaj</span><strong>{money(expensesTotal)}</strong><small>Shpenzime të regjistruara në muajin aktual</small></article>}
       <article className="qb-metric"><span>Klientët</span><strong>{customerCount ?? 0}</strong><small>{lowStock ? `${lowStock} artikuj me stok të ulët` : "Regjistri i klientëve"}</small></article>
     </section>
     <section className="qb-dashboard-grid">
