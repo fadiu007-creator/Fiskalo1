@@ -33,7 +33,7 @@ export default async function DailyReportsPage({ params, searchParams }: Props) 
   const { data: payments } = invoiceIds.length
     ? await supabase.from("fiskalo_invoice_payments").select("invoice_id,amount,payment_method").in("invoice_id",invoiceIds)
     : { data: [] as {invoice_id:string;amount:number;payment_method:string}[] };
-  const sum = (rows: Array<number|string|null|undefined>)=>rows.reduce((a,v)=>a+Number(v??0),0);
+  const sum = (rows: Array<number|string|null|undefined>)=>rows.reduce<number>((total,value)=>total+Number(value??0),0);
   const gross = sum(invoices.map(row=>row.total));
   const net = sum(invoices.map(row=>row.subtotal));
   const vat = sum(invoices.map(row=>row.vat_total));
