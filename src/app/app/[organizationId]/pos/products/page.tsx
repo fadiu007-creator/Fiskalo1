@@ -11,7 +11,7 @@ type Product = {
   is_active: boolean; atk_unit_code: string | null; atk_tax_code: string | null; atk_item_category_code: string | null;
 };
 const blank = { name: "", sku: "", item_type: "product", unit: "cope", pos_category: "TT", image_url: "", unit_price: "0", vat_rate: "18",
-  stock_quantity: "0", track_stock: false, atk_unit_code: "", atk_tax_code: "E", atk_item_category_code: "" };
+  stock_quantity: "0", track_stock: false, atk_unit_code: "cope", atk_tax_code: "E", atk_item_category_code: "TT" };
 const field: React.CSSProperties = { width: "100%", border: "1px solid var(--line)", borderRadius: 9, padding: "10px 11px", background: "white", color: "var(--ink)" };
 const primary: React.CSSProperties = { border: 0, borderRadius: 9, padding: "11px 15px", background: "var(--brand)", color: "white", fontWeight: 750, cursor: "pointer" };
 
@@ -32,8 +32,8 @@ export default function PosProductsPage() {
   const [scanMessage, setScanMessage] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
   const [planInfo, setPlanInfo] = useState<{ plan_package: string; product_limit: number } | null>(null);
-  const unitCodes = Array.from(new Set(["cope", ...products.map(p => p.atk_unit_code || p.unit).filter((v): v is string => Boolean(v))])).sort();
-  const itemCategoryCodes = Array.from(new Set(["TT", ...products.map(p => p.atk_item_category_code || p.pos_category).filter((v): v is string => Boolean(v))])).sort();
+  const unitCodes = Array.from(new Set(["cope", ...products.map(p => p.atk_unit_code).filter((v): v is string => Boolean(v))])).sort();
+  const itemCategoryCodes = Array.from(new Set(["TT", ...products.map(p => p.atk_item_category_code).filter((v): v is string => Boolean(v))])).sort();
 
   const load = useCallback(async () => {
     const { data: auth } = await supabase.auth.getUser();
@@ -118,7 +118,7 @@ export default function PosProductsPage() {
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
     const price = Number(form.unit_price), vat = Number(form.vat_rate), stock = Number(form.stock_quantity);
-    if (!form.name.trim() || !Number.isFinite(price) || price < 0 || ![0, 8, 18].includes(vat) ||
+    if (!form.name.trim() || !form.atk_unit_code.trim() || !form.atk_item_category_code.trim() || !Number.isFinite(price) || price < 0 || ![0, 8, 18].includes(vat) ||
         !Number.isFinite(stock) || stock < 0) {
       setBusy(false); setError("Kontrollo emrin, çmimin, TVSH-në (0, 8 ose 18) dhe stokun."); return;
     }
