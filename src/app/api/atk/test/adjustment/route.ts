@@ -75,12 +75,12 @@ export async function POST(request: Request) {
   const details = typeof body.details === "string" ? body.details : "";
   const signature = typeof body.signature === "string" ? body.signature : "";
   const couponIdRaw = typeof body.couponId === "string" ? body.couponId : String(body.couponId ?? "");
-  const couponId = /^\\d+$/.test(couponIdRaw) ? BigInt(couponIdRaw) : BigInt(0);
+  const couponId = /^\d+$/.test(couponIdRaw) ? BigInt(couponIdRaw) : BigInt(0);
   const applicationId = positiveInteger(body.applicationId);
   const totalCents = positiveInteger(body.totalCents);
   const refundPaymentMethod = typeof body.refundPaymentMethod === "string" ? body.refundPaymentMethod : "";
   const paymentType: Record<string, number> = { cash: 1, card: 2, bank_transfer: 6 };
-  if (!organizationId || !adjustmentId || !posInstallationId || !/^\\d{9}$/.test(nui) ||
+  if (!organizationId || !adjustmentId || !posInstallationId || !/^\d{9}$/.test(nui) ||
       couponId <= BigInt(0) || couponId > BigInt("18446744073709551615") ||
       !applicationId || totalCents === null || !isBase64(details) || !isBase64(signature) ||
       !paymentType[refundPaymentMethod]) {
