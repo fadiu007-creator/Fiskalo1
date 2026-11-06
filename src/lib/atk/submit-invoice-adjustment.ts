@@ -40,7 +40,7 @@ export async function submitInvoiceAdjustmentToATK(
   ]);
   if (adjustmentError || !adjustment) throw new Error("Kërkesa për korrigjim nuk u gjet.");
   if (adjustment.status !== "awaiting_atk") throw new Error("Kërkesa nuk është në pritje të dërgimit në ATK.");
-  if (organizationError || !organization || !/^\\d{9}$/.test(String(organization.nui))) throw new Error("NUI i biznesit mungon ose nuk është valid.");
+  if (organizationError || !organization || !/^\d{9}$/.test(String(organization.nui))) throw new Error("NUI i biznesit mungon ose nuk është valid.");
 
   const [{ data: original, error: originalError }, { data: adjustmentItems, error: adjustmentItemsError }, { data: invoiceItems, error: invoiceItemsError }] = await Promise.all([
     supabase.from("fiskalo_atk_fiscal_documents")
