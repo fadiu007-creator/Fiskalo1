@@ -123,6 +123,8 @@ export type CouponPayment = { amount: number; payment_method: string };
 export type CouponValidationContext = {
   nui: string;
   couponId: number;
+  couponType?: 1 | 2 | 3;
+  referenceCouponId?: string | number | bigint;
   branchId: number;
   posId: number;
   applicationId: number;
@@ -149,7 +151,7 @@ export function validateAtkCouponPayload(details: string, context: CouponValidat
 
     const header = [
       [1, BigInt(context.nui)], [2, BigInt(context.couponId)], [3, BigInt(context.branchId)],
-      [6, BigInt(context.posId)], [7, BigInt(context.applicationId)], [9, BigInt(1)],
+      [6, BigInt(context.posId)], [7, BigInt(context.applicationId)], [9, BigInt(context.couponType ?? 1)],
       [13, cents(context.total)],
     ] as const;
     for (const [number, expected] of header) {
@@ -164,8 +166,15 @@ export function validateAtkCouponPayload(details: string, context: CouponValidat
       throw new Error("Coupon VAT and net totals do not match the invoice.");
     }
     if (asUint(fields, 19, false) !== BigInt(0)) throw new Error("Discounts are not supported by this POS checkout.");
-    if (asUint(fields, 17, false) !== BigInt(0) || asUint(fields, 18, false) !== BigInt(0)) {
-      throw new Error("A sale coupon cannot reference another transaction.");
+    const expectedReference = context.referenceCouponId == null ? BigInt(0) : BigInt(context.referenceCouponId);
+    if (asUint(fields, 17, false) !== expectedReference || asUint(fields, 18, false) !== BigInt(0)) {
+      throw new Error("Coupon reference does not match the original ATK sale coupon.");
+    }
+    if ((context.couponType ?? 1) === 1 && expectedReference !== BigInt(0)) {
+      throw new Error("A sale coupon cannot reference another coupon.");
+    }
+    if ((context.couponType ?? 1) !== 1 && expectedReference <= BigInt(0)) {
+      throw new Error("ATK cancellation and return coupons must reference the original sale coupon.");
     }
 
     const productMap = new Map(context.products.map((product) => [product.id, product]));
