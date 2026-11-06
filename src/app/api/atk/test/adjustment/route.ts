@@ -40,7 +40,7 @@ function isBase64(value: string): boolean {
 }
 
 function transactionId(raw: string): string | null {
-  const match = raw.match(/"transaction_id"\\s*:\\s*(?:"([0-9]+)"|([0-9]+))/);
+  const match = raw.match(/"transaction_id"\s*:\s*(?:"([0-9]+)"|([0-9]+))/);
   const value = match?.[1] ?? match?.[2];
   if (!value) return null;
   try {
