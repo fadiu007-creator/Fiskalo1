@@ -218,24 +218,19 @@ export async function POST(request: Request) {
     return Response.json({ error: "fiscal_document_save_failed", detail: insertError?.message }, { status: 500 });
   }
 
-  // Once a durable fiscal document exists, prevent the same adjustment from being
-  // recreated or treated as an unsent request in the business UI.
-  const { error: adjustmentSubmitError } = await supabase.rpc("fiskalo_set_invoice_adjustment_atk_status", {
-    target_adjustment: adjustmentId, target_status: "submitted",
-  });
-  if (adjustmentSubmitError) {
-    return Response.json({ error: "adjustment_status_save_failed", detail: "The correction coupon is saved in Fiskalo but its request status could not be updated. Do not submit it again.", fiscalDocumentId: fiscalDocument.id }, { status: 500 });
-  }
-
+  // The signed coupon is now durably stored and uniquely linked to this adjustment.
+  // Audit/status writes must not prevent the actual ATK request: otherwise a saved
+  // coupon can become permanently stuck without ever reaching ATK.
   const { error: eventError } = await supabase.from("fiskalo_atk_fiscal_events").insert({
     organization_id: organizationId, fiscal_document_id: fiscalDocument.id,
     event_type: "submission_started",
     details: { environment: "TEST", adjustmentId, adjustmentType: adjustment.adjustment_type, originalCouponId: original.coupon_id },
   });
-  if (eventError) return Response.json({ error: "fiscal_event_save_failed", fiscalDocumentId: fiscalDocument.id }, { status: 500 });
-  await supabase.from("fiskalo_atk_fiscal_documents").update({
+  if (eventError) console.error("Fiskalo ATK adjustment audit event failed", eventError.message);
+  const { error: submittingError } = await supabase.from("fiskalo_atk_fiscal_documents").update({
     status: "submitted", submission_attempts: 1, last_submitted_at: new Date().toISOString(),
   }).eq("id", fiscalDocument.id).eq("organization_id", organizationId);
+  if (submittingError) console.error("Fiskalo ATK adjustment submission status update failed", submittingError.message);
 
   try {
     const response = await fetch("https://fiskalizimi-test.atk-ks.org/pos/coupon", {
