@@ -220,9 +220,9 @@ export async function POST(request: Request) {
 
   // Once a durable fiscal document exists, prevent the same adjustment from being
   // recreated or treated as an unsent request in the business UI.
-  const { error: adjustmentSubmitError } = await supabase.from("fiskalo_invoice_adjustments")
-    .update({ status: "submitted", updated_at: new Date().toISOString() })
-    .eq("id", adjustmentId).eq("organization_id", organizationId).eq("status", "awaiting_atk");
+  const { error: adjustmentSubmitError } = await supabase.rpc("fiskalo_set_invoice_adjustment_atk_status", {
+    target_adjustment: adjustmentId, target_status: "submitted",
+  });
   if (adjustmentSubmitError) {
     return Response.json({ error: "adjustment_status_save_failed", detail: "The correction coupon is saved in Fiskalo but its request status could not be updated. Do not submit it again.", fiscalDocumentId: fiscalDocument.id }, { status: 500 });
   }
@@ -257,9 +257,9 @@ export async function POST(request: Request) {
         details: { httpStatus: response.status, detail, requiresReconciliation: !definitive },
       });
       if (definitive) {
-        await supabase.from("fiskalo_invoice_adjustments").update({
-          status: "rejected", updated_at: new Date().toISOString(),
-        }).eq("id", adjustmentId).eq("organization_id", organizationId);
+        await supabase.rpc("fiskalo_set_invoice_adjustment_atk_status", {
+          target_adjustment: adjustmentId, target_status: "rejected",
+        });
       }
       return Response.json({ error: definitive ? "atk_correction_rejected" : "atk_response_unconfirmed", detail, fiscalDocumentId: fiscalDocument.id }, { status: 502 });
     }
@@ -275,9 +275,9 @@ export async function POST(request: Request) {
       status: "accepted", atk_transaction_id: id, atk_response: result, accepted_at: new Date().toISOString(), last_error: null,
     }).eq("id", fiscalDocument.id).eq("organization_id", organizationId);
     if (acceptedError) return Response.json({ error: "accepted_status_save_failed", detail: "ATK accepted the correction, but Fiskalo could not persist its status. Do not resubmit.", fiscalDocumentId: fiscalDocument.id, transactionId: id }, { status: 500 });
-    const { error: adjustmentAcceptedError } = await supabase.from("fiskalo_invoice_adjustments").update({
-      status: "accepted", updated_at: new Date().toISOString(),
-    }).eq("id", adjustmentId).eq("organization_id", organizationId);
+    const { error: adjustmentAcceptedError } = await supabase.rpc("fiskalo_set_invoice_adjustment_atk_status", {
+      target_adjustment: adjustmentId, target_status: "accepted",
+    });
     if (adjustmentAcceptedError) {
       return Response.json({ error: "adjustment_acceptance_save_failed", detail: "ATK accepted the correction and the fiscal document is saved, but the adjustment ledger status needs reconciliation. Do not resubmit.", fiscalDocumentId: fiscalDocument.id, transactionId: id }, { status: 500 });
     }
