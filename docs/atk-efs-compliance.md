@@ -40,7 +40,9 @@ No internal toggle, test certificate, fabricated code, or successful TEST coupon
 - Coupon IDs must be unique across the taxpayer/business, not merely unique within one POS.
 - Use ATK monetary precision: unit price in EUR × 10,000; totals, tax and payments in cents.
 - Validate product unit, item category, VAT/tax code and payment type against the current official ATK catalogues.
-- Do not label any receipt fiscalized until ATK has returned and Fiskalo has durably saved a valid accepted response/transaction ID.\n\nThe public [ATK C# Protobuf example](https://github.com/fiskalizimi/pos-csharp) defines `CANCEL=2`, `RETURN=3`, and `ReferenceNo` as the original Sale `CouponId`. It documents the ATK response `transaction_id` as a server-returned uint64. The sample does not specify correction-payment/refund semantics or whether the `TransactionNo` request field must be populated for a correction; those details require ATK confirmation and TEST evidence before automatic submission is enabled.
+- Do not label any receipt fiscalized until ATK has returned and Fiskalo has durably saved a valid accepted response/transaction ID.
+
+The public [ATK C# Protobuf example](https://github.com/fiskalizimi/pos-csharp) defines `CANCEL=2`, `RETURN=3`, and `ReferenceNo` as the original Sale `CouponId`. It documents the ATK response `transaction_id` as a server-returned uint64. The sample does not specify correction-payment/refund semantics or whether the `TransactionNo` request field must be populated for a correction; those details require ATK confirmation and TEST evidence before automatic submission is enabled.
 
 ### Device security and connectivity
 - Generate a separate key for each registered POS and keep private keys on that device.
