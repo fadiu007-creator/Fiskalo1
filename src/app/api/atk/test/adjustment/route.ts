@@ -224,7 +224,6 @@ export async function POST(request: Request) {
     details: { environment: "TEST", adjustmentId, adjustmentType: adjustment.adjustment_type, originalCouponId: original.coupon_id },
   });
   if (eventError) return Response.json({ error: "fiscal_event_save_failed", fiscalDocumentId: fiscalDocument.id }, { status: 500 });
-  await supabase.from("fiskalo_invoice_adjustments").update({ status: "submitted" }).eq("id", adjustmentId).eq("organization_id", organizationId);
   await supabase.from("fiskalo_atk_fiscal_documents").update({
     status: "submitted", submission_attempts: 1, last_submitted_at: new Date().toISOString(),
   }).eq("id", fiscalDocument.id).eq("organization_id", organizationId);
@@ -243,7 +242,6 @@ export async function POST(request: Request) {
       await supabase.from("fiskalo_atk_fiscal_documents").update({
         status: definitive ? "rejected" : "offline_pending", last_error: detail, atk_response: result,
       }).eq("id", fiscalDocument.id);
-      if (definitive) await supabase.from("fiskalo_invoice_adjustments").update({ status: "rejected" }).eq("id", adjustmentId);
       await supabase.from("fiskalo_atk_fiscal_events").insert({
         organization_id: organizationId, fiscal_document_id: fiscalDocument.id,
         event_type: definitive ? "rejected" : "response_unconfirmed",
@@ -263,7 +261,6 @@ export async function POST(request: Request) {
       status: "accepted", atk_transaction_id: id, atk_response: result, accepted_at: new Date().toISOString(), last_error: null,
     }).eq("id", fiscalDocument.id).eq("organization_id", organizationId);
     if (acceptedError) return Response.json({ error: "accepted_status_save_failed", detail: "ATK accepted the correction, but Fiskalo could not persist its status. Do not resubmit.", fiscalDocumentId: fiscalDocument.id, transactionId: id }, { status: 500 });
-    await supabase.from("fiskalo_invoice_adjustments").update({ status: "accepted" }).eq("id", adjustmentId).eq("organization_id", organizationId);
     await supabase.from("fiskalo_atk_fiscal_events").insert({
       organization_id: organizationId, fiscal_document_id: fiscalDocument.id,
       event_type: "accepted", details: { transactionId: id, environment: "TEST", adjustmentId },
