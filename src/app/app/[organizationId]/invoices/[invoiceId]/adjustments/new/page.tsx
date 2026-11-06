@@ -45,6 +45,7 @@ export default async function NewInvoiceAdjustmentPage({params,searchParams}:Pro
       : Promise.resolve({data:[],error:null}),
   ]);
   const fiscalStatusByAdjustment=new Map((priorFiscalDocs??[]).map(doc=>[doc.source_adjustment_id,doc] as const));
+  const pendingAdjustmentId=activePrior.find(row=>row.adjustment_type===kind&&row.status==="awaiting_atk"&&!fiscalStatusByAdjustment.has(row.id))?.id;
   const ledger=new Map<string,{quantity:number;net:number;vat:number}>();
   for(const row of priorItems??[]){
     const value=ledger.get(row.original_invoice_item_id)??{quantity:0,net:0,vat:0};
@@ -70,7 +71,7 @@ export default async function NewInvoiceAdjustmentPage({params,searchParams}:Pro
         <strong>Kërkesat paraprake</strong><br/>{priorRows.map(row=>{const fiscal=fiscalStatusByAdjustment.get(row.id);return <div key={row.id} style={{paddingTop:6}}>{row.adjustment_type==="cancel"?"Anulim":"Kthim"} · {Number(row.amount).toFixed(2)} € · {row.status} · ATK: {fiscal?.status??"nuk është dërguar"}{fiscal?.atk_transaction_id? " · TX "+String(fiscal.atk_transaction_id):""}</div>})}<br/>
         Shuma e regjistruar: {priorAmount.toFixed(2)} € / {Number(invoice.total).toFixed(2)} €
       </div>:null}
-      <AdjustmentRequestForm invoiceId={invoiceId} organizationId={organizationId} total={Number(invoice.total)}
+      <AdjustmentRequestForm invoiceId={invoiceId} organizationId={organizationId} pendingAdjustmentId={pendingAdjustmentId} total={Number(invoice.total)}
         kind={kind} invoiceNumber={invoice.invoice_number||invoice.id} couponId={String(fiscalDoc.coupon_id)}
         transactionId={String(fiscalDoc.atk_transaction_id)}
         items={(invoiceItems??[]).map(item=>{
