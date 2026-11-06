@@ -69,7 +69,7 @@ The public [ATK C# Protobuf example](https://github.com/fiskalizimi/pos-csharp) 
 | Paid Web POS Sale coupon creation and TEST submission | Implemented; runbook records four accepted TEST Sale documents |
 | ATK response/transaction ID storage and duplicate-sale guard | Implemented for Sale flow |
 | Ambiguous ATK response state | Implemented as pending/reconciliation-required; do not blindly retry |
-| Cancel and Return ATK submission | Not yet implemented end-to-end; item-level return/cancellation quantities, proportional net/VAT amounts, residual rounding and audit ledger are now recorded internally, but no signed correction coupon is submitted to ATK |
+| Cancel and Return ATK submission | Signed TEST submission paths now exist for both types. They reference the original Sale CouponId, use the same original TEST POS/certificate, validate item-level quantities/net/VAT against the adjustment ledger, persist a linked fiscal document and prevent duplicate submission. ATK acceptance for both scenarios is still unverified; payment/refund semantics and optional Protobuf `TransactionNo` require ATK TEST confirmation before certification |
 | Complete encrypted offline journal and automatic recovery | Partial foundation; not certified or verified against ATK recovery requirements |
 | Android key/coupon workflow | Standalone internal-test APK build succeeds; physical-device certificate, ATK submission and printer tests remain |
 | Complete official X/Z report submission for SEF | Not established by the inspected public SEF sample; do not claim implemented or required without current ATK confirmation |
@@ -83,7 +83,7 @@ The public [ATK C# Protobuf example](https://github.com/fiskalizimi/pos-csharp) 
 
 1. Obtain ATK's latest complete test scenarios and written confirmation of protocol details that are unclear in public examples.
 2. Complete Cancel and Return flows, including original-coupon references, item/amount reconciliation, unique IDs, signature, response persistence and audit trail.
-3. Complete the durable offline journal, required recovery window, reconciliation and operator alerts.
+3. Validate signed Cancel and partial/full Return against ATK's prescribed TEST cases, including the chosen refund payment method and the optional `TransactionNo` field. The current correction implementation leaves `TransactionNo` unset because the public sample does not define its correction semantics. Complete the durable offline journal, required recovery window, reconciliation and operator alerts.
 4. Complete and physically test the approved POS Agent / Android device-key and printing architecture.
 5. Validate all official ATK unit, item-category, tax and payment catalogues against the live product UI and coupon validator.
 6. Run every ATK-prescribed test for every required POS environment and retain evidence.
