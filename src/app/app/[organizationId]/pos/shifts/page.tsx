@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-type Shift = {
+type ShiftReport = { id: string; cashier_shift_id: string; report_number: string; generated_at: string };\n\ntype Shift = {
   id: string;
   status: "open" | "closed";
   opening_cash: number;
@@ -26,7 +26,7 @@ export default function CashierShiftsPage() {
   const organizationId = params.organizationId;
   const supabase = useMemo(() => createClient(), []);
   const [shift, setShift] = useState<Shift | null>(null);
-  const [recent, setRecent] = useState<Shift[]>([]);
+  const [recent, setRecent] = useState<Shift[]>([]);\n  const [recentReports, setRecentReports] = useState<ShiftReport[]>([]);\n  const [latestReportId, setLatestReportId] = useState("");
   const [openingCash, setOpeningCash] = useState("0");
   const [countedCash, setCountedCash] = useState("");
   const [closingNote, setClosingNote] = useState("");
@@ -115,7 +115,7 @@ export default function CashierShiftsPage() {
     if (rpcError) setError(rpcError.message);
     else {
       const result = Array.isArray(data) ? data[0] : data;
-      setMessage("Ndërrimi u mbyll. Gjendja e pritur: " + money(Number(result?.expected ?? 0)) + "; diferenca: " + money(Number(result?.difference ?? 0)) + ".");
+      setLatestReportId(String(result?.report_id ?? ""));\n      setMessage("Ndërrimi u mbyll. Raporti i brendshëm Z u krijua me gjendjen e arkës dhe evidencën e pagesave.");
       setCountedCash(""); setClosingNote(""); await load();
     }
     setBusy(false);
@@ -130,7 +130,7 @@ export default function CashierShiftsPage() {
       <button onClick={() => void load()} style={{ ...field, width: "auto", cursor: "pointer" }}>Rifresko</button>
     </header>
     {error && <div role="alert" style={{ padding: 12, borderRadius: 8, background: "#fff0ef", color: "#982d25", marginBottom: 14 }}>{error}</div>}
-    {message && <div role="status" style={{ padding: 12, borderRadius: 8, background: "#edf7f1", color: "#155c3c", marginBottom: 14 }}>{message}</div>}
+    {message && <div role="status" style={{ padding: 12, borderRadius: 8, background: "#edf7f1", color: "#155c3c", marginBottom: 14 }}>{message}{latestReportId && <div style={{marginTop:6}}><Link href={`/app/${organizationId}/pos/shifts/reports/${latestReportId}`} style={{fontWeight:800,textDecoration:"underline"}}>Hap raportin Z</Link></div>}</div>}
     {shift ? <section style={{ border: "1px solid var(--line)", borderRadius: 12, padding: 18, background: "var(--surface)", display: "grid", gap: 16 }}>
       <div><strong style={{ color: "#167044" }}>Ndërrimi është i hapur</strong><div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>Hapur: {new Date(shift.opened_at).toLocaleString("sq-XK")}</div><div style={{ marginTop: 8 }}>Para fillestare: <strong>{money(Number(shift.opening_cash))}</strong></div></div>
       <form onSubmit={addMovement} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 10, alignItems: "end" }}>
@@ -158,6 +158,6 @@ export default function CashierShiftsPage() {
         </table>
       </div>
     </section>
-    <p style={{ marginTop: 14, color: "var(--muted)", fontSize: 11, lineHeight: 1.5 }}>Pagesat me para në dorë të regjistruara gjatë ndërrimit lidhen automatikisht me arkën e hapur të këtij përdoruesi. Kjo është evidencë e brendshme e arkës, jo raport fiskal i ATK-së.</p>
+    <section style={{ marginTop: 24 }}>\n      <h2 style={{ fontSize: 18 }}>Raportet Z të arkës</h2>\n      <div style={{ overflowX: "auto", border: "1px solid var(--line)", borderRadius: 10 }}>\n        <table className="data-table" style={{ width: "100%", minWidth: 520 }}>\n          <thead><tr><th>Raporti</th><th>Gjeneruar</th><th>Dokumenti</th></tr></thead>\n          <tbody>{recentReports.map(report => <tr key={report.id}><td><strong>{report.report_number}</strong></td><td>{new Date(report.generated_at).toLocaleString("sq-XK")}</td><td><Link href={`/app/${organizationId}/pos/shifts/reports/${report.id}`} style={{color:"var(--brand)",fontWeight:800}}>Hap raportin Z</Link></td></tr>)}{!recentReports.length && <tr><td colSpan={3}>Ende nuk ka raporte Z.</td></tr>}</tbody>\n        </table>\n      </div>\n    </section>\n    <p style={{ marginTop: 14, color: "var(--muted)", fontSize: 11, lineHeight: 1.5 }}>Raportet X/Z në Fiskalo janë vetëm raporte të brendshme menaxheriale. Nuk janë raporte tatimore zyrtare të ATK-së dhe nuk dërgohen në ATK. Pagesat me para në dorë lidhen automatikisht me ndërrimin aktiv të arkëtarit.</p>
   </main>;
 }
