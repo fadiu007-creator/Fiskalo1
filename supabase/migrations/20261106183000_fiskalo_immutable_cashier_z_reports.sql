@@ -21,7 +21,9 @@ create policy fiskalo_cashier_shift_reports_select on public.fiskalo_cashier_shi
   for select to authenticated using (public.fiskalo_is_member(organization_id));
 grant select on public.fiskalo_cashier_shift_reports to authenticated;
 
-create or replace function public.fiskalo_close_cashier_shift(
+drop function if exists public.fiskalo_close_cashier_shift(uuid,numeric,text);
+
+create function public.fiskalo_close_cashier_shift(
   target_shift uuid,
   counted_amount numeric,
   closing_note text default null
