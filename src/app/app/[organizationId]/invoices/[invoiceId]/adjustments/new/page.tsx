@@ -62,7 +62,7 @@ export default async function NewInvoiceAdjustmentPage({params,searchParams}:Pro
         <strong>Kërkesat paraprake</strong><br/>{priorRows.map(row=><div key={row.id} style={{paddingTop:6}}>{row.adjustment_type==="cancel"?"Anulim":"Kthim"} · {Number(row.amount).toFixed(2)} € · {row.status}</div>)}<br/>
         Shuma e regjistruar: {priorAmount.toFixed(2)} € / {Number(invoice.total).toFixed(2)} €
       </div>:null}
-      <AdjustmentRequestForm invoiceId={invoiceId} total={Number(invoice.total)}
+      <AdjustmentRequestForm invoiceId={invoiceId} organizationId={organizationId} total={Number(invoice.total)}
         kind={kind} invoiceNumber={invoice.invoice_number||invoice.id} couponId={String(fiscalDoc.coupon_id)}
         transactionId={String(fiscalDoc.atk_transaction_id)}
         items={(invoiceItems??[]).map(item=>{
