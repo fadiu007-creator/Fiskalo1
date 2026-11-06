@@ -57,7 +57,7 @@ export default function AdjustmentRequestForm(props: Props) {
       ]);
       const status = fiscalDocument?.status || adjustment?.status || "unknown";
       const detail = error instanceof Error ? error.message : "Dërgimi në ATK dështoi.";
-      setCanRetry(status === "awaiting_atk");
+      setCanRetry(status === "awaiting_atk" && !fiscalDocument);
       setMessage(status === "awaiting_atk"
         ? detail + " Kërkesa është ruajtur në Fiskalo dhe mund të provohet përsëri pasi të rregullohet pengesa."
         : "Statusi fiskal: " + status + ". " + (fiscalDocument?.last_error || detail) + " Mos e dërgo përsëri pa kontrolluar statusin në ATK.");
