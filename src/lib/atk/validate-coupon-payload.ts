@@ -122,7 +122,7 @@ export type CouponPayment = { amount: number; payment_method: string };
 
 export type CouponValidationContext = {
   nui: string;
-  couponId: number;
+  couponId: string | number | bigint;
   couponType?: 1 | 2 | 3;
   referenceCouponId?: string | number | bigint;
   branchId: number;
