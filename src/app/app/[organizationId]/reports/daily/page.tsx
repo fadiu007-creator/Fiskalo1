@@ -40,7 +40,7 @@ export default async function DailyReportsPage({ params, searchParams }: Props) 
       .eq("organization_id",organizationId).eq("status","issued").eq("issue_date",date).order("issue_date",{ascending:true}).limit(2000),
     supabase.from("fiskalo_cashier_shifts").select("id,status,opening_cash,expected_cash,counted_cash,cash_difference,opened_at,closed_at")
       .eq("organization_id",organizationId)
-      .or("and(opened_at.gte." + bounds.start + ",opened_at.lt." + bounds.end + "),and(closed_at.gte." + bounds.start + ",closed_at.lt." + bounds.end + ")")
+      .or("status.eq.open,and(opened_at.gte." + bounds.start + ",opened_at.lt." + bounds.end + "),and(closed_at.gte." + bounds.start + ",closed_at.lt." + bounds.end + ")")
       .order("opened_at",{ascending:true}).limit(500),
     supabase.from("fiskalo_atk_fiscal_documents").select("id,status,document_type,total,atk_transaction_id,last_error,occurred_at")
       .eq("organization_id",organizationId).gte("occurred_at",bounds.start).lt("occurred_at",bounds.end).order("occurred_at",{ascending:true}).limit(2000)
