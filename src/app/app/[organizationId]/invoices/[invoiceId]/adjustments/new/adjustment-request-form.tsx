@@ -38,6 +38,7 @@ export default function AdjustmentRequestForm(props: Props) {
   const [created, setCreated] = useState(false);
   const [createdAdjustmentId, setCreatedAdjustmentId] = useState("");
   const [accepted, setAccepted] = useState(false);
+  const [canRetry, setCanRetry] = useState(false);
   const [refundPaymentMethod, setRefundPaymentMethod] = useState<"cash" | "card" | "bank_transfer">("cash");
 
   async function sendToATK(adjustmentId: string) {
@@ -47,6 +48,7 @@ export default function AdjustmentRequestForm(props: Props) {
     try {
       const result = await submitInvoiceAdjustmentToATK(supabase, props.organizationId, adjustmentId, refundPaymentMethod);
       setAccepted(true);
+      setCanRetry(false);
       setMessage(result.message + " Numri i transaksionit: " + result.transactionId);
     } catch (error) {
       const [{ data: adjustment }, { data: fiscalDocument }] = await Promise.all([
@@ -55,6 +57,7 @@ export default function AdjustmentRequestForm(props: Props) {
       ]);
       const status = fiscalDocument?.status || adjustment?.status || "unknown";
       const detail = error instanceof Error ? error.message : "Dërgimi në ATK dështoi.";
+      setCanRetry(status === "awaiting_atk");
       setMessage(status === "awaiting_atk"
         ? detail + " Kërkesa është ruajtur në Fiskalo dhe mund të provohet përsëri pasi të rregullohet pengesa."
         : "Statusi fiskal: " + status + ". " + (fiscalDocument?.last_error || detail) + " Mos e dërgo përsëri pa kontrolluar statusin në ATK.");
@@ -155,7 +158,7 @@ export default function AdjustmentRequestForm(props: Props) {
       style={{border:0,borderRadius:9,padding:"12px 16px",background:"var(--brand)",color:"white",fontWeight:800,cursor:"pointer"}}>
       {busy ? "Duke përpunuar..." : accepted ? "Korrigjimi u pranua nga ATK TEST" : created ? "Kërkesa u ruajt" : props.kind === "cancel" ? "Regjistro dhe dërgo anulimin në ATK TEST" : "Regjistro dhe dërgo kthimin në ATK TEST"}
     </button>
-    {createdAdjustmentId && !accepted && <button type="button" disabled={busy} onClick={()=>void sendToATK(createdAdjustmentId)} style={{border:"1px solid var(--line)",borderRadius:9,padding:"10px 14px",background:"white",fontWeight:750,cursor:"pointer"}}>Kontrollo / provo dërgimin në ATK TEST</button>}
+    {createdAdjustmentId && canRetry && !accepted && <button type="button" disabled={busy} onClick={()=>void sendToATK(createdAdjustmentId)} style={{border:"1px solid var(--line)",borderRadius:9,padding:"10px 14px",background:"white",fontWeight:750,cursor:"pointer"}}>Kontrollo / provo dërgimin në ATK TEST</button>}
     {message && <p role="status" style={{margin:0,fontSize:12,color:accepted?"#26734d":"#a33f36"}}>{message}</p>}
   </form>;
 }
