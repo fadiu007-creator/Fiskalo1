@@ -5,7 +5,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-type ShiftReport = { id: string; cashier_shift_id: string; report_number: string; generated_at: string };\n\ntype Shift = {
+type ShiftReport = { id: string; cashier_shift_id: string; report_number: string; generated_at: string };
+
+type Shift = {
   id: string;
   status: "open" | "closed";
   opening_cash: number;
@@ -26,7 +28,9 @@ export default function CashierShiftsPage() {
   const organizationId = params.organizationId;
   const supabase = useMemo(() => createClient(), []);
   const [shift, setShift] = useState<Shift | null>(null);
-  const [recent, setRecent] = useState<Shift[]>([]);\n  const [recentReports, setRecentReports] = useState<ShiftReport[]>([]);\n  const [latestReportId, setLatestReportId] = useState("");
+  const [recent, setRecent] = useState<Shift[]>([]);
+  const [recentReports, setRecentReports] = useState<ShiftReport[]>([]);
+  const [latestReportId, setLatestReportId] = useState("");
   const [openingCash, setOpeningCash] = useState("0");
   const [countedCash, setCountedCash] = useState("");
   const [closingNote, setClosingNote] = useState("");
@@ -73,6 +77,13 @@ export default function CashierShiftsPage() {
     }
     setShift(active.data as Shift | null);
     setRecent((history.data ?? []) as Shift[]);
+    const shiftIds = (history.data ?? []).map((row) => row.id);
+    const { data: reports, error: reportsError } = shiftIds.length
+      ? await supabase.from("fiskalo_cashier_shift_reports").select("id,cashier_shift_id,report_number,generated_at")
+          .eq("organization_id", organizationId).in("cashier_shift_id", shiftIds).order("generated_at", { ascending: false })
+      : { data: [], error: null };
+    if (reportsError) { setError("Ndërrimet u lexuan, por raportet Z nuk u ngarkuan. Apliko migrimin e raporteve të arkës."); return; }
+    setRecentReports((reports ?? []) as ShiftReport[]);
     setError("");
   }, [organizationId, supabase]);
 
@@ -115,7 +126,8 @@ export default function CashierShiftsPage() {
     if (rpcError) setError(rpcError.message);
     else {
       const result = Array.isArray(data) ? data[0] : data;
-      setLatestReportId(String(result?.report_id ?? ""));\n      setMessage("Ndërrimi u mbyll. Raporti i brendshëm Z u krijua me gjendjen e arkës dhe evidencën e pagesave.");
+      setLatestReportId(String(result?.report_id ?? ""));
+      setMessage("Ndërrimi u mbyll. Raporti i brendshëm Z u krijua me gjendjen e arkës dhe evidencën e pagesave.");
       setCountedCash(""); setClosingNote(""); await load();
     }
     setBusy(false);
@@ -158,6 +170,15 @@ export default function CashierShiftsPage() {
         </table>
       </div>
     </section>
-    <section style={{ marginTop: 24 }}>\n      <h2 style={{ fontSize: 18 }}>Raportet Z të arkës</h2>\n      <div style={{ overflowX: "auto", border: "1px solid var(--line)", borderRadius: 10 }}>\n        <table className="data-table" style={{ width: "100%", minWidth: 520 }}>\n          <thead><tr><th>Raporti</th><th>Gjeneruar</th><th>Dokumenti</th></tr></thead>\n          <tbody>{recentReports.map(report => <tr key={report.id}><td><strong>{report.report_number}</strong></td><td>{new Date(report.generated_at).toLocaleString("sq-XK")}</td><td><Link href={`/app/${organizationId}/pos/shifts/reports/${report.id}`} style={{color:"var(--brand)",fontWeight:800}}>Hap raportin Z</Link></td></tr>)}{!recentReports.length && <tr><td colSpan={3}>Ende nuk ka raporte Z.</td></tr>}</tbody>\n        </table>\n      </div>\n    </section>\n    <p style={{ marginTop: 14, color: "var(--muted)", fontSize: 11, lineHeight: 1.5 }}>Raportet X/Z në Fiskalo janë vetëm raporte të brendshme menaxheriale. Nuk janë raporte tatimore zyrtare të ATK-së dhe nuk dërgohen në ATK. Pagesat me para në dorë lidhen automatikisht me ndërrimin aktiv të arkëtarit.</p>
+    <section style={{ marginTop: 24 }}>
+      <h2 style={{ fontSize: 18 }}>Raportet Z të arkës</h2>
+      <div style={{ overflowX: "auto", border: "1px solid var(--line)", borderRadius: 10 }}>
+        <table className="data-table" style={{ width: "100%", minWidth: 520 }}>
+          <thead><tr><th>Raporti</th><th>Gjeneruar</th><th>Dokumenti</th></tr></thead>
+          <tbody>{recentReports.map(report => <tr key={report.id}><td><strong>{report.report_number}</strong></td><td>{new Date(report.generated_at).toLocaleString("sq-XK")}</td><td><Link href={`/app/${organizationId}/pos/shifts/reports/${report.id}`} style={{color:"var(--brand)",fontWeight:800}}>Hap raportin Z</Link></td></tr>)}{!recentReports.length && <tr><td colSpan={3}>Ende nuk ka raporte Z.</td></tr>}</tbody>
+        </table>
+      </div>
+    </section>
+    <p style={{ marginTop: 14, color: "var(--muted)", fontSize: 11, lineHeight: 1.5 }}>Raportet X/Z në Fiskalo janë vetëm raporte të brendshme menaxheriale. Nuk janë raporte tatimore zyrtare të ATK-së dhe nuk dërgohen në ATK. Pagesat me para në dorë lidhen automatikisht me ndërrimin aktiv të arkëtarit.</p>
   </main>;
 }
