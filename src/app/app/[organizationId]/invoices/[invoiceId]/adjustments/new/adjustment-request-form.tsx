@@ -24,6 +24,7 @@ type Props = {
   couponId: string;
   transactionId: string;
   items: InvoiceItem[];
+  pendingAdjustmentId?: string;
 };
 
 const money = (value: number) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR" }).format(value);
@@ -34,11 +35,11 @@ export default function AdjustmentRequestForm(props: Props) {
   );
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  const [created, setCreated] = useState(false);
-  const [createdAdjustmentId, setCreatedAdjustmentId] = useState("");
+  const [message, setMessage] = useState(props.pendingAdjustmentId ? "Ekziston një kërkesë e ruajtur që nuk është dërguar ende në ATK. Konfirmo mënyrën reale të kthimit dhe vazhdo." : "");
+  const [created, setCreated] = useState(Boolean(props.pendingAdjustmentId));
+  const [createdAdjustmentId, setCreatedAdjustmentId] = useState(props.pendingAdjustmentId ?? "");
   const [accepted, setAccepted] = useState(false);
-  const [canRetry, setCanRetry] = useState(false);
+  const [canRetry, setCanRetry] = useState(Boolean(props.pendingAdjustmentId));
   const [refundPaymentMethod, setRefundPaymentMethod] = useState<"cash" | "card" | "bank_transfer">("cash");
 
   async function sendToATK(adjustmentId: string) {
