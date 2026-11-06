@@ -231,6 +231,10 @@ export async function POST(request: Request) {
     status: "submitted", submission_attempts: 1, last_submitted_at: new Date().toISOString(),
   }).eq("id", fiscalDocument.id).eq("organization_id", organizationId);
   if (submittingError) console.error("Fiskalo ATK adjustment submission status update failed", submittingError.message);
+  const { error: adjustmentSubmitError } = await supabase.rpc("fiskalo_set_invoice_adjustment_atk_status", {
+    target_adjustment: adjustmentId, target_status: "submitted",
+  });
+  if (adjustmentSubmitError) console.error("Fiskalo ATK adjustment ledger submission status update failed", adjustmentSubmitError.message);
 
   try {
     const response = await fetch("https://fiskalizimi-test.atk-ks.org/pos/coupon", {
