@@ -184,7 +184,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "unsupported_transaction_reference", detail: "The optional ATK TransactionNo field is intentionally left unset pending ATK confirmation." }, { status: 409 });
   }
   const payloadValidation = validateAtkCouponPayload(details, {
-    nui, couponId: Number(couponId), couponType, referenceCouponId: String(original.coupon_id),
+    nui, couponId: couponId.toString(), couponType, referenceCouponId: String(original.coupon_id),
     branchId: Number(pos.atk_branch_id), posId: Number(pos.pos_id), applicationId,
     operatorId: user.id, location: pos.location || organization.municipality || "",
     total, subtotal, vatTotal, lines, products: products ?? [],
