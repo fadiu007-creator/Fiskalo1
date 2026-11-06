@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { submitInvoiceAdjustmentToATK } from "@/lib/atk/submit-invoice-adjustment";
 
 type InvoiceItem = {
   id: string;
@@ -16,6 +17,7 @@ type InvoiceItem = {
 
 type Props = {
   invoiceId: string;
+  organizationId: string;
   total: number;
   kind: "cancel" | "return";
   invoiceNumber: string;
@@ -34,6 +36,30 @@ export default function AdjustmentRequestForm(props: Props) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [created, setCreated] = useState(false);
+  const [createdAdjustmentId, setCreatedAdjustmentId] = useState("");
+  const [accepted, setAccepted] = useState(false);
+  const [refundPaymentMethod, setRefundPaymentMethod] = useState<"cash" | "card" | "bank_transfer">("cash");
+
+  async function sendToATK(adjustmentId: string) {
+    setBusy(true);
+    setMessage("Duke nënshkruar dhe dërguar kuponin korrigjues në ATK TEST...");
+    const supabase = createClient();
+    try {
+      const result = await submitInvoiceAdjustmentToATK(supabase, props.organizationId, adjustmentId, refundPaymentMethod);
+      setAccepted(true);
+      setMessage(result.message + " Numri i transaksionit: " + result.transactionId);
+    } catch (error) {
+      const [{ data: adjustment }, { data: fiscalDocument }] = await Promise.all([
+        supabase.from("fiskalo_invoice_adjustments").select("status").eq("id", adjustmentId).maybeSingle(),
+        supabase.from("fiskalo_atk_fiscal_documents").select("status,last_error").eq("source_adjustment_id", adjustmentId).maybeSingle(),
+      ]);
+      const status = fiscalDocument?.status || adjustment?.status || "unknown";
+      const detail = error instanceof Error ? error.message : "Dërgimi në ATK dështoi.";
+      setMessage(status === "awaiting_atk"
+        ? detail + " Kërkesa është ruajtur në Fiskalo dhe mund të provohet përsëri pasi të rregullohet pengesa."
+        : "Statusi fiskal: " + status + ". " + (fiscalDocument?.last_error || detail) + " Mos e dërgo përsëri pa kontrolluar statusin në ATK.");
+    } finally { setBusy(false); }
+  }
 
   const selectedItems = useMemo(() => props.items.flatMap((item) => {
     const quantity = Number(quantities[item.id] || 0);
@@ -77,9 +103,11 @@ export default function AdjustmentRequestForm(props: Props) {
       setBusy(false);
       return;
     }
+    const adjustmentId = String(data);
+    setCreatedAdjustmentId(adjustmentId);
     setCreated(true);
-    setMessage("Kërkesa dhe sasitë e artikujve u regjistruan me evidencë auditimi. Ende nuk është dërguar në ATK dhe shitja origjinale mbetet e pranuar.");
     setBusy(false);
+    await sendToATK(adjustmentId);
   }
 
   return <form onSubmit={submit} style={{display:"grid",gap:14}}>
@@ -107,18 +135,27 @@ export default function AdjustmentRequestForm(props: Props) {
     </div>
     {props.kind === "cancel" && <p style={{margin:0,fontSize:12,color:"var(--muted)"}}>Anulimi përfshin të gjitha linjat dhe vlerën e plotë të faturës origjinale.</p>}
     <label style={{display:"grid",gap:6,fontSize:13,fontWeight:700}}>
+      Mënyra e kthimit të pagesës
+      <select value={refundPaymentMethod} onChange={event=>setRefundPaymentMethod(event.target.value as "cash" | "card" | "bank_transfer")} style={{padding:11,border:"1px solid var(--line)",borderRadius:9,font:"inherit",background:"white"}}>
+        <option value="cash">Para të gatshme</option>
+        <option value="card">Kartelë</option>
+        <option value="bank_transfer">Transfer bankar / tjetër</option>
+      </select>
+    </label>
+    <label style={{display:"grid",gap:6,fontSize:13,fontWeight:700}}>
       Arsyeja
       <textarea required minLength={3} maxLength={500} value={reason} onChange={event=>setReason(event.target.value)}
         placeholder="Shëno arsyen e anulimit ose kthimit..." rows={3}
         style={{padding:12,border:"1px solid var(--line)",borderRadius:9,font:"inherit",resize:"vertical"}}/>
     </label>
     <div style={{padding:12,border:"1px solid #d7a64a",borderRadius:9,background:"#fff9eb",fontSize:12,lineHeight:1.6}}>
-      <strong>Status fiskal:</strong> Kjo ruan kërkesën dhe sasitë e sakta të artikujve në Fiskalo. Nuk dërgon ende kupon anulimi/kthimi në ATK; mos e trajto si korrigjim fiskal të përfunduar.
+      <strong>TEST:</strong> Korrigjimi nënshkruhet në këtë pajisje me certifikatën e POS origjinal dhe dërgohet vetëm në ATK TEST. Mënyra e pagesës duhet të përputhet me kthimin real të parave.
     </div>
     <button disabled={busy || created || !reason.trim() || !selectedItems.length || amount <= 0 || quantityInvalid} type="submit"
       style={{border:0,borderRadius:9,padding:"12px 16px",background:"var(--brand)",color:"white",fontWeight:800,cursor:"pointer"}}>
-      {busy ? "Duke ruajtur..." : created ? "Kërkesa u regjistrua" : props.kind === "cancel" ? "Regjistro anulimin" : "Regjistro kthimin"}
+      {busy ? "Duke përpunuar..." : accepted ? "Korrigjimi u pranua nga ATK TEST" : created ? "Kërkesa u ruajt" : props.kind === "cancel" ? "Regjistro dhe dërgo anulimin në ATK TEST" : "Regjistro dhe dërgo kthimin në ATK TEST"}
     </button>
-    {message && <p role="status" style={{margin:0,fontSize:12,color:created?"#26734d":"#a33f36"}}>{message}</p>}
+    {createdAdjustmentId && !accepted && <button type="button" disabled={busy} onClick={()=>void sendToATK(createdAdjustmentId)} style={{border:"1px solid var(--line)",borderRadius:9,padding:"10px 14px",background:"white",fontWeight:750,cursor:"pointer"}}>Kontrollo / provo dërgimin në ATK TEST</button>}
+    {message && <p role="status" style={{margin:0,fontSize:12,color:accepted?"#26734d":"#a33f36"}}>{message}</p>}
   </form>;
 }
