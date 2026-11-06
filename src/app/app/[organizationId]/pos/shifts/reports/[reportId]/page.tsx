@@ -34,7 +34,6 @@ export default async function InternalZReportPage({ params }: Props) {
     <div className="no-print" style={{display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:18}}>
       <Link href={"/app/"+organizationId+"/pos/shifts"} style={{color:"var(--brand)",fontWeight:800}}>← Ndërrimet e arkës</Link>
       <PrintReportButton />
-      <button type="button" onClick={undefined as never} style={{display:"none"}} aria-hidden="true">Print</button>
     </div>
     <header style={{borderBottom:"2px solid #111",paddingBottom:16,marginBottom:18}}>
       <p style={{fontSize:11,fontWeight:900,letterSpacing:".12em",margin:"0 0 8px"}}>FISKALO · RAPORT I BRENDSHËM</p>
