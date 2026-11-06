@@ -50,7 +50,7 @@ export default async function InternalZReportPage({ params }: Props) {
         ["Arka e pritur",snapshot.expected_cash],
         ["Arka e numëruar",snapshot.counted_cash],
         ["Diferenca",snapshot.cash_difference],
-      ].map(([name,value])=><article key={String(name)} style={{border:"1px solid var(--line)",borderRadius:10,padding:13}}><span style={{fontSize:11,color:"var(--muted)"}}>{name}</span><strong style={{display:"block",fontSize:20,marginTop:6}}>{money(value)}</strong></article>)}
+      ].map(([name,value])=><article key={String(name)} style={{border:"1px solid var(--line)",borderRadius:10,padding:13}}><span style={{fontSize:11,color:"var(--muted)"}}>{String(name)}</span><strong style={{display:"block",fontSize:20,marginTop:6}}>{money(value)}</strong></article>)}
     </section>
     <article style={{border:"1px solid var(--line)",borderRadius:10,padding:16,marginBottom:14}}>
       <h2 style={{fontSize:16,margin:"0 0 10px"}}>Pagesat sipas mënyrës</h2>
