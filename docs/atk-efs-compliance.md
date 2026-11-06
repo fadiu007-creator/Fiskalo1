@@ -71,7 +71,8 @@ No internal toggle, test certificate, fabricated code, or successful TEST coupon
 | Complete encrypted offline journal and automatic recovery | Partial foundation; not certified or verified against ATK recovery requirements |
 | Android key/coupon workflow | Standalone internal-test APK build succeeds; physical-device certificate, ATK submission and printer tests remain |
 | Complete official X/Z report submission for SEF | Not established by the inspected public SEF sample; do not claim implemented or required without current ATK confirmation |
-| Internal daily sales/payment/shift/fiscal status report | Implemented; internal management report only |\n| Internal live X cash snapshot and immutable Z shift-close snapshot | Implemented in Fiskalo; internal only, role-scoped, not submitted to ATK |
+| Internal daily sales/payment/shift/fiscal status report | Implemented; internal management report only |
+| Internal live X cash snapshot and immutable Z shift-close snapshot | Implemented in Fiskalo; internal only, role-scoped, not submitted to ATK |
 | POS Agent and production-grade key custody | Not complete |
 | Provider/software ATK certification | Not complete |
 | Production fiscalization | Disabled by design; not authorized |
