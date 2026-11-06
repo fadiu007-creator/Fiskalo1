@@ -32,11 +32,19 @@ export default async function NewInvoiceAdjustmentPage({params,searchParams}:Pro
   const activePrior=priorRows.filter(row=>row.status!=="voided");
   const priorAmount=activePrior.reduce((sum,row)=>sum+Number(row.amount),0);
   const activePriorIds=activePrior.map(row=>row.id);
-  const {data:priorItems,error:priorItemsError}=activePriorIds.length
-    ? await supabase.from("fiskalo_invoice_adjustment_items")
-        .select("original_invoice_item_id,quantity,net_amount,vat_amount")
-        .eq("organization_id",organizationId).in("adjustment_id",activePriorIds)
-    : {data:[],error:null};
+  const [{data:priorItems,error:priorItemsError},{data:priorFiscalDocs,error:priorFiscalDocsError}]=await Promise.all([
+    activePriorIds.length
+      ? supabase.from("fiskalo_invoice_adjustment_items")
+          .select("original_invoice_item_id,quantity,net_amount,vat_amount")
+          .eq("organization_id",organizationId).in("adjustment_id",activePriorIds)
+      : Promise.resolve({data:[],error:null}),
+    activePriorIds.length
+      ? supabase.from("fiskalo_atk_fiscal_documents")
+          .select("source_adjustment_id,status,atk_transaction_id,last_error")
+          .eq("organization_id",organizationId).in("source_adjustment_id",activePriorIds)
+      : Promise.resolve({data:[],error:null}),
+  ]);
+  const fiscalStatusByAdjustment=new Map((priorFiscalDocs??[]).map(doc=>[doc.source_adjustment_id,doc] as const));
   const ledger=new Map<string,{quantity:number;net:number;vat:number}>();
   for(const row of priorItems??[]){
     const value=ledger.get(row.original_invoice_item_id)??{quantity:0,net:0,vat:0};
@@ -52,14 +60,14 @@ export default async function NewInvoiceAdjustmentPage({params,searchParams}:Pro
     {!eligible ? <section style={{padding:16,border:"1px solid var(--line)",borderRadius:12,background:"white"}}>
       <strong>Nuk mund të krijohet kërkesa.</strong>
       <p style={{fontSize:13,color:"var(--muted)"}}>Kërkohet faturë e lëshuar dhe plotësisht e paguar, me kupon origjinal të pranuar nga ATK.</p>
-    </section> : itemError || priorItemsError || !invoiceItems?.length ? <section style={{padding:16,border:"1px solid var(--line)",borderRadius:12,background:"white"}}>
+    </section> : itemError || priorItemsError || priorFiscalDocsError || !invoiceItems?.length ? <section style={{padding:16,border:"1px solid var(--line)",borderRadius:12,background:"white"}}>
       <strong>Linjat e faturës ose kthimet paraprake nuk u lexuan.</strong><p style={{fontSize:13,color:"var(--muted)"}}>Nuk mund të krijohet korrigjim pa të dhënat e plota të artikujve.</p>
     </section> : cancellationBlocked ? <section style={{padding:16,border:"1px solid var(--line)",borderRadius:12,background:"white"}}>
       <strong>Anulimi i plotë nuk është më i disponueshëm.</strong>
       <p style={{fontSize:13,color:"var(--muted)"}}>Ekziston së paku një kërkesë kthimi/anulimi. Vazhdo vetëm me kthimin e sasive të mbetura të artikujve.</p>
     </section> : <section style={{padding:18,border:"1px solid var(--line)",borderRadius:12,background:"white"}}>
       {priorRows.length ? <div style={{padding:12,background:"#f5f7fa",borderRadius:9,marginBottom:14,fontSize:12}}>
-        <strong>Kërkesat paraprake</strong><br/>{priorRows.map(row=><div key={row.id} style={{paddingTop:6}}>{row.adjustment_type==="cancel"?"Anulim":"Kthim"} · {Number(row.amount).toFixed(2)} € · {row.status}</div>)}<br/>
+        <strong>Kërkesat paraprake</strong><br/>{priorRows.map(row=>{const fiscal=fiscalStatusByAdjustment.get(row.id);return <div key={row.id} style={{paddingTop:6}}>{row.adjustment_type==="cancel"?"Anulim":"Kthim"} · {Number(row.amount).toFixed(2)} € · {row.status} · ATK: {fiscal?.status??"nuk është dërguar"}{fiscal?.atk_transaction_id? " · TX "+String(fiscal.atk_transaction_id):""}</div>})}<br/>
         Shuma e regjistruar: {priorAmount.toFixed(2)} € / {Number(invoice.total).toFixed(2)} €
       </div>:null}
       <AdjustmentRequestForm invoiceId={invoiceId} organizationId={organizationId} total={Number(invoice.total)}
