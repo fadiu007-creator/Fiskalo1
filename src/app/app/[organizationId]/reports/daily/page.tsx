@@ -106,10 +106,10 @@ export default async function DailyReportsPage({ params, searchParams }: Props) 
     <section className="report-card" style={{background:"white",border:"1px solid var(--line)",borderRadius:12,padding:17,marginBottom:14}}>
       <h2 style={{fontSize:16,margin:"0 0 8px"}}>Raporti X · Gjendja e arkës</h2>
       <p style={{fontSize:11,color:"var(--muted)",margin:"0 0 10px"}}>Pamje statistikore e brendshme për ndërrimet e kësaj date; nuk është raport tatimor i ATK-së.</p>
-      {openShiftBalances.length ? openShiftBalances.map(row=><div key={row.id} style={{padding:"10px 0",borderBottom:"1px solid var(--line)"}}>
+      {date === kosovoDate() && openShiftBalances.length ? openShiftBalances.map(row=><div key={row.id} style={{padding:"10px 0",borderBottom:"1px solid var(--line)"}}>
         <div style={{display:"flex",justifyContent:"space-between",gap:8}}><span>Ndërrim aktiv · {new Date(row.opened_at).toLocaleTimeString("sq-XK")}</span><strong>{money(row.expectedCash)} para të pritshme</strong></div>
         <div style={{fontSize:11,color:"var(--muted)",marginTop:5}}>Fillimi {money(row.opening_cash)} + shitje cash {money(row.cashSales)} + hyrje {money(row.cashIn)} − dalje {money(row.cashOut)}</div>
-      </div>) : <p style={{fontSize:13,color:"var(--muted)",margin:0}}>Nuk ka ndërrim aktiv në këtë datë.</p>}
+      </div>) : <p style={{fontSize:13,color:"var(--muted)",margin:0}}>{date === kosovoDate() ? "Nuk ka ndërrim aktiv në këtë datë." : "Pozicioni X paraqitet vetëm për datën aktuale; raporti historik mbetet i pandryshueshëm."}</p>}
       <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0"}}><span>Hyrje në arkë gjatë ditës</span><strong>{money(cashIn)}</strong></div>
       <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0"}}><span>Dalje nga arka</span><strong>{money(cashOut)}</strong></div>
       <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderTop:"1px solid var(--line)"}}><span>Lëvizja neto e parasë</span><strong>{money(cashIn-cashOut)}</strong></div>
