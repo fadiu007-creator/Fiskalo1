@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import PrintReportButton from "../../../../reports/daily/print-button";
 
 type Props = { params: Promise<{ organizationId: string; reportId: string }> };
 type Movement = { id: string; type: string; amount: number | string; note: string; created_at: string };
@@ -32,6 +33,7 @@ export default async function InternalZReportPage({ params }: Props) {
     <style>{`@media print {.no-print{display:none!important} body{background:#fff!important} main{max-width:none!important;padding:0!important} article{break-inside:avoid;box-shadow:none!important}}`}</style>
     <div className="no-print" style={{display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:18}}>
       <Link href={"/app/"+organizationId+"/pos/shifts"} style={{color:"var(--brand)",fontWeight:800}}>← Ndërrimet e arkës</Link>
+      <PrintReportButton />
       <button type="button" onClick={undefined as never} style={{display:"none"}} aria-hidden="true">Print</button>
     </div>
     <header style={{borderBottom:"2px solid #111",paddingBottom:16,marginBottom:18}}>
