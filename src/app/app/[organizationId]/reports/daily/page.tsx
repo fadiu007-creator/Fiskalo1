@@ -53,6 +53,15 @@ export default async function DailyReportsPage({ params, searchParams }: Props) 
     ? await supabase.from("fiskalo_cash_movements").select("cashier_shift_id,movement_type,amount,note,created_at")
         .eq("organization_id", organizationId).in("cashier_shift_id", shiftIds).gte("created_at", bounds.start).lt("created_at", bounds.end)
     : { data: [] as Array<{cashier_shift_id:string;movement_type:string;amount:number;note:string;created_at:string}>, error: null };
+  const [{ data: shiftPayments, error: shiftPaymentsError }, { data: allShiftMovements, error: allShiftMovementsError }] = shiftIds.length
+    ? await Promise.all([
+        supabase.from("fiskalo_invoice_payments").select("cashier_shift_id,amount,payment_method")
+          .eq("organization_id", organizationId).in("cashier_shift_id", shiftIds),
+        supabase.from("fiskalo_cash_movements").select("cashier_shift_id,movement_type,amount")
+          .eq("organization_id", organizationId).in("cashier_shift_id", shiftIds),
+      ])
+    : [{ data: [] as Array<{cashier_shift_id:string;amount:number;payment_method:string}>, error: null },
+       { data: [] as Array<{cashier_shift_id:string;movement_type:string;amount:number}>, error: null }];
   const invoiceIds = invoices.map(row=>row.id);
   const { data: payments } = invoiceIds.length
     ? await supabase.from("fiskalo_invoice_payments").select("invoice_id,amount,payment_method").in("invoice_id",invoiceIds)
@@ -68,7 +77,17 @@ export default async function DailyReportsPage({ params, searchParams }: Props) 
   const fiscalRejected = fiscalDocs.filter(row=>row.status==="rejected").length;
   const cashIn = sum((cashMovements ?? []).filter(row => row.movement_type === "cash_in").map(row => row.amount));
   const cashOut = sum((cashMovements ?? []).filter(row => row.movement_type === "cash_out").map(row => row.amount));
-  const error = invoiceResult.error || shiftResult.error || fiscalResult.error || movementError;
+  const openShiftBalances = shifts.filter(row => row.status === "open").map(row => {
+    const shiftCashSales = sum((shiftPayments ?? []).filter(payment =>
+      payment.cashier_shift_id === row.id && payment.payment_method === "cash").map(payment => payment.amount));
+    const shiftCashIn = sum((allShiftMovements ?? []).filter(movement =>
+      movement.cashier_shift_id === row.id && movement.movement_type === "cash_in").map(movement => movement.amount));
+    const shiftCashOut = sum((allShiftMovements ?? []).filter(movement =>
+      movement.cashier_shift_id === row.id && movement.movement_type === "cash_out").map(movement => movement.amount));
+    return { ...row, cashSales: shiftCashSales, cashIn: shiftCashIn, cashOut: shiftCashOut,
+      expectedCash: Number(row.opening_cash) + shiftCashSales + shiftCashIn - shiftCashOut };
+  });
+  const error = invoiceResult.error || shiftResult.error || fiscalResult.error || movementError || shiftPaymentsError || allShiftMovementsError;
   return <main style={{maxWidth:1050,margin:"0 auto",padding:"24px clamp(15px,3vw,28px) 56px"}}>
     <style>{`@media print {.no-print{display:none!important} body{background:#fff!important} main{max-width:none!important;padding:0!important} .report-card{break-inside:avoid;box-shadow:none!important;border:1px solid #bbb!important}}`}</style>
     <header className="no-print" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:22}}>
@@ -87,8 +106,11 @@ export default async function DailyReportsPage({ params, searchParams }: Props) 
     <section className="report-card" style={{background:"white",border:"1px solid var(--line)",borderRadius:12,padding:17,marginBottom:14}}>
       <h2 style={{fontSize:16,margin:"0 0 8px"}}>Raporti X · Gjendja e arkës</h2>
       <p style={{fontSize:11,color:"var(--muted)",margin:"0 0 10px"}}>Pamje statistikore e brendshme për ndërrimet e kësaj date; nuk është raport tatimor i ATK-së.</p>
-      {shifts.filter(row=>row.status==="open").length ? shifts.filter(row=>row.status==="open").map(row=><div key={row.id} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid var(--line)"}}><span>Ndërrim aktiv · {new Date(row.opened_at).toLocaleTimeString("sq-XK")}</span><strong>{money(row.opening_cash)} para fillestare</strong></div>) : <p style={{fontSize:13,color:"var(--muted)",margin:0}}>Nuk ka ndërrim aktiv në këtë datë.</p>}
-      <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0"}}><span>Hyrje në arkë</span><strong>{money(cashIn)}</strong></div>
+      {openShiftBalances.length ? openShiftBalances.map(row=><div key={row.id} style={{padding:"10px 0",borderBottom:"1px solid var(--line)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",gap:8}}><span>Ndërrim aktiv · {new Date(row.opened_at).toLocaleTimeString("sq-XK")}</span><strong>{money(row.expectedCash)} para të pritshme</strong></div>
+        <div style={{fontSize:11,color:"var(--muted)",marginTop:5}}>Fillimi {money(row.opening_cash)} + shitje cash {money(row.cashSales)} + hyrje {money(row.cashIn)} − dalje {money(row.cashOut)}</div>
+      </div>) : <p style={{fontSize:13,color:"var(--muted)",margin:0}}>Nuk ka ndërrim aktiv në këtë datë.</p>}
+      <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0"}}><span>Hyrje në arkë gjatë ditës</span><strong>{money(cashIn)}</strong></div>
       <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0"}}><span>Dalje nga arka</span><strong>{money(cashOut)}</strong></div>
       <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderTop:"1px solid var(--line)"}}><span>Lëvizja neto e parasë</span><strong>{money(cashIn-cashOut)}</strong></div>
     </section>
