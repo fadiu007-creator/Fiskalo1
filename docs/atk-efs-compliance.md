@@ -52,7 +52,7 @@ No internal toggle, test certificate, fabricated code, or successful TEST coupon
 
 ### Reporting and operational controls
 - Provide internal daily sales, VAT, payment-method, shift, cash-movement and fiscal-transmission reports.
-- Provide X-style cash snapshots and end-of-day Z-style closing records for operational control, with immutable close snapshots.
+- Provide a live internal X-style cash-position snapshot for the current business date and immutable end-of-shift Z-style close snapshots for operational control. These are not official ATK reports and are never submitted to ATK.
 - Do not assume that a PEF/SF X/Z submission endpoint applies to SEF. Send reports to ATK only when the current SEF technical specification explicitly requires it.
 - Keep internal reports clearly labelled as internal; do not present them as official ATK tax reports.
 
@@ -71,7 +71,7 @@ No internal toggle, test certificate, fabricated code, or successful TEST coupon
 | Complete encrypted offline journal and automatic recovery | Partial foundation; not certified or verified against ATK recovery requirements |
 | Android key/coupon workflow | Standalone internal-test APK build succeeds; physical-device certificate, ATK submission and printer tests remain |
 | Complete official X/Z report submission for SEF | Not established by the inspected public SEF sample; do not claim implemented or required without current ATK confirmation |
-| Internal daily sales/payment/shift/fiscal status report | Implemented; internal management report only |
+| Internal daily sales/payment/shift/fiscal status report | Implemented; internal management report only |\n| Internal live X cash snapshot and immutable Z shift-close snapshot | Implemented in Fiskalo; internal only, role-scoped, not submitted to ATK |
 | POS Agent and production-grade key custody | Not complete |
 | Provider/software ATK certification | Not complete |
 | Production fiscalization | Disabled by design; not authorized |
