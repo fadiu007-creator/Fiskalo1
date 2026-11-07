@@ -124,8 +124,14 @@ async function decryptDraft(db: IDBDatabase, record: StoredDraftRecord): Promise
   const ciphertext = fromBase64(record.ciphertextBase64);
   if (iv.length !== 12 || ciphertext.length < 16) throw new Error("Drafti i enkriptuar është i dëmtuar.");
   const additionalData = encoder.encode(record.id + ":" + record.organizationId);
+  // WebCrypto's current TypeScript DOM types require ArrayBuffer-backed views.
+  const ivBuffer = Uint8Array.from(iv).buffer as ArrayBuffer;
+  const additionalDataBuffer = Uint8Array.from(additionalData).buffer as ArrayBuffer;
+  const ciphertextBuffer = Uint8Array.from(ciphertext).buffer as ArrayBuffer;
   try {
-    const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv, additionalData, tagLength: 128 }, key, ciphertext);
+    const plaintext = await crypto.subtle.decrypt({
+      name: "AES-GCM", iv: ivBuffer, additionalData: additionalDataBuffer, tagLength: 128,
+    }, key, ciphertextBuffer);
     const draft = JSON.parse(decoder.decode(plaintext)) as OfflinePosDraft;
     if (draft.id !== record.id || draft.organizationId !== record.organizationId ||
         !Array.isArray(draft.cart) || typeof draft.createdAt !== "string") {
