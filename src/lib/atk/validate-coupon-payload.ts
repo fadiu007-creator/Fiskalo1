@@ -131,6 +131,7 @@ export type CouponValidationContext = {
   operatorId: string;
   location: string;
   total: number;
+  discountTotal?: number;
   subtotal: number;
   vatTotal: number;
   lines: CouponInvoiceLine[];
@@ -165,7 +166,11 @@ export function validateAtkCouponPayload(details: string, context: CouponValidat
         asUint(fields, 16, false) !== cents(context.subtotal)) {
       throw new Error("Coupon VAT and net totals do not match the invoice.");
     }
-    if (asUint(fields, 19, false) !== BigInt(0)) throw new Error("Discounts are not supported by this POS checkout.");
+    const couponDiscount = asUint(fields, 19, false);
+    const expectedDiscount = cents(Number(context.discountTotal ?? 0));
+    if (couponDiscount !== expectedDiscount) {
+      throw new Error("Coupon discount does not match the saved invoice discount.");
+    }
     const expectedReference = context.referenceCouponId == null ? BigInt(0) : BigInt(context.referenceCouponId);
     if (asUint(fields, 17, false) !== expectedReference || asUint(fields, 18, false) !== BigInt(0)) {
       throw new Error("Coupon reference does not match the original ATK sale coupon.");
@@ -209,7 +214,13 @@ export function validateAtkCouponPayload(details: string, context: CouponValidat
         unitPrice: BigInt(Math.round(Number(line.unit_price) * 10000)),
         unit: product.atk_unit_code,
         quantity: Number(line.quantity),
-        total: cents(Number(line.line_subtotal) + Number(line.line_vat)),
+        // ATK item rows carry the pre-discount gross line value. The coupon-level
+        // TotalDiscount is then deducted once; tax groups and coupon totals use
+        // the discounted taxable base saved on the invoice.
+        total: cents(
+          Math.round(Number(line.quantity) * Number(line.unit_price) * 100) / 100 +
+          Math.round(Number(line.quantity) * Number(line.unit_price) * Number(line.vat_rate)) / 100
+        ),
         tax: product.atk_tax_code,
         itemType: product.atk_item_category_code,
       };
@@ -270,7 +281,7 @@ export function validateAtkCouponPayload(details: string, context: CouponValidat
 
     const itemTotal = expectedItems.reduce((sum, item) => sum + item.total, BigInt(0));
     const paymentTotal = Array.from(expectedPayments.values()).reduce((sum, amount) => sum + amount, BigInt(0));
-    if (itemTotal !== cents(context.total) || paymentTotal !== cents(context.total)) {
+    if (itemTotal - couponDiscount !== cents(context.total) || paymentTotal !== cents(context.total)) {
       throw new Error("Invoice lines or payment ledger do not reconcile to the invoice total.");
     }
     return { ok: true };
