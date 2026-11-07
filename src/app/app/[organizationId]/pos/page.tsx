@@ -376,6 +376,7 @@ export default function WebPosPage() {
             subtotal: receiptSubtotal,
             vatTotal: receiptVatTotal,
             total: Number(issuedInvoice.total),
+            discountTotal,
             qrPayload: receiptQrPayload,
             fiscalStatus: receiptFiscalStatus,
             paperWidthMm: printerSettings.paperWidthMm,
