@@ -93,7 +93,7 @@ export async function POST(request: Request) {
   if (!authorization.ok) return Response.json({ error: "organization_not_authorized", detail: authorization.detail }, { status: authorization.status });
 
   const [{ data: invoice, error: invoiceError }, { data: pos, error: posError }] = await Promise.all([
-    supabase.from("fiskalo_invoices").select("id,organization_id,status,total,subtotal,vat_total,invoice_number,payment_status,payment_method").eq("id", invoiceId).eq("organization_id", organizationId).single(),
+    supabase.from("fiskalo_invoices").select("id,organization_id,status,total,subtotal,vat_total,discount_total,invoice_number,payment_status,payment_method").eq("id", invoiceId).eq("organization_id", organizationId).single(),
     supabase.from("fiskalo_atk_pos_installations").select("id,organization_id,atk_branch_id,pos_id,environment,status,location").eq("id", posInstallationId).eq("organization_id", organizationId).single(),
   ]);
   if (invoiceError || !invoice || invoice.status !== "issued" || invoice.payment_status !== "paid") {
@@ -154,6 +154,7 @@ export async function POST(request: Request) {
     operatorId: user.id,
     location: pos.location || authorization.organization.municipality || "",
     total: Number(invoice.total),
+    discountTotal: Number(invoice.discount_total ?? 0),
     subtotal: Number(invoice.subtotal),
     vatTotal: Number(invoice.vat_total),
     lines: invoiceLines,
