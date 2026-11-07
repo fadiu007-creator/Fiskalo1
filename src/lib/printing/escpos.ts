@@ -1,8 +1,14 @@
 export type ReceiptLine = { name: string; quantity: number; unitPrice: number; vatRate: number; lineTotal: number };
 export type ReceiptPrintData = {
-  businessName: string; nui?: string | null; address?: string | null; municipality?: string | null; phone?: string | null;
+  businessName: string; nui?: string | null; fiscalNumber?: string | null; vatNumber?: string | null;
+  address?: string | null; municipality?: string | null; phone?: string | null;
   invoiceNumber: string; issuedAt: string; paymentMethod: string; items: ReceiptLine[];
-  subtotal: number; vatTotal: number; total: number; discountTotal?: number; qrPayload?: string | null; fiscalStatus?: string | null;
+  subtotal: number; vatTotal: number; total: number; discountTotal?: number;
+  taxGroups?: Array<{ rate: number; net: number; tax: number }>;
+  unitNumber?: string | number | null; posId?: string | number | null; sefIdentifier?: string | null;
+  couponId?: string | number | null; verificationNo?: string | null; couponType?: string | null;
+  operatorName?: string | null; operatorId?: string | null; isTest?: boolean;
+  qrPayload?: string | null; fiscalStatus?: string | null;
   paperWidthMm: 58 | 80;
 };
 
@@ -41,16 +47,28 @@ export function buildEscPosReceipt(receipt: ReceiptPrintData): Uint8Array {
   command(0x1b, 0x40); // Initialize printer
   command(0x1b, 0x61, 0x01); // Center
   command(0x1b, 0x45, 0x01);
+  line("REPUBLIKA E KOSOVES · RKS");
+  line("KUPON FISKAL / E-KUPON");
+  if (receipt.isTest) line("TEST ATK · JO KUPON ZYRTAR");
   line(receipt.businessName.toUpperCase());
   command(0x1b, 0x45, 0x00);
   if (receipt.address) for (const part of wrap(receipt.address, columns)) line(part);
   if (receipt.municipality) line(receipt.municipality);
-  if (receipt.nui) line("NUI: " + receipt.nui);
-  if (receipt.phone) line("Tel: " + receipt.phone);
+  if (receipt.nui) pair("NUI / NR. FISKAL", receipt.nui);
+  if (receipt.fiscalNumber && receipt.fiscalNumber !== receipt.nui) pair("NR. FISKAL", receipt.fiscalNumber);
+  if (receipt.vatNumber) pair("NR. TVSH", receipt.vatNumber);
+  if (receipt.phone) pair("Tel", receipt.phone);
   command(0x1b, 0x61, 0x00); // Left
   rule();
-  pair("FATURA", receipt.invoiceNumber || "-");
-  pair("DATA", receipt.issuedAt);
+  pair("KUPONI", receipt.couponId == null ? (receipt.invoiceNumber || "-") : String(receipt.couponId));
+  if (receipt.couponType) pair("LLOJI", receipt.couponType);
+  pair("DATA / ORA", receipt.issuedAt);
+  if (receipt.unitNumber != null) pair("NJESIA", String(receipt.unitNumber));
+  if (receipt.posId != null) pair("POS ID", String(receipt.posId));
+  if (receipt.sefIdentifier) pair("IDENTIFIKUESI SEF", receipt.sefIdentifier);
+  if (receipt.verificationNo) pair("VERIFICATION NO", receipt.verificationNo);
+  if (receipt.operatorName) pair("OPERATORI", receipt.operatorName);
+  if (receipt.operatorId) pair("ID OPERATORI", receipt.operatorId);
   pair("PAGESA", receipt.paymentMethod);
   rule();
   for (const item of receipt.items) {
@@ -60,7 +78,13 @@ export function buildEscPosReceipt(receipt: ReceiptPrintData): Uint8Array {
   }
   rule();
   pair("NENTOTALI", money(receipt.subtotal));
-  pair("TVSH", money(receipt.vatTotal));
+  if (receipt.taxGroups?.length) {
+    line("TVSH SIPAS NORMAVE");
+    for (const group of receipt.taxGroups) {
+      pair("TVSH " + group.rate + "% · NETO " + money(group.net), money(group.tax));
+    }
+  }
+  pair("TVSH TOTALE", money(receipt.vatTotal));
   if (receipt.discountTotal && receipt.discountTotal > 0) pair("ZBRITJA E APLIKUAR", "-" + money(receipt.discountTotal));
   command(0x1b, 0x45, 0x01);
   pair("TOTALI", money(receipt.total));
@@ -85,6 +109,7 @@ export function buildEscPosReceipt(receipt: ReceiptPrintData): Uint8Array {
     line("JO KUPON FISKAL");
   }
   if (receipt.fiscalStatus && receipt.fiscalStatus !== "accepted") line("ATK STATUS: " + receipt.fiscalStatus);
+  if (receipt.isTest) line("KOPJE TESTIMI · NUK VLEN SI KUPON FISKAL");
   line("JU FALEMINDERIT!");
   line(); line();
   command(0x1d, 0x56, 0x00); // Full cut
