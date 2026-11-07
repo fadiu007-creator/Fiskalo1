@@ -39,6 +39,7 @@ export default function WebPosPage() {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [customerId, setCustomerId] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [discountPercent, setDiscountPercent] = useState("0");
   const [confirmedPayment, setConfirmedPayment] = useState(false);
   const [atkSetupNotice, setAtkSetupNotice] = useState("Duke kontrolluar qasjen në arkë…");
   const [isManagement, setIsManagement] = useState(false);
@@ -145,16 +146,20 @@ export default function WebPosPage() {
     const matchesSearch = !q || product.name.toLocaleLowerCase().includes(q) || (product.sku ?? "").toLocaleLowerCase().includes(q);
     return matchesCategory && matchesSearch;
   });
+  const appliedDiscountPercent = Number.isFinite(Number(discountPercent)) ? Math.min(99.99, Math.max(0, Number(discountPercent))) : 0;
   const lines = cart.map((line) => {
     const product = products.find((item) => item.id === line.productId);
     const quantity = Number(line.quantity);
-    const lineSubtotal = product && Number.isFinite(quantity) ? roundMoney(Number(product.unit_price) * quantity) : 0;
+    const lineSubtotal = product && Number.isFinite(quantity) ? roundMoney(Number(product.unit_price) * quantity * (100 - appliedDiscountPercent) / 100) : 0;
     const lineVat = product && Number.isFinite(quantity) ? roundMoney(Number(product.unit_price) * quantity * Number(product.vat_rate) / 100) : 0;
     return { ...line, product, quantity, lineSubtotal, lineVat, lineTotal: lineSubtotal + lineVat };
   }).filter((line) => line.product);
   const subtotal = roundMoney(lines.reduce((sum, line) => sum + line.lineSubtotal, 0));
   const vatTotal = roundMoney(lines.reduce((sum, line) => sum + line.lineVat, 0));
   const total = roundMoney(subtotal + vatTotal);
+  const grossSubtotal = roundMoney(lines.reduce((sum, line) => sum + (line.product ? Number(line.product.unit_price) * line.quantity : 0), 0));
+  const grossVatTotal = roundMoney(lines.reduce((sum, line) => sum + (line.product ? roundMoney(Number(line.product.unit_price) * line.quantity * Number(line.product.vat_rate) / 100) : 0), 0));
+  const discountTotal = roundMoney(grossSubtotal + grossVatTotal - total);
 
   function addProduct(product: Product) {
     setCart((current) => {
@@ -179,6 +184,7 @@ export default function WebPosPage() {
         cart: cart.map((line) => ({ ...line })),
         customerId,
         paymentMethod,
+        discountPercent: Number(discountPercent) || 0,
       };
       await saveOfflinePosDraft(draft);
       setOfflineDrafts(await listOfflinePosDrafts(organizationId));
@@ -204,6 +210,7 @@ export default function WebPosPage() {
     setCart(draft.cart.map((line) => ({ ...line })));
     setCustomerId(draft.customerId);
     setPaymentMethod(draft.paymentMethod);
+    setDiscountPercent(String(draft.discountPercent ?? 0));
     setConfirmedPayment(false);
     setRestoredDraftId(draft.id);
     setActiveView("pos");
@@ -240,6 +247,7 @@ export default function WebPosPage() {
     setError(""); setNotice(""); setIssuedInvoiceId(""); setIssuedNumber(""); setIssuedQrPayload(""); setIssuedFiscalStatus("");
     const valid = lines.filter((line) => Number.isFinite(line.quantity) && line.quantity > 0);
     if (!valid.length || valid.length !== lines.length) { setError("Shto artikuj dhe kontrollo sasitë."); return; }
+    if (!Number.isFinite(Number(discountPercent)) || Number(discountPercent) < 0 || Number(discountPercent) > 99.99) { setError("Zbritja duhet të jetë nga 0% deri në 99.99%."); return; }
     if (paymentMethod !== "credit") {
       const unmapped = valid.filter(({ product }) =>
         !product!.atk_unit_code?.trim() ||
@@ -274,6 +282,7 @@ export default function WebPosPage() {
       cart: valid.map((line) => ({ productId: line.productId, quantity: String(line.quantity) })),
       customerId,
       paymentMethod,
+      discountPercent: appliedDiscountPercent,
     };
     try {
       await saveOfflinePosDraft(pendingDraft);
@@ -292,6 +301,7 @@ export default function WebPosPage() {
       target_customer: customerId || null,
       target_payment_method: paymentMethod,
       sale_items: valid.map((line) => ({ product_id: line.productId, quantity: line.quantity })),
+      target_discount_percent: appliedDiscountPercent,
     });
     const sale = Array.isArray(saleRows) ? saleRows[0] : saleRows;
     if (saleError || !sale?.invoice_id) {
@@ -388,6 +398,8 @@ export default function WebPosPage() {
       setCart([]);
       setCustomerId("");
       setPaymentMethod("cash");
+      setDiscountPercent("0");
+      setDiscountPercent("0");
       setConfirmedPayment(false);
     } else {
       setNotice((current) => current + " Porosia mbetet e ruajtur në këtë pajisje me të njëjtën ID. Kontrollo statusin ATK dhe provo përsëri; nuk krijohet faturë e re.");
@@ -471,9 +483,14 @@ export default function WebPosPage() {
           {!lines.length && <p className="cart-empty" style={{ color: "var(--muted)", textAlign: "center", padding: 20 }}>Shporta është bosh.<br/>Zgjidh produktet për të filluar.</p>}
         </div>
         <div className="pos-cart-summary" style={{ borderTop: "1px solid var(--line)", marginTop: 12, paddingTop: 12, display: "grid", gap: 8 }}>
-          <div style={{ display: "flex", justifyContent: "space-between" }}><span>Nëntotali pa TVSH</span><strong>{money(subtotal)}</strong></div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}><span>Baza tatimore pas zbritjes</span><strong>{money(subtotal)}</strong></div>
           <div style={{ display: "flex", justifyContent: "space-between" }}><span>TVSH</span><strong>{money(vatTotal)}</strong></div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 20 }}><strong>Totali</strong><strong>{money(total)}</strong></div>
+          <label style={{ display: "grid", gap: 5, fontSize: 12, fontWeight: 650 }}>Zbritja tregtare (%)
+            <input type="number" min="0" max="99.99" step="0.01" inputMode="decimal" value={discountPercent} onChange={(event) => setDiscountPercent(event.target.value)} style={field} aria-label="Zbritja tregtare në përqindje" />
+            <span style={{ color: "var(--muted)", fontWeight: 400 }}>Aplikohet në të gjithë artikujt para llogaritjes së TVSH-së.</span>
+          </label>
+          {appliedDiscountPercent > 0 && <div style={{ display: "flex", justifyContent: "space-between", color: "#16734a" }}><span>Zbritja e dhënë ({appliedDiscountPercent.toFixed(2)}%)</span><strong>−{money(discountTotal)}</strong></div>}
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 20 }}><strong>Totali për pagesë</strong><strong>{money(total)}</strong></div>
           <label style={{ display: "grid", gap: 5, fontSize: 12, fontWeight: 650 }}>Klienti
             <select value={customerId} onChange={(event) => setCustomerId(event.target.value)} style={field}><option value="">Klient pa emër</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}{customer.phone ? " · " + customer.phone : ""}</option>)}</select>
           </label>
