@@ -245,3 +245,23 @@ $$;
 
 revoke all on function public.fiskalo_create_pos_sale(uuid,uuid,uuid,text,jsonb,numeric) from public, anon;
 grant execute on function public.fiskalo_create_pos_sale(uuid,uuid,uuid,text,jsonb,numeric) to authenticated;
+
+-- Keep compatibility for existing Android clients that do not send a discount argument.
+create function public.fiskalo_create_pos_sale(
+  target_org uuid,
+  request_id uuid,
+  target_customer uuid,
+  target_payment_method text,
+  sale_items jsonb
+)
+returns table(invoice_id uuid, invoice_number text, invoice_total numeric, replayed boolean)
+language sql
+security invoker
+set search_path = ''
+as $
+  select * from public.fiskalo_create_pos_sale(
+    target_org, request_id, target_customer, target_payment_method, sale_items, 0::numeric
+  );
+$;
+revoke all on function public.fiskalo_create_pos_sale(uuid,uuid,uuid,text,jsonb) from public, anon;
+grant execute on function public.fiskalo_create_pos_sale(uuid,uuid,uuid,text,jsonb) to authenticated;
