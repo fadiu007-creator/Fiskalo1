@@ -88,7 +88,7 @@ async function runEnsureATKTestPosReady(
   })));
   const pos = certificateChecks.find((entry) => entry.hasCertificate)?.candidate ??
     validVerifiedPositions[0] ?? orderedPositions[0];
-  const keyId = organizationId + ":" + pos.id;
+  let keyId = "";
   const saved = verificationByPos.get(pos.id) ?? null;
 
   let businessName = "";
@@ -124,6 +124,11 @@ async function runEnsureATKTestPosReady(
     if (!businessName || !verificationCode) throw new Error("ATK nuk ktheu business_name dhe verification_code.");
     window.localStorage.setItem(applicationStorageKey, String(applicationId));
   }
+
+  // A certificate is issued for a specific ATK Application ID. Namespace the
+  // browser key by that ID so a stale certificate can never sign a coupon for
+  // a newly configured application.
+  keyId = organizationId + ":" + pos.id + ":" + applicationId;
 
   if (await hasBrowserPosCertificate(keyId)) {
     if (pos.status !== "active") {
