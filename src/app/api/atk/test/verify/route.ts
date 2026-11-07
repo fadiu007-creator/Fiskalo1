@@ -1,3 +1,4 @@
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { authorizeAtkOrganization, getAtkRequestContext, positiveInteger } from "@/lib/atk/server-auth";
 
 function readableProviderMessage(value: unknown, fallback: string): string {
@@ -33,10 +34,24 @@ export async function POST(request: Request) {
   if (!organizationId || !posInstallationId || !/^\d{9}$/.test(nui) || !fiscalizationNumber || !branchId || !posId || !applicationId) {
     return Response.json({ error: "invalid_test_identifiers", detail: "Organization, 9-digit taxpayer NUI, test fiscalization number, branch ID, POS ID and Application ID are required." }, { status: 400 });
   }
-  const authorization = await authorizeAtkOrganization(supabase, user.id, organizationId, nui);
-  if (!authorization.ok) return Response.json({ error: "organization_not_authorized", detail: authorization.detail }, { status: authorization.status });
+  const platformAdmins = (process.env.FISKALO_PLATFORM_ADMIN_EMAILS || "").split(",").map(v => v.trim().toLowerCase()).filter(Boolean);
+  const isPlatformAdmin = Boolean(user.email && platformAdmins.includes(user.email.toLowerCase()));
+  let dataClient = supabase;
+  if (isPlatformAdmin) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !serviceKey) return Response.json({ error: "admin_backend_not_configured", detail: "Platform admin service is not configured." }, { status: 503 });
+    dataClient = createSupabaseClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } }) as typeof supabase;
+    const { data: organization, error: organizationError } = await dataClient.from("fiskalo_organizations").select("nui").eq("id", organizationId).maybeSingle();
+    if (organizationError || !organization || String(organization.nui) !== nui) {
+      return Response.json({ error: "organization_not_authorized", detail: "The taxpayer NUI does not match the selected business." }, { status: 403 });
+    }
+  } else {
+    const authorization = await authorizeAtkOrganization(supabase, user.id, organizationId, nui);
+    if (!authorization.ok) return Response.json({ error: "organization_not_authorized", detail: authorization.detail }, { status: authorization.status });
+  }
 
-  const { data: pos, error: posError } = await supabase.from("fiskalo_atk_pos_installations")
+  const { data: pos, error: posError } = await dataClient.from("fiskalo_atk_pos_installations")
     .select("id,organization_id,atk_branch_id,pos_id,environment")
     .eq("id", posInstallationId).eq("organization_id", organizationId).maybeSingle();
   if (posError || !pos || pos.environment !== "test" || Number(pos.atk_branch_id) !== branchId || Number(pos.pos_id) !== posId) {
@@ -73,7 +88,7 @@ export async function POST(request: Request) {
         atkStatus: response.status,
       }, { status: 502, headers: { "Cache-Control": "no-store" } });
     }
-    const { error: saveError } = await supabase.from("fiskalo_atk_pos_verifications").upsert({
+    const { error: saveError } = await dataClient.from("fiskalo_atk_pos_verifications").upsert({
       organization_id: organizationId, pos_installation_id: posInstallationId, nui,
       atk_branch_id: branchId, pos_id: posId, application_id: applicationId,
       verification_code: verificationCode, business_name: businessName, verified_at: new Date().toISOString(), created_by: user.id,
