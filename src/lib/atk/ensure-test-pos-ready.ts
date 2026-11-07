@@ -84,7 +84,7 @@ async function runEnsureATKTestPosReady(
   });
   const certificateChecks = await Promise.all(validVerifiedPositions.map(async (candidate) => ({
     candidate,
-    hasCertificate: await hasBrowserPosCertificate(organizationId + ":" + candidate.id).catch(() => false),
+    hasCertificate: await hasBrowserPosCertificate(organizationId + ":" + candidate.id + ":" + applicationId).catch(() => false),
   })));
   const pos = certificateChecks.find((entry) => entry.hasCertificate)?.candidate ??
     validVerifiedPositions[0] ?? orderedPositions[0];
