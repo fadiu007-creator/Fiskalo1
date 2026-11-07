@@ -195,13 +195,14 @@ export default function InvoiceDetailPage() {
       <div className="thermal-items">
         {lines.map((line, i) => <div className="thermal-item" key={line.id}>
           <div className="thermal-item-name">{String(i + 1).padStart(2, "0")} · {line.description}</div>
-          <div className="thermal-item-price"><span>{line.quantity} × {fmtUnit(Number(line.unit_price))}</span><strong>{fmt(Number(line.line_subtotal) + Number(line.line_vat))}</strong></div>
+          <div className="thermal-item-price"><span>{line.quantity} × {fmtUnit(Number(line.unit_price) * (100 - Number(line.discount_percent || 0)) / 100)}</span><strong>{fmt(Number(line.line_subtotal) + Number(line.line_vat))}</strong></div>
           <div className="thermal-item-tax">TVSH {Number(line.vat_rate).toLocaleString("sq-XK")}%</div>
         </div>)}
       </div>
       <div className="thermal-totals">
-        <div><span>NËNTOTALI</span><strong>{fmt(Number(invoice.subtotal))}</strong></div>
-        <div><span>TVSH</span><strong>{fmt(Number(invoice.vat_total))}</strong></div>
+        <div><span>BAZA TATIMORE PAS ZBRITJES</span><strong>{fmt(Number(invoice.subtotal))}</strong></div>
+        <div><span>TVSH PAS ZBRITJES</span><strong>{fmt(Number(invoice.vat_total))}</strong></div>
+        {Number(invoice.discount_total || 0) > 0 && <div><span>ZBRITJA E APLIKUAR</span><strong>{fmt(Number(invoice.discount_total))}</strong></div>}
         <div className="thermal-grand"><span>TOTALI NË EURO</span><strong>{fmt(Number(invoice.total))}</strong></div>
         <div><span>KUPON</span><strong>{fmt(Number(invoice.total))}</strong></div>
       </div>
