@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Building2, RefreshCw, UserRoundCog, Plus, Monitor } from "lucide-react";
 
-type Pos = { id: string; atk_branch_id: number; pos_id: number; label: string; environment: string; status: string };
+type Pos = { id: string; atk_branch_id: number; pos_id: number; label: string; location: string | null; environment: string; status: string };
 type Org = { id: string; legal_name: string; trade_name: string | null; nui: string; municipality: string; email: string | null; phone: string | null; owners: { userId: string; email: string }[]; pos: Pos[] };
 const field: React.CSSProperties = { width: "100%", border: "1px solid #dce2e8", borderRadius: 8, padding: "10px 11px", background: "#fff", color: "#17212b" };
 const panel: React.CSSProperties = { border: "1px solid #e2e7ec", borderRadius: 13, padding: 16, background: "#fff" };
@@ -17,6 +17,8 @@ export default function PlatformAdminPage() {
   const [busy, setBusy] = useState("");
   const [ownerEmails, setOwnerEmails] = useState<Record<string,string>>({});
   const [posForms, setPosForms] = useState<Record<string,{branchId:string;posId:string;label:string;location:string}>>({});
+  const [editingPos, setEditingPos] = useState<string>("");
+  const [editForms, setEditForms] = useState<Record<string,{branchId:string;posId:string;label:string;location:string}>>({});
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -40,6 +42,24 @@ export default function PlatformAdminPage() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : typeof data.error === "string" ? data.error : "Veprimi dështoi.");
       setNotice(action === "assign_owner" ? "Pronari u caktua." : "POS TEST u krijua. Pronari duhet ta përfundojë verifikimin dhe certifikatën në pajisjen e vet.");
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "Veprimi dështoi."); }
+    finally { setBusy(""); }
+  }
+
+
+  async function managePos(action: "update_pos" | "delete_pos", organizationId: string, pos: Pos) {
+    if (action === "delete_pos" && !window.confirm("A je i sigurt që dëshiron ta fshish këtë POS? POS aktiv nuk mund të fshihet.")) return;
+    setBusy(pos.id); setError(""); setNotice("");
+    try {
+      const form = editForms[pos.id] || { branchId:String(pos.atk_branch_id), posId:String(pos.pos_id), label:pos.label, location:pos.location || "" };
+      const response = await fetch("/api/platform-admin", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({
+        action, organizationId, posInstallationId:pos.id, ...(action === "update_pos" ? form : {})
+      }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : typeof data.error === "string" ? data.error : "Veprimi dështoi.");
+      setNotice(action === "delete_pos" ? "POS u fshi." : data.requires_reregistration ? "POS u përditësua. Ndryshimi i identifikuesve kërkon regjistrim të ri te ATK." : "POS u përditësua.");
+      setEditingPos("");
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : "Veprimi dështoi."); }
     finally { setBusy(""); }
@@ -81,10 +101,10 @@ export default function PlatformAdminPage() {
       </div>
       <div style={{marginTop:14,borderTop:"1px solid #e5eaf0",paddingTop:10}}>
         <strong style={{fontSize:13}}>POS të regjistruara ({org.pos.length})</strong>
-        {org.pos.length ? <div style={{overflowX:"auto",marginTop:8}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr><th style={{textAlign:"left",padding:7}}>Pajisja</th><th style={{textAlign:"left",padding:7}}>Dega</th><th style={{textAlign:"left",padding:7}}>POS ID</th><th style={{textAlign:"left",padding:7}}>Mjedisi</th><th style={{textAlign:"left",padding:7}}>Statusi</th></tr></thead><tbody>{org.pos.map(p=><tr key={p.id} style={{borderTop:"1px solid #e5eaf0"}}><td style={{padding:7}}>{p.label}</td><td style={{padding:7}}>{p.atk_branch_id}</td><td style={{padding:7}}>{p.pos_id}</td><td style={{padding:7}}>{p.environment.toUpperCase()}</td><td style={{padding:7}}>{p.status}</td></tr>)}</tbody></table></div> : <p style={{fontSize:12,color:"#64748b"}}>Ende nuk ka POS.</p>}
+        {org.pos.length ? <div style={{overflowX:"auto",marginTop:8}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr><th style={{textAlign:"left",padding:7}}>Pajisja</th><th style={{textAlign:"left",padding:7}}>Dega</th><th style={{textAlign:"left",padding:7}}>POS ID</th><th style={{textAlign:"left",padding:7}}>Mjedisi</th><th style={{textAlign:"left",padding:7}}>Statusi</th><th style={{textAlign:"left",padding:7}}>Veprime</th></tr></thead><tbody>{org.pos.map(p=><tr key={p.id} style={{borderTop:"1px solid #e5eaf0"}}><td style={{padding:7}}>{p.label}</td><td style={{padding:7}}>{p.atk_branch_id}</td><td style={{padding:7}}>{p.pos_id}</td><td style={{padding:7}}>{p.environment.toUpperCase()}</td><td style={{padding:7}}>{p.status}</td><td style={{padding:7,whiteSpace:"nowrap"}}><button type="button" disabled={!!busy} onClick={()=>{setEditingPos(editingPos===p.id?"":p.id);setEditForms(v=>({...v,[p.id]:{branchId:String(p.atk_branch_id),posId:String(p.pos_id),label:p.label,location:p.location||""}}));}} style={{...field,width:"auto",display:"inline-block",marginRight:5,cursor:"pointer"}}>Ndrysho</button><button type="button" disabled={!!busy || p.status==="active"} onClick={()=>void managePos("delete_pos",org.id,p)} style={{...field,width:"auto",display:"inline-block",color:"#b42318",cursor:"pointer"}}>Fshij</button></td></tr>)}</tbody></table></div>{org.pos.filter(p=>p.id===editingPos).map(p=><form key={p.id} onSubmit={e=>{e.preventDefault();void managePos("update_pos",org.id,p)}} style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:7,marginTop:10,padding:10,background:"#f8fafc",borderRadius:9}}><input aria-label="Emri i POS-it" required value={editForms[p.id]?.label??p.label} onChange={e=>setEditForms(v=>({...v,[p.id]:{...(v[p.id]||{branchId:String(p.atk_branch_id),posId:String(p.pos_id),label:p.label,location:p.location||""}),label:e.target.value}}))} style={field}/><input aria-label="Dega ATK" required type="number" min="1" value={editForms[p.id]?.branchId??String(p.atk_branch_id)} onChange={e=>setEditForms(v=>({...v,[p.id]:{...(v[p.id]||{branchId:String(p.atk_branch_id),posId:String(p.pos_id),label:p.label,location:p.location||""}),branchId:e.target.value}}))} style={field}/><input aria-label="POS ID" required type="number" min="1" value={editForms[p.id]?.posId??String(p.pos_id)} onChange={e=>setEditForms(v=>({...v,[p.id]:{...(v[p.id]||{branchId:String(p.atk_branch_id),posId:String(p.pos_id),label:p.label,location:p.location||""}),posId:e.target.value}}))} style={field}/><input aria-label="Lokacioni" value={editForms[p.id]?.location??p.location??""} onChange={e=>setEditForms(v=>({...v,[p.id]:{...(v[p.id]||{branchId:String(p.atk_branch_id),posId:String(p.pos_id),label:p.label,location:p.location||""}),location:e.target.value}}))} style={field}/><button disabled={!!busy} style={{...field,background:"#17212b",color:"#fff",cursor:"pointer"}}>Ruaj ndryshimet</button></form>)}</div> : <p style={{fontSize:12,color:"#64748b"}}>Ende nuk ka POS.</p>}
       </div>
     </section>)}
-    <p style={{fontSize:11,color:"#64748b",marginTop:18}}>Krijimi këtu regjistron vetëm POS TEST në Fiskalo. Nuk regjistron pajisjen automatikisht në ATK dhe nuk instalon certifikatën; pronari duhet t’i përfundojë hapat në pajisjen/shfletuesin e vet.</p>
+    <p style={{fontSize:11,color:"#64748b",marginTop:18}}>Ofruesi menaxhon krijimin, ndryshimin dhe fshirjen e POS-eve. Ndryshimi i degës ose POS ID e kthen POS-in në statusin e paregjistruar dhe kërkon verifikim të ri te ATK. Çelësi privat/certifikata duhet të mbetet në pajisjen ku do të lëshohen kuponët.</p>
     <Link href="/" style={{color:"#2563eb",fontSize:12}}>Kthehu në Fiskalo</Link>
   </main>;
 }
