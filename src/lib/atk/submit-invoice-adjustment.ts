@@ -7,6 +7,44 @@ import type { createClient } from "@/lib/supabase/client";
 type SupabaseBrowserClient = ReturnType<typeof createClient>;
 type RefundMethod = "cash" | "card" | "bank_transfer";
 
+function readOriginalApplicationId(details: string): number {
+  const binary = atob(details);
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  let cursor = 0;
+  const readVarint = (): bigint => {
+    let value = BigInt(0); let shift = BigInt(0);
+    while (cursor < bytes.length && shift < BigInt(70)) {
+      const byte = bytes[cursor++];
+      value |= BigInt(byte & 0x7f) << shift;
+      if ((byte & 0x80) === 0) return value;
+      shift += BigInt(7);
+    }
+    throw new Error("Kuponi origjinal ka Protobuf të pavlefshëm.");
+  };
+  while (cursor < bytes.length) {
+    const tag = readVarint();
+    const field = Number(tag >> BigInt(3));
+    const wire = Number(tag & BigInt(7));
+    if (field <= 0) throw new Error("Kuponi origjinal ka fushë të pavlefshme.");
+    if (wire === 0) {
+      const value = readVarint();
+      if (field === 7) {
+        const applicationId = Number(value);
+        if (!Number.isSafeInteger(applicationId) || applicationId <= 0) throw new Error("Application ID i kuponit origjinal është i pavlefshëm.");
+        return applicationId;
+      }
+    } else if (wire === 1) cursor += 8;
+    else if (wire === 2) {
+      const length = Number(readVarint());
+      if (!Number.isSafeInteger(length) || length < 0) throw new Error("Gjatësia e kuponit origjinal është e pavlefshme.");
+      cursor += length;
+    } else if (wire === 5) cursor += 4;
+    else throw new Error("Kuponi origjinal ka Protobuf wire type të pambështetur.");
+    if (cursor > bytes.length) throw new Error("Kuponi origjinal është i cunguar.");
+  }
+  throw new Error("Kuponi origjinal nuk përmban Application ID.");
+}
+
 function verificationNo(): string {
   const alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   const bytes = new Uint8Array(16);
@@ -75,15 +113,18 @@ export async function submitInvoiceAdjustmentToATK(
       !Number.isSafeInteger(Number(verification.application_id)) || Number(verification.application_id) <= 0) {
     throw new Error("Verifikimi i POS origjinal nuk përputhet me biznesin ose Application ID mungon.");
   }
-  // Existing accepted sales were signed with the original browser key stored
-  // under organization:POS. Prefer that key for a correction of the same sale;
-  // the server independently checks that its signed coupon used this exact
-  // Application ID. New installations use the Application-ID-scoped key.
+  // The accepted sale's coupon is the authoritative source of Application ID.
+  // The current POS verification may have since been replaced with another ID.
+  let originalApplicationId: number;
+  try { originalApplicationId = readOriginalApplicationId(String(original.pos_coupon_base64 || "")); }
+  catch {
+    throw new Error("Nuk mund të lexohet Application ID nga kuponi origjinal i pranuar. Korrigjimi nuk u dërgua.");
+  }
   const legacyKeyId = organizationId + ":" + pos.id;
-  const scopedKeyId = organizationId + ":" + pos.id + ":" + Number(verification.application_id);
-  const keyId = await hasBrowserPosCertificate(legacyKeyId)
-    ? legacyKeyId
-    : await hasBrowserPosCertificate(scopedKeyId) ? scopedKeyId : "";
+  const scopedKeyId = organizationId + ":" + pos.id + ":" + originalApplicationId;
+  const keyId = await hasBrowserPosCertificate(scopedKeyId)
+    ? scopedKeyId
+    : await hasBrowserPosCertificate(legacyKeyId) ? legacyKeyId : "";
   if (!keyId) {
     throw new Error("Certifikata ATK TEST e POS-it origjinal nuk gjendet në këtë shfletues. Hape POS-in origjinal në këtë pajisje dhe përfundo regjistrimin e certifikatës TEST.");
   }
@@ -153,7 +194,7 @@ export async function submitInvoiceAdjustmentToATK(
     location: pos.location || organization.municipality || "",
     operatorId: auth.user.id,
     posId: pos.pos_id,
-    applicationId: Number(verification.application_id),
+    applicationId: originalApplicationId,
     verificationNo: verificationNo(),
     type: adjustment.adjustment_type === "cancel" ? 2 : 3,
     unixTime: Math.floor(Date.now() / 1000),
@@ -176,7 +217,7 @@ export async function submitInvoiceAdjustmentToATK(
       posInstallationId: pos.id,
       nui: String(organization.nui),
       couponId: String(couponId),
-      applicationId: Number(verification.application_id),
+      applicationId: originalApplicationId,
       totalCents,
       refundPaymentMethod,
       details,
