@@ -533,6 +533,10 @@ export default function BusinessDashboard() {
         <div><Link href="/app" style={{ color: "var(--brand)", fontWeight: 800, fontSize: 22 }}>fiskalo</Link><div style={{ color: "var(--muted)", fontSize: 12 }}>Paneli i biznesit</div></div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}><Link href={`/app/${organizationId}/pos`} style={primary}>Hap POS</Link><Link href="/app" style={secondary}>Bizneset</Link><button onClick={signOut} style={secondary}>Dil nga llogaria</button></div>
       </header>
+      <nav aria-label="Versioni i Fiskalo" className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
+        <Link href={`/app/${organizationId}`} aria-current="page" style={{ ...primary, textDecoration: "none" }}>Versioni aktual</Link>
+        <Link href={`/app/${organizationId}/basic`} style={{ ...secondary, textDecoration: "none" }}>Fiskalo Basic MVP</Link>
+      </nav>
       <section style={{ ...panel, marginBottom: 18, display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div><h1 style={{ margin: "0 0 5px", fontSize: 27 }}>{org.legal_name}</h1><span style={{ color: "var(--muted)", fontSize: 13 }}>{org.municipality} · NUI: {org.nui}</span></div>
         <div style={{ alignSelf: "center", fontSize: 12, color: "var(--muted)", maxWidth: 290 }}>Fiskalizimi zyrtar: <strong>{org.fiscalization_status === "certified" ? "I konfiguruar" : "Jo aktiv"}</strong><br />Fiskalo nuk është i certifikuar nga ATK.</div>
