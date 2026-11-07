@@ -81,6 +81,10 @@ export default async function BusinessDashboard({ params }: Props) {
     { href:`/app/${organizationId}/reports`, title:"Raportet financiare", detail:"Shitjet, TVSH-ja dhe shpenzimet", icon:FileBarChart2, roles:["owner","administrator","manager","accountant"] },
   ].filter(item => item.roles.includes(role));
   return <main className="qb-dashboard">
+    <nav aria-label="Versioni i Fiskalo" className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "0 0 18px" }}>
+      <Link href={`/app/${organizationId}`} aria-current="page" className="qb-primary-action" style={{ textDecoration: "none" }}>Versioni aktual</Link>
+      <Link href={`/app/${organizationId}/basic`} className="qb-action-link" style={{ textDecoration: "none" }}>Fiskalo Basic MVP <ArrowUpRight size={15}/></Link>
+    </nav>
     <section className="qb-welcome"><div><span className="qb-eyebrow">PËRMBLEDHJA E BIZNESIT</span><h1>Përshëndetje, {roleLabel[role] ?? role}</h1><p>{organization.trade_name || organization.legal_name} · {organization.municipality || "Kosovë"}</p></div>{["owner", "administrator", "manager", "cashier"].includes(role) && <Link className="qb-primary-action" href={`/app/${organizationId}/pos`}><Plus size={17}/> Shitje e re</Link>}</section>
     {(invoiceError || financialDataError || productDataError || customerCountError || unpaidInvoiceError) && <div className="qb-inline-alert"><AlertCircle size={16}/> Disa të dhëna nuk u ngarkuan plotësisht: {invoiceError?.message || financialDataError || productDataError || customerCountError?.message || unpaidInvoiceError?.message}</div>}
     <section className="qb-metric-grid" aria-label="Treguesit e muajit">
