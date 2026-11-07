@@ -80,11 +80,8 @@ export async function POST(request: Request) {
   const totalCents = positiveInteger(body.totalCents);
   const refundPaymentMethod = typeof body.refundPaymentMethod === "string" ? body.refundPaymentMethod : "";
   const paymentType: Record<string, number> = { cash: 1, card: 2, bank_transfer: 6 };
-  if (!organizationId || !adjustmentId || !posInstallationId || !/^\d{9}$/.test(nui) ||
-      couponId <= BigInt(0) || couponId > BigInt("18446744073709551615") ||
-      !applicationId || totalCents === null || !isBase64(details) || !isBase64(signature) ||
-      !paymentType[refundPaymentMethod]) {
-    return Response.json({ error: "invalid_adjustment_request", detail: "A valid adjustment, TEST POS, coupon ID, payment method and signed coupon are required." }, { status: 400 });
+  if (!organizationId || !adjustmentId || !/^\d{9}$/.test(nui)) {
+    return Response.json({ error: "invalid_adjustment_request", detail: "A valid organization, adjustment and nine-digit NUI are required." }, { status: 400 });
   }
 
   const authorization = await authorizeAtkOrganization(supabase, user.id, organizationId, nui, ["owner", "administrator", "manager", "accountant"]);
@@ -104,6 +101,12 @@ export async function POST(request: Request) {
     const { data: existing } = await supabase.from("fiskalo_atk_fiscal_documents")
       .select("id,status,atk_transaction_id").eq("source_adjustment_id", adjustmentId).maybeSingle();
     return Response.json({ error: "adjustment_already_processed", fiscalDocumentId: existing?.id, status: existing?.status ?? adjustment.status, transactionId: existing?.atk_transaction_id }, { status: 409 });
+  }
+
+  if (!posInstallationId || couponId <= BigInt(0) || couponId > BigInt("18446744073709551615") ||
+      !applicationId || totalCents === null || !isBase64(details) || !isBase64(signature) ||
+      !paymentType[refundPaymentMethod]) {
+    return rejectBeforeSubmission("invalid_adjustment_request", "Të dhënat e POS-it, kuponit ose nënshkrimit janë të pavlefshme. Korrigjimi nuk u dërgua në ATK.", 400);
   }
 
   const [{ data: invoice, error: invoiceError }, { data: original, error: originalError }, { data: pos, error: posError }] = await Promise.all([
