@@ -178,6 +178,19 @@ export async function POST(request: Request) {
   const total = Number(adjustment.amount);
   const subtotal = lines.reduce((sum, line) => sum + line.line_subtotal, 0);
   const vatTotal = lines.reduce((sum, line) => sum + line.line_vat, 0);
+  // For returned quantities, compare the original unit-price gross value with
+  // the discounted refund ledger amount. This preserves the original sale's
+  // discount in ATK TotalDiscount instead of silently dropping it.
+  const discountTotalCents = lines.reduce((sum, line) => {
+    const grossCents =
+      Math.round(Number(line.quantity) * Number(line.unit_price) * 100) +
+      Math.round(Number(line.quantity) * Number(line.unit_price) * Number(line.vat_rate));
+    const discountedCents = Math.round((Number(line.line_subtotal) + Number(line.line_vat)) * 100);
+    return sum + grossCents - discountedCents;
+  }, 0);
+  if (discountTotalCents < 0) {
+    return rejectBeforeSubmission("adjustment_discount_invalid", "Zbritja e llogaritur për korrigjimin është negative. Korrigjimi nuk u dërgua.");
+  }
   if (Math.round(total * 100) !== totalCents || Math.round((subtotal + vatTotal) * 100) !== totalCents) {
     return rejectBeforeSubmission("adjustment_total_mismatch", "Totali i korrigjimit nuk përputhet me shumën e nënshkruar. Korrigjimi nuk u dërgua.");
   }
@@ -207,7 +220,7 @@ export async function POST(request: Request) {
     nui, couponId: couponId.toString(), couponType, referenceCouponId: String(original.coupon_id),
     branchId: Number(pos.atk_branch_id), posId: Number(pos.pos_id), applicationId,
     operatorId: user.id, location: pos.location || organization.municipality || "",
-    total, subtotal, vatTotal, lines, products: products ?? [],
+    total, discountTotal: discountTotalCents / 100, subtotal, vatTotal, lines, products: products ?? [],
     payments: [{ amount: total, payment_method: refundPaymentMethod }],
   });
   if (!payloadValidation.ok) return rejectBeforeSubmission("correction_payload_mismatch", payloadValidation.detail + " Korrigjimi nuk u dërgua në ATK.");
