@@ -66,17 +66,18 @@ export async function submitInvoiceAdjustmentToATK(
   if (posError || !pos || pos.environment !== "test" || pos.status !== "active") {
     throw new Error("POS TEST origjinal nuk është aktiv. Korrigjimi duhet të dërgohet nga i njëjti POS.");
   }
-  const keyId = organizationId + ":" + pos.id;
-  if (!await hasBrowserPosCertificate(keyId)) {
-    throw new Error("Certifikata e këtij POS nuk gjendet në këtë shfletues. Përdor pajisjen ku u regjistrua POS.");
-  }
   const { data: verification, error: verificationError } = await supabase.from("fiskalo_atk_pos_verifications")
     .select("nui,atk_branch_id,pos_id,application_id")
     .eq("organization_id", organizationId).eq("pos_installation_id", pos.id).maybeSingle();
   if (verificationError || !verification || verification.nui !== String(organization.nui) ||
       Number(verification.atk_branch_id) !== Number(pos.atk_branch_id) ||
-      Number(verification.pos_id) !== Number(pos.pos_id)) {
-    throw new Error("Verifikimi i POS origjinal nuk përputhet me biznesin.");
+      Number(verification.pos_id) !== Number(pos.pos_id) ||
+      !Number.isSafeInteger(Number(verification.application_id)) || Number(verification.application_id) <= 0) {
+    throw new Error("Verifikimi i POS origjinal nuk përputhet me biznesin ose Application ID mungon.");
+  }
+  const keyId = organizationId + ":" + pos.id + ":" + Number(verification.application_id);
+  if (!await hasBrowserPosCertificate(keyId)) {
+    throw new Error("Certifikata ATK TEST nuk përputhet me Application ID aktual. Rifresko POS-in në këtë shfletues që të ri-lëshohet certifikata për ID-në e verifikuar, pastaj krijo kërkesën e re.");
   }
 
   const originalItemMap = new Map(invoiceItems.map((line) => [line.id, line]));
