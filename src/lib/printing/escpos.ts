@@ -12,6 +12,41 @@ export type ReceiptPrintData = {
   paperWidthMm: 58 | 80;
 };
 
+export function readAtkVerificationNo(detailsBase64: string | null | undefined): string | null {
+  if (!detailsBase64) return null;
+  try {
+    const binary = atob(detailsBase64);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    let cursor = 0;
+    const readVarint = (): number => {
+      let value = 0; let shift = 0;
+      while (cursor < bytes.length && shift < 35) {
+        const byte = bytes[cursor++];
+        value |= (byte & 0x7f) << shift;
+        if ((byte & 0x80) === 0) return value >>> 0;
+        shift += 7;
+      }
+      throw new Error("Malformed Protobuf varint");
+    };
+    while (cursor < bytes.length) {
+      const tag = readVarint();
+      const field = tag >>> 3;
+      const wire = tag & 7;
+      if (wire === 0) readVarint();
+      else if (wire === 1) cursor += 8;
+      else if (wire === 2) {
+        const length = readVarint();
+        if (length < 0 || cursor + length > bytes.length) throw new Error("Malformed Protobuf length");
+        if (field === 8) return new TextDecoder("utf-8", { fatal: true }).decode(bytes.slice(cursor, cursor + length));
+        cursor += length;
+      } else if (wire === 5) cursor += 4;
+      else throw new Error("Unsupported Protobuf wire type");
+      if (cursor > bytes.length) throw new Error("Truncated Protobuf");
+    }
+  } catch { return null; }
+  return null;
+}
+
 const encoder = new TextEncoder();
 const money = (value: number) => new Intl.NumberFormat("sq-XK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value) + " EUR";
 const plain = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[ëË]/g, "e").replace(/[çÇ]/g, "c").replace(/[^\x20-\x7E]/g, "?");
