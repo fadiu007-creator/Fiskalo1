@@ -258,10 +258,10 @@ returns table(invoice_id uuid, invoice_number text, invoice_total numeric, repla
 language sql
 security invoker
 set search_path = ''
-as $
+as $wrapper$
   select * from public.fiskalo_create_pos_sale(
     target_org, request_id, target_customer, target_payment_method, sale_items, 0::numeric
   );
-$;
+$wrapper$;
 revoke all on function public.fiskalo_create_pos_sale(uuid,uuid,uuid,text,jsonb) from public, anon;
 grant execute on function public.fiskalo_create_pos_sale(uuid,uuid,uuid,text,jsonb) to authenticated;
