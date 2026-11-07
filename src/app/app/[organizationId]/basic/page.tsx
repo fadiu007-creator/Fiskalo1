@@ -27,7 +27,7 @@ export default async function FiskaloBasicApp({ params }: Props) {
   const pending = recent.filter((row) => ["queued", "submitted", "pending"].includes(String(row.fiscalization_status))).length;
   const actions = [
     ...(canSell ? [{ href: `/app/${organizationId}/basic/pos`, title: "Arka / POS", description: "Regjistro shitje dhe prano pagesa.", icon: ShoppingCart, primary: true }] : []),
-    ...(canManage ? [{ href: `/app/${organizationId}/basic/inventory`, title: "Produktet", description: "Menaxho artikujt, çmimet dhe kodet fiskale ATK.", icon: Boxes }] : []),
+    ...(canManage ? [{ href: `/app/${organizationId}/basic/products`, title: "Produktet", description: "Menaxho artikujt, çmimet dhe kodet fiskale ATK.", icon: Boxes }] : []),
     { href: `/app/${organizationId}/basic/invoices`, title: "Faturat", description: "Shiko faturat, pagesat dhe statusin fiskal.", icon: FileText },
     ...(canManage ? [{ href: `/app/${organizationId}/basic/pos/setup`, title: "Konfigurimi ATK / POS", description: "Kontrollo regjistrimin, verifikimin dhe certifikatën.", icon: Settings2 }] : []),
     ...(canManage ? [{ href: `/app/${organizationId}/basic/reports`, title: "Raportet bazë", description: "Kontrollo shitjet dhe TVSH-në.", icon: FileBarChart2 }] : []),
