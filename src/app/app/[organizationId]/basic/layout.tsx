@@ -16,7 +16,7 @@ export default async function FiskaloBasicLayout({ children, params }: Props) {
   const links = [
     { href: `/app/${organizationId}/basic`, label: "Përmbledhja", icon: FileBarChart2, roles: ["owner","administrator","manager","accountant","cashier"] },
     { href: `/app/${organizationId}/basic/pos`, label: "Arka / POS", icon: ShoppingCart, roles: ["owner","administrator","manager","cashier"] },
-    { href: `/app/${organizationId}/basic/inventory`, label: "Produktet", icon: Boxes, roles: ["owner","administrator","manager"] },
+    { href: `/app/${organizationId}/basic/products`, label: "Produktet", icon: Boxes, roles: ["owner","administrator","manager"] },
     { href: `/app/${organizationId}/basic/invoices`, label: "Faturat", icon: FileText, roles: ["owner","administrator","manager","accountant","cashier"] },
     { href: `/app/${organizationId}/basic/pos/setup`, label: "ATK / POS", icon: Settings2, roles: ["owner","administrator"] },
     { href: `/app/${organizationId}/basic/reports`, label: "Raportet", icon: FileBarChart2, roles: ["owner","administrator","manager","accountant"] },
