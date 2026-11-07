@@ -19,7 +19,6 @@ export default async function BusinessHome({ searchParams }: { searchParams: Pro
   if (error) throw new Error("Nuk u ngarkuan bizneset. Provo përsëri.");
   const isProvider = Boolean(providerAccess);
   if (!memberships?.length && !isProvider) redirect("/onboarding");
-  if (memberships?.length === 1 && !isProvider && forceSwitch !== "1") redirect(`/app/${memberships[0].organization_id}`);
 
   return <main className="workspace-picker">
     <header><Link href="/" className="workspace-picker-brand"><span>F</span><strong>fiskalo</strong></Link><span>{auth.user.email}</span></header>
@@ -28,7 +27,7 @@ export default async function BusinessHome({ searchParams }: { searchParams: Pro
       {isProvider && <Link href="/provider" className="workspace-picker-card provider"><span className="workspace-picker-icon"><Building2 size={23}/></span><strong>Paneli i ofruesit</strong><p>Menaxho softuerin Fiskalo, konfigurimin ATK dhe bizneset kliente.</p><span>Hap hapësirën <ArrowUpRight size={16}/></span></Link>}
       {(memberships ?? []).map((membership) => {
         const org = membership.fiskalo_organizations as {legal_name?:string;trade_name?:string;municipality?:string}|null;
-        return <article key={membership.organization_id} className="workspace-picker-card"><span className="workspace-picker-icon"><Store size={23}/></span><strong>{org?.trade_name || org?.legal_name || "Biznes"}</strong><p>{org?.municipality ?? ""} · Roli: {membership.role}</p><div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}><Link href={`/app/${membership.organization_id}`} className="workspace-picker-action">Hap Fiskalo Full <ArrowUpRight size={15}/></Link><Link href={`/app/${membership.organization_id}/basic`} className="workspace-picker-action secondary">Hap Fiskalo Basic <ArrowUpRight size={15}/></Link></div></article>;
+        return <article key={membership.organization_id} className="workspace-picker-card"><span className="workspace-picker-icon"><Store size={23}/></span><strong>{org?.trade_name || org?.legal_name || "Biznes"}</strong><p>{org?.municipality ?? ""} · Roli: {membership.role}</p><div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}><Link href={`/app/${membership.organization_id}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "9px 11px", borderRadius: 8, background: "var(--brand)", color: "white", fontWeight: 700, fontSize: 12, textDecoration: "none" }}>Hap Fiskalo Full <ArrowUpRight size={15}/></Link><Link href={`/app/${membership.organization_id}/basic`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "9px 11px", borderRadius: 8, border: "1px solid var(--line)", color: "var(--ink)", fontWeight: 700, fontSize: 12, textDecoration: "none" }}>Hap Fiskalo Basic <ArrowUpRight size={15}/></Link></div></article>;
       })}
     </section>
     <Link href="/onboarding" className="workspace-picker-add">+ Shto biznes tjetër</Link>
