@@ -79,5 +79,45 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, pos });
   }
 
+  if (body.action === "update_pos") {
+    const posId = typeof body.posInstallationId === "string" ? body.posInstallationId : "";
+    const branchId = Number(body.branchId), terminalId = Number(body.posId);
+    const label = typeof body.label === "string" ? body.label.trim() : "";
+    const location = typeof body.location === "string" ? body.location.trim() : "";
+    if (!posId || !Number.isSafeInteger(branchId) || branchId <= 0 || !Number.isSafeInteger(terminalId) || terminalId <= 0 || !label) {
+      return NextResponse.json({ error: "invalid_pos", detail: "POS, dega ATK, POS ID dhe emri janë të detyrueshme." }, { status: 400 });
+    }
+    const { data: existing, error: lookupError } = await admin.from("fiskalo_atk_pos_installations")
+      .select("id,organization_id,atk_branch_id,pos_id,status").eq("id", posId).eq("organization_id", organizationId).maybeSingle();
+    if (lookupError || !existing) return NextResponse.json({ error: "pos_not_found", detail: lookupError?.message || "POS nuk u gjet." }, { status: 404 });
+    const identityChanged = Number(existing.atk_branch_id) !== branchId || Number(existing.pos_id) !== terminalId;
+    const update: Record<string, unknown> = { atk_branch_id: branchId, pos_id: terminalId, label, location: location || null };
+    // A changed ATK identity invalidates the previous verification. Require a fresh provider registration.
+    if (identityChanged) update.status = "unregistered";
+    const { data: pos, error: updateError } = await admin.from("fiskalo_atk_pos_installations")
+      .update(update).eq("id", posId).eq("organization_id", organizationId)
+      .select("id,organization_id,atk_branch_id,pos_id,label,location,environment,status").single();
+    if (updateError) return NextResponse.json({ error: "pos_update_failed", detail: updateError.message }, { status: 409 });
+    if (identityChanged) {
+      await admin.from("fiskalo_atk_pos_verifications").delete().eq("organization_id", organizationId).eq("pos_installation_id", posId);
+    }
+    return NextResponse.json({ success: true, pos, requires_reregistration: identityChanged });
+  }
+
+  if (body.action === "delete_pos") {
+    const posId = typeof body.posInstallationId === "string" ? body.posInstallationId : "";
+    if (!posId) return NextResponse.json({ error: "pos_required" }, { status: 400 });
+    const { data: existing, error: lookupError } = await admin.from("fiskalo_atk_pos_installations")
+      .select("id,organization_id,status").eq("id", posId).eq("organization_id", organizationId).maybeSingle();
+    if (lookupError || !existing) return NextResponse.json({ error: "pos_not_found", detail: lookupError?.message || "POS nuk u gjet." }, { status: 404 });
+    if (existing.status === "active") {
+      return NextResponse.json({ error: "active_pos_protected", detail: "POS aktiv nuk mund të fshihet drejtpërdrejt. Çaktivizoje/revokoje fillimisht në ATK dhe pastaj provo përsëri." }, { status: 409 });
+    }
+    const { error: deleteError } = await admin.from("fiskalo_atk_pos_installations")
+      .delete().eq("id", posId).eq("organization_id", organizationId);
+    if (deleteError) return NextResponse.json({ error: "pos_delete_failed", detail: "POS nuk u fshi. Mund të ketë kuponë ose regjistrime të lidhura; ruaje historikun dhe çaktivizoje në vend të fshirjes. " + deleteError.message }, { status: 409 });
+    return NextResponse.json({ success: true, deleted: true });
+  }
+
   return NextResponse.json({ error: "unsupported_action" }, { status: 400 });
 }
