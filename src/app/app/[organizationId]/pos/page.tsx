@@ -8,6 +8,7 @@ import { submitPaidInvoiceToATK } from "@/lib/atk/submit-paid-invoice";
 import { FiscalQrCode } from "@/components/fiscal-qr-code";
 import { ThermalPrinterSettings } from "@/components/thermal-printer-settings";
 import { printWithAgent, readPrinterSettings } from "@/lib/printing/thermal-printer-client";
+import { readAtkVerificationNo } from "@/lib/printing/escpos";
 import { ensureATKTestPosReady } from "@/lib/atk/ensure-test-pos-ready";
 import { deleteOfflinePosDraft, listOfflinePosDrafts, saveOfflinePosDraft, type OfflinePosDraft } from "@/lib/pos/offline-drafts";
 import { ArrowRight, FileText, Plus, RefreshCw, Search, Settings2, ShoppingCart } from "lucide-react";
@@ -356,6 +357,31 @@ export default function WebPosPage() {
         if (typeof fiscalDocument?.status === "string") { receiptFiscalStatus = fiscalDocument.status; setIssuedFiscalStatus(fiscalDocument.status); }
       }
     }
+    let receiptFiscalDocument: {
+      qr_payload: string | null; status: string; coupon_id: number;
+      pos_installation_id: string; document_type: string; pos_coupon_base64: string | null;
+    } | null = null;
+    let receiptPos: { atk_branch_id: number; pos_id: number; environment: string } | null = null;
+    if (paymentMethod !== "credit") {
+      const { data: fiscalDocument } = await supabase.from("fiskalo_atk_fiscal_documents")
+        .select("qr_payload,status,coupon_id,pos_installation_id,document_type,pos_coupon_base64")
+        .eq("organization_id", organizationId).eq("source_invoice_id", invoiceId).maybeSingle();
+      receiptFiscalDocument = fiscalDocument;
+      if (typeof fiscalDocument?.qr_payload === "string") {
+        receiptQrPayload = fiscalDocument.qr_payload;
+        setIssuedQrPayload(fiscalDocument.qr_payload);
+      }
+      if (typeof fiscalDocument?.status === "string") {
+        receiptFiscalStatus = fiscalDocument.status;
+        setIssuedFiscalStatus(fiscalDocument.status);
+      }
+      if (fiscalDocument?.pos_installation_id) {
+        const { data: posDetails } = await supabase.from("fiskalo_atk_pos_installations")
+          .select("atk_branch_id,pos_id,environment")
+          .eq("id", fiscalDocument.pos_installation_id).eq("organization_id", organizationId).maybeSingle();
+        receiptPos = posDetails;
+      }
+    }
     if (paymentMethod !== "credit") {
       const printerSettings = readPrinterSettings();
       if (printerSettings.autoPrint && (receiptFiscalStatus !== "accepted" || !receiptQrPayload)) {
@@ -363,11 +389,39 @@ export default function WebPosPage() {
       } else if (printerSettings.autoPrint) {
         try {
           const { data: business } = await supabase.from("fiskalo_organizations")
-            .select("legal_name,trade_name,nui,address,municipality,phone")
+            .select("legal_name,trade_name,nui,fiscal_number,vat_registered,address,municipality,phone")
             .eq("id", organizationId).maybeSingle();
+          const { data: operatorAuth } = await supabase.auth.getUser();
+          const operatorMetadata = operatorAuth.user?.user_metadata ?? {};
+          const operatorName = typeof operatorMetadata.full_name === "string" ? operatorMetadata.full_name
+            : typeof operatorMetadata.name === "string" ? operatorMetadata.name
+            : operatorAuth.user?.email ?? null;
+          const receiptTaxGroups = [0, 8, 18].map((rate) => ({
+            rate,
+            net: persistedItems.filter((item) => Number(item.vat_rate) === rate)
+              .reduce((sum, item) => sum + Number(item.line_subtotal), 0),
+            tax: persistedItems.filter((item) => Number(item.vat_rate) === rate)
+              .reduce((sum, item) => sum + Number(item.line_vat), 0),
+          })).filter((group) => group.net !== 0 || group.tax !== 0);
           await printWithAgent({
             businessName: business?.trade_name || business?.legal_name || "Biznesi",
             nui: business?.nui ?? null,
+            fiscalNumber: business?.fiscal_number ?? null,
+            vatNumber: business?.vat_registered ? business?.fiscal_number ?? null : null,
+            unitNumber: receiptPos?.atk_branch_id ?? null,
+            posId: receiptPos?.pos_id ?? null,
+            sefIdentifier: receiptPos && business?.nui
+              ? String(receiptPos.atk_branch_id) + "-" + String(business.nui) + "-" + String(receiptPos.pos_id)
+              : null,
+            couponId: receiptFiscalDocument?.coupon_id ?? null,
+            verificationNo: readAtkVerificationNo(receiptFiscalDocument?.pos_coupon_base64),
+            couponType: receiptFiscalDocument?.document_type === "sale" ? "SHITJE"
+              : receiptFiscalDocument?.document_type === "cancel" ? "ANULIM"
+              : receiptFiscalDocument?.document_type === "return" ? "KTHIM" : null,
+            operatorName,
+            operatorId: operatorAuth.user?.id ?? null,
+            isTest: receiptPos?.environment === "test",
+            taxGroups: receiptTaxGroups,
             address: business?.address ?? null,
             municipality: business?.municipality ?? null,
             phone: business?.phone ?? null,
