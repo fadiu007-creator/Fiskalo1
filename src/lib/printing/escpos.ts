@@ -2,7 +2,7 @@ export type ReceiptLine = { name: string; quantity: number; unitPrice: number; v
 export type ReceiptPrintData = {
   businessName: string; nui?: string | null; address?: string | null; municipality?: string | null; phone?: string | null;
   invoiceNumber: string; issuedAt: string; paymentMethod: string; items: ReceiptLine[];
-  subtotal: number; vatTotal: number; total: number; qrPayload?: string | null; fiscalStatus?: string | null;
+  subtotal: number; vatTotal: number; total: number; discountTotal?: number; qrPayload?: string | null; fiscalStatus?: string | null;
   paperWidthMm: 58 | 80;
 };
 
@@ -61,6 +61,7 @@ export function buildEscPosReceipt(receipt: ReceiptPrintData): Uint8Array {
   rule();
   pair("NENTOTALI", money(receipt.subtotal));
   pair("TVSH", money(receipt.vatTotal));
+  if (receipt.discountTotal && receipt.discountTotal > 0) pair("ZBRITJA E APLIKUAR", "-" + money(receipt.discountTotal));
   command(0x1b, 0x45, 0x01);
   pair("TOTALI", money(receipt.total));
   command(0x1b, 0x45, 0x00);
