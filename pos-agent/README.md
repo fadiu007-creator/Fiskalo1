@@ -17,7 +17,7 @@
 - Printer enumeration, default-printer identification and non-fiscal test-print endpoint.
 - Test certificate is stored locally only after its public key is confirmed to match the protected private key.
 - Signed coupon is persisted to the encrypted queue before submission. Accepted/rejected outcomes are recorded. Ambiguous outcomes are locked for operator reconciliation.
-- Operator reconciliation endpoint supports accepted, rejected and operator-confirmed-not-found decisions. It never retries automatically.
+- Background worker retries only safely queued/not-yet-submitted signed records after connectivity returns; ambiguous submissions remain locked for operator reconciliation. Operator-confirmed-not-found requeues the exact same signed payload and coupon ID.
 - Automated tests cover coupon mapping and queue reconciliation; CI builds on Windows and Ubuntu and publishes a Windows x64 artifact.
 
 ## Security boundaries
@@ -26,6 +26,7 @@
 - Windows key and queue protection uses DPAPI CurrentUser and fails closed off Windows.
 - The agent listens only on 127.0.0.1:17843, rejects unexpected Host values, checks exact browser origins and requires a paired bearer session for operational routes.
 - The pairing code is printed to the local console and must be kept private. The current session is memory-only; restarting the agent invalidates it.
+- The 48-hour recovery deadline is surfaced as an overdue alert; it does not delete or suppress the original signed fiscal record.
 - The queue's not_found_confirmed resolution is an operator assertion after checking ATK records. It is not an ATK query. Never use it when ATK status is unavailable or uncertain.
 - ATK calls are restricted to the official test hostname. No production endpoint or production enable switch exists.
 
