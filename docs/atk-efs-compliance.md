@@ -58,6 +58,24 @@ The public [ATK C# Protobuf example](https://github.com/fiskalizimi/pos-csharp) 
 - Do not assume that a PEF/SF X/Z submission endpoint applies to SEF. Send reports to ATK only when the current SEF technical specification explicitly requires it.
 - Keep internal reports clearly labelled as internal; do not present them as official ATK tax reports.
 
+## Current ATK amendment — 22 June 2026
+
+The ATK portal publishes a signed amendment to the 29 May 2026 technical/functional requirements:
+[Amendment PDF](https://apps.atk-ks.org/sefaplikimi/uploads/documents/4994a4cd-75c8-46fd-bb7c-d541e4aa0e40.pdf).
+
+The amendment adds/clarifies these SEF obligations:
+
+- Installation and use must be supported on at least one suitable device/work environment (PC, laptop, tablet, mobile phone or another suitable electronic device).
+- Transaction data must be stored in a protected way that preserves integrity through faults or interruption.
+- During an internet outage, the device must retain transactions and automatically transmit them when connectivity returns.
+- Locally retained fiscal data must be encrypted using advanced encryption standards.
+- Access to unsent data is restricted to a request by ATK or another competent state authority.
+- Untransmitted data must be exportable in suitable CSV/PDF formats only upon such a request.
+
+These are not optional UX enhancements. The cloud-only Web POS and browser IndexedDB key vault do not, by themselves, demonstrate compliance with the amended local-storage, encryption, recovery and restricted-export requirements. The Windows POS Agent has an encrypted DPAPI journal and now includes an automatic delivery worker for queued, never-submitted documents. It still needs a complete installer/service lifecycle, integration with checkout, a controlled authority-request export workflow, and verification on the target device. Ambiguous in-flight requests remain locked for reconciliation to prevent duplicate coupons.
+
+The 48-hour recovery timestamp in the queue is an operational target/alert deadline, not a reason to delete or permanently suppress an unsent fiscal record. The queue now retains overdue records and continues automatic delivery attempts when their state is safely Queued. If a request may already have reached ATK, it remains NeedsReconciliation and is never blindly retried.
+
 ## Current implementation status
 
 | Capability | Status |
@@ -70,7 +88,9 @@ The public [ATK C# Protobuf example](https://github.com/fiskalizimi/pos-csharp) 
 | ATK response/transaction ID storage and duplicate-sale guard | Implemented for Sale flow |
 | Ambiguous ATK response state | Implemented as pending/reconciliation-required; do not blindly retry |
 | Cancel and Return ATK submission | Signed TEST submission paths now exist for both types. They reference the original Sale CouponId, use the same original TEST POS/certificate, validate item-level quantities/net/VAT against the adjustment ledger, persist a linked fiscal document and prevent duplicate submission. ATK acceptance for both scenarios is still unverified; payment/refund semantics and optional Protobuf `TransactionNo` require ATK TEST confirmation before certification |
-| Complete encrypted offline journal and automatic recovery | Partial foundation; not certified or verified against ATK recovery requirements |
+| Encrypted Windows local journal | Core implemented with DPAPI and atomic persistence; Windows-only and not yet certified |
+| Automatic recovery after connectivity returns | Queue worker implemented for safely queued/not-yet-submitted records; CI and real host integration still to verify; ambiguous submissions require reconciliation |
+| Authority-request export of untransmitted data (CSV/PDF) | Not implemented; must be access-controlled and available only on documented ATK/competent-authority request |
 | Android key/coupon workflow | Standalone internal-test APK build succeeds; physical-device certificate, ATK submission and printer tests remain |
 | Complete official X/Z report submission for SEF | Not established by the inspected public SEF sample; do not claim implemented or required without current ATK confirmation |
 | Internal daily sales/payment/shift/fiscal status report | Implemented; internal management report only |
