@@ -36,7 +36,7 @@ export async function submitPaidInvoiceToATK(
 
   const { data: invoice, error: invoiceError } = await supabase
     .from("fiskalo_invoices")
-    .select("id,organization_id,status,total,invoice_number,payment_status,payment_method,subtotal,vat_total")
+    .select("id,organization_id,status,total,invoice_number,payment_status,payment_method,subtotal,vat_total,discount_total")
     .eq("id", invoiceId).eq("organization_id", organizationId).single();
   if (invoiceError || !invoice) throw new Error("Fatura nuk u gjet për fiskalizim.");
   if (invoice.status !== "issued" || invoice.payment_status !== "paid") {
@@ -61,7 +61,7 @@ export async function submitPaidInvoiceToATK(
     supabase.from("fiskalo_atk_pos_installations").select("id,atk_branch_id,pos_id,label,location,environment,status")
       .eq("organization_id", organizationId).eq("environment", "test").eq("status", "active")
       .order("created_at", { ascending: false }),
-    supabase.from("fiskalo_invoice_items").select("id,product_id,description,quantity,unit_price,line_subtotal,line_vat,vat_rate")
+    supabase.from("fiskalo_invoice_items").select("id,product_id,description,quantity,unit_price,line_subtotal,line_vat,vat_rate,discount_percent")
       .eq("invoice_id", invoiceId),
     supabase.from("fiskalo_invoice_payments").select("amount,payment_method").eq("invoice_id", invoiceId).order("created_at"),
   ]);
@@ -128,11 +128,16 @@ export async function submitPaidInvoiceToATK(
   const { data: couponId, error: couponError } = await supabase.rpc("fiskalo_next_atk_coupon_id", { target_organization: organizationId });
   if (couponError || !couponId) throw new Error("Nuk u caktua numri unik i kuponit ATK.");
   const totalCents = Math.round(Number(invoice.total) * 100);
-  const items = itemRows.map(({ line, unit, tax, itemType }) => ({
-    name: line.description, unitPriceEuro: Number(line.unit_price), unit, quantity: Number(line.quantity),
-    lineTotalCents: Math.round((Number(line.line_subtotal) + Number(line.line_vat)) * 100),
-    taxRate: tax, itemType,
-  }));
+  const items = itemRows.map(({ line, unit, tax, itemType }) => {
+    const grossBase = Math.round(Number(line.quantity) * Number(line.unit_price) * 100) / 100;
+    const grossVat = Math.round(Number(line.quantity) * Number(line.unit_price) * Number(line.vat_rate)) / 100;
+    return {
+      name: line.description, unitPriceEuro: Number(line.unit_price), unit, quantity: Number(line.quantity),
+      // ATK receives undiscounted item values plus one explicit coupon-level discount.
+      lineTotalCents: Math.round((grossBase + grossVat) * 100),
+      taxRate: tax, itemType,
+    };
+  });
   const grouped = new Map<string, { totalForTaxCents: number; totalTaxCents: number }>();
   itemRows.forEach(({ line, tax }) => {
     const current = grouped.get(tax) || { totalForTaxCents: 0, totalTaxCents: 0 };
@@ -149,6 +154,7 @@ export async function submitPaidInvoiceToATK(
     taxGroups: Array.from(grouped.entries()).map(([taxRate, values]) => ({ taxRate, ...values })),
     totalTaxCents: Math.round(Number(invoice.vat_total) * 100),
     totalNoTaxCents: Math.round(Number(invoice.subtotal) * 100),
+    totalDiscountCents: Math.round(Number(invoice.discount_total ?? 0) * 100),
   });
   const details = encodeAtkBase64(payload);
   const signature = await signAtkBase64Payload(keyId, details);
