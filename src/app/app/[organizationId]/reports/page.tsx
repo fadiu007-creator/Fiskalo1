@@ -86,6 +86,7 @@ export default async function ReportsPage({ params }: Props) {
     <header style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:22}}>
       <div><Link href={"/app/"+organizationId} style={{display:"inline-flex",alignItems:"center",gap:7,color:"var(--brand)",fontSize:12,fontWeight:750}}><ArrowLeft size={15}/> Paneli</Link><h1 style={{fontSize:29,letterSpacing:"-.04em",margin:"12px 0 5px"}}>Raportet</h1><p style={{margin:0,color:"var(--muted)",fontSize:13}}>Përmbledhje operative dhe financiare · {day(fromDate)} – {day(toDate)}</p></div>
       <Link href={"/app/"+organizationId+"/reports/daily"} style={{display:"inline-flex",alignItems:"center",gap:8,padding:"11px 14px",borderRadius:10,border:"1px solid var(--line)",color:"var(--ink)",fontSize:12,fontWeight:800,textDecoration:"none"}}>Raporti ditor</Link>
+      {["owner", "administrator"].includes(membership.role) ? <Link href={"/app/"+organizationId+"/reports/audit"} style={{display:"inline-flex",alignItems:"center",gap:8,padding:"11px 14px",borderRadius:10,border:"1px solid var(--line)",color:"var(--ink)",fontSize:12,fontWeight:800,textDecoration:"none"}}>Log-et e auditimit</Link> : null}
       <a href={csvHref} download={"fiskalo-raporti-"+fromDate+"-"+toDate+".csv"} style={{display:"inline-flex",alignItems:"center",gap:8,padding:"11px 14px",borderRadius:10,background:"var(--brand)",color:"white",fontSize:12,fontWeight:800,textDecoration:"none"}}><Download size={15}/> Eksporto faturat CSV</a>
     </header>
 
