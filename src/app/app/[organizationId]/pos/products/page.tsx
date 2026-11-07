@@ -18,6 +18,43 @@ const ATK_UNITS = [
   ["LM", "Metër linear"], ["MTS", "Metër katror"], ["MTV", "Metër kub"], ["MSK", "Metër për sekondë katror"], ["KËH", "Kilovat-orë"], ["NFJ", "Numër fjalësh"],
   ["NFQ", "Numër faqesh"], ["PRQ", "Përqindje"], ["DP", "Ditë pune"], ["OP", "Orë pune"], ["PRD", "Përdorim"], ["PAL", "Palë"], ["XBX", "Kuti"], ["PK", "Pako"], ["SET", "Set"]
 ] as const;
+const ATK_CATEGORIES = [
+  ["TT", "Të tjera"],
+  ["UR", "Ushqime restoranti"],
+  ["AU", "Artikuj ushqimorë"],
+  ["VM", "Veshmbathje"],
+  ["KO", "Kozmetikë"],
+  ["AP", "Autopjesë"],
+  ["BM", "Barna mjekësore"],
+  ["PM", "Pajisje mjekësore"],
+  ["PP", "Pemë dhe perime"],
+  ["PE", "Pajisje elektronike"],
+  ["PS", "Pajisje shtëpiake"],
+  ["PB", "Pajisje bujqësore"],
+  ["BB", "Barna bujqësore"],
+  ["KB", "Karburante"],
+  ["EE", "Energji elektrike"],
+  ["PSE", "Pajisje speciale elektrike"],
+  ["SM", "Shërbime mjekësore"],
+  ["SJ", "Shërbime juridike"],
+  ["ST", "Shërbime të tjera"],
+  ["SK", "Shërbime të kontabilitetit"],
+  ["SMK", "Shërbime mekanike"],
+  ["STR", "Shërbime transporti"],
+  ["PI", "Pajisje industriale"],
+  ["PT", "Pajisje transporti"],
+  ["SEA", "Shërbime edukative dhe arsimore"],
+  ["KS", "Klube sportive"],
+  ["MN", "Materiale ndërtimore"],
+  ["SHN", "Shërbime ndërtimore"],
+  ["SDG", "Shtyp dhe dizajn grafik"],
+  ["HT", "Hotele dhe turizëm"],
+  ["SHB", "Shërbime bankare"],
+  ["STI", "Shërbime të TI-së"],
+  ["SHT", "Shërbime të telekomunikimit"],
+  ["PBS", "Prodhimi bimor dhe shtazor"],
+  ["MPM", "Mish dhe produkte të mishit"],
+] as const;
 const field: React.CSSProperties = { width: "100%", border: "1px solid var(--line)", borderRadius: 9, padding: "10px 11px", background: "white", color: "var(--ink)" };
 const primary: React.CSSProperties = { border: 0, borderRadius: 9, padding: "11px 15px", background: "var(--brand)", color: "white", fontWeight: 750, cursor: "pointer" };
 
@@ -38,7 +75,9 @@ export default function PosProductsPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [planInfo, setPlanInfo] = useState<{ plan_package: string; product_limit: number } | null>(null);
   const legacyUnitCodes = Array.from(new Set(products.map(p => p.atk_unit_code).filter((v): v is string => Boolean(v) && !ATK_UNITS.some(([code]) => code === v)))).sort();
-  const itemCategoryCodes = Array.from(new Set(["TT", ...products.map(p => p.atk_item_category_code).filter((v): v is string => Boolean(v))])).sort();
+  const legacyItemCategoryCodes = Array.from(new Set(products.map(p => p.atk_item_category_code)
+    .filter((v): v is string => Boolean(v) && !ATK_CATEGORIES.some(([code]) => code === v)))).sort();
+  const itemCategoryCodes = [...ATK_CATEGORIES.map(([code]) => code), ...legacyItemCategoryCodes];
 
   const load = useCallback(async () => {
     const { data: auth } = await supabase.auth.getUser();
@@ -204,9 +243,9 @@ export default function PosProductsPage() {
         <strong style={{ fontSize: 13 }}>Kodet fiskale ATK</strong><p style={{ color: "var(--muted)", fontSize: 12, margin: "4px 0 0" }}>Njësia matëse dhe kategoria e artikullit caktohen vetëm një herë këtu. Njësitë përdorin listën e publikuar nga ATK.</p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10, marginTop: 8 }}>
           <label style={{ fontSize: 12 }}>Njësia matëse — kodi ATK<select required value={form.atk_unit_code} onChange={e=>setForm(v=>({...v,atk_unit_code:e.target.value,unit:e.target.value}))} style={field}>{ATK_UNITS.map(([code,label])=><option key={code} value={code}>{code} — {label}{code === "CP" ? " (Parazgjedhur)" : ""}</option>)}{legacyUnitCodes.map(code=><option key={code} value={code}>{code} — kod ekzistues</option>)}</select></label>
-<label style={{ fontSize: 12 }}>Kategoria e artikullit — kodi ATK<select required value={form.atk_item_category_code} onChange={e=>setForm(v=>({...v,atk_item_category_code:e.target.value}))} style={field}>{itemCategoryCodes.map(code=><option key={code} value={code}>{code}</option>)}</select></label>
+<label style={{ fontSize: 12 }}>Kategoria e artikullit — kodi ATK<select required value={form.atk_item_category_code} onChange={e=>setForm(v=>({...v,atk_item_category_code:e.target.value}))} style={field}>{itemCategoryCodes.map(code=>{const category=ATK_CATEGORIES.find(([officialCode])=>officialCode===code);return <option key={code} value={code}>{category ? code+" — "+category[1] : code+" — kod ekzistues"}</option>;})}</select></label>
         </div>
-        <p style={{ color: "var(--muted)", fontSize: 11, marginTop: 6 }}>ATK publikon 31 njësi matëse në specifikacionin teknik. Për kategorinë e artikullit, dokumenti publik nuk jep tabelë të plotë kodesh; ruhet TT si vlera e shembullit të integrimit dhe kodet ekzistuese të biznesit. Nuk janë shtuar kode të pa verifikuara.</p>
+        <p style={{ color: "var(--muted)", fontSize: 11, marginTop: 6 }}>Lista përmban 31 njësi matëse dhe 35 kategori zyrtare të mallrave/shërbimeve nga dokumenti teknik ATK. Kodet historike të produkteve ruhen për editim, por nuk shtohen në listën e kodeve të reja.</p>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button disabled={busy} type="submit" style={primary}>{busy ? "Duke ruajtur..." : editingId ? "Ruaj ndryshimet" : planInfo && products.length >= planInfo.product_limit ? "Limiti i paketës u arrit" : "Shto produktin"}</button>{editingId && <button type="button" onClick={reset} style={{ ...primary, background: "white", color: "var(--ink)", border: "1px solid var(--line)" }}>Anulo</button>}</div>
     </form>
