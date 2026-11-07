@@ -29,7 +29,9 @@ export default async function NewInvoiceAdjustmentPage({params,searchParams}:Pro
   ]);
   if(!invoice) notFound();
   const priorRows=(prior??[]);
-  const activePrior=priorRows.filter(row=>row.status!=="voided");
+  // Only live ATK workflows reserve quantities or block a full cancellation.
+  // Rejected attempts remain visible as history but must not block a new correction.
+  const activePrior=priorRows.filter(row=>["awaiting_atk","submitted","accepted"].includes(row.status));
   const priorAmount=activePrior.reduce((sum,row)=>sum+Number(row.amount),0);
   const activePriorIds=activePrior.map(row=>row.id);
   const [{data:priorItems,error:priorItemsError},{data:priorFiscalDocs,error:priorFiscalDocsError}]=await Promise.all([
