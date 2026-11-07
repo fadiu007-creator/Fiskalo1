@@ -5,6 +5,7 @@ export type OfflinePosDraft = {
   cart: Array<{ productId: string; quantity: string }>;
   customerId: string;
   paymentMethod: string;
+  discountPercent?: number;
 };
 
 const DATABASE = "fiskalo-pos-local";
