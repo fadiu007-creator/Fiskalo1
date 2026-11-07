@@ -105,7 +105,6 @@ public sealed class FiscalQueueStore
             EnsureQueued(item);
             var attempts = checked(item.AttemptCount + 1);
             var delaySeconds = Math.Min(15 * Math.Pow(2, Math.Min(attempts - 1, 10)), MaximumRetryDelay.TotalSeconds);
-            var deadlineReached = timestamp >= item.RecoveryDeadlineUtc;
             return item with
             {
                 AttemptCount = attempts,
