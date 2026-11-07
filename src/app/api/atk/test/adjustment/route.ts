@@ -142,8 +142,7 @@ export async function POST(request: Request) {
     .eq("organization_id", organizationId).eq("pos_installation_id", posInstallationId).maybeSingle();
   if (verificationError || !verification || verification.nui !== nui ||
       Number(verification.atk_branch_id) !== Number(pos.atk_branch_id) ||
-      Number(verification.pos_id) !== Number(pos.pos_id) ||
-      Number(verification.application_id) !== applicationId) {
+      Number(verification.pos_id) !== Number(pos.pos_id)) {
     return rejectBeforeSubmission("pos_verification_missing", "POS-i origjinal nuk ka verifikim ATK TEST të sinkronizuar në Fiskalo. Korrigjimi nuk u dërgua në ATK.");
   }
 
