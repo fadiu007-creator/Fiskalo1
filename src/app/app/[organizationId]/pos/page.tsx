@@ -28,7 +28,7 @@ const roundMoney = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const CATEGORY_VISUALS: Record<string, { icon: string; label: string }> = { TT: { icon: "▦", label: "Mallra" } };
 const categoryVisual = (code: string) => CATEGORY_VISUALS[code] ?? { icon: "◇", label: "Artikull" };
 
-export default function WebPosPage() {
+export function WebPosPage({ basicMode = false }: { basicMode?: boolean } = {}) {
   const params = useParams<{ organizationId: string }>();
   const organizationId = params.organizationId;
   const supabase = useMemo(() => createClient(), []);
@@ -470,11 +470,11 @@ export default function WebPosPage() {
 
   return <main className="fiskalo-pos hybrid-pos" style={{ maxWidth: 1440, margin: "0 auto", padding: "22px clamp(12px,3vw,28px) 50px" }}>
     <nav aria-label="Versioni i Fiskalo" className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-      <Link href={`/app/${organizationId}`} style={{ border: "1px solid var(--line)", borderRadius: 9, padding: "10px 12px", color: "var(--ink)", textDecoration: "none", fontWeight: 650 }}>Versioni aktual</Link>
-      <Link href={`/app/${organizationId}/basic`} aria-current="page" style={{ borderRadius: 9, padding: "10px 12px", background: "var(--brand)", color: "white", textDecoration: "none", fontWeight: 750 }}>Fiskalo Basic MVP</Link>
+      <Link href={`/app/${organizationId}`} aria-current={!basicMode ? "page" : undefined} style={{ border: "1px solid var(--line)", borderRadius: 9, padding: "10px 12px", color: "var(--ink)", textDecoration: "none", fontWeight: 650 }}>Versioni aktual</Link>
+      <Link href={`/app/${organizationId}/basic`} aria-current={basicMode ? "page" : undefined} style={{ borderRadius: 9, padding: "10px 12px", background: basicMode ? "var(--brand)" : "transparent", color: basicMode ? "white" : "var(--ink)", border: "1px solid var(--line)", textDecoration: "none", fontWeight: 750 }}>Fiskalo Basic MVP</Link>
     </nav>
     <header className="hybrid-pos-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
-      <div><span className="pos-kicker">KASA / SHITJE E SHPEJTË</span><h1 style={{ margin: "8px 0 0", fontSize: 28 }}>Pika e shitjes</h1><div className="pos-header-subtitle" style={{ color: "var(--muted)", fontSize: 13 }}>Zgjidh produktet me një prekje. Shporta dhe pagesa përditësohen automatikisht.</div></div>
+      <div><span className="pos-kicker">{basicMode ? "FISKALO BASIC / MVP" : "KASA / SHITJE E SHPEJTË"}</span><h1 style={{ margin: "8px 0 0", fontSize: 28 }}>{basicMode ? "Fiskalo Basic MVP" : "Pika e shitjes"}</h1><div className="pos-header-subtitle" style={{ color: "var(--muted)", fontSize: 13 }}>{basicMode ? "Version i thjeshtuar për shitje, pagesë, kupon ATK TEST dhe fatura." : "Zgjidh produktet me një prekje. Shporta dhe pagesa përditësohen automatikisht."}</div></div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Link href={`/app/${organizationId}/pos/shifts`} style={{ ...secondary, textDecoration: "none" }}>Ndërrimi i arkës</Link>{["owner", "administrator", "manager"].includes(userRole) && <Link href={`/app/${organizationId}/pos/products`} style={{ ...secondary, textDecoration: "none" }}>Produktet</Link>}{isManagement && <Link href={`/app/${organizationId}/pos/setup`} style={{ ...secondary, textDecoration: "none" }}><Settings2 size={15} /> Konfiguro ATK</Link>}
         {userRole !== "cashier" && <Link href={`/app/${organizationId}`} style={{ ...secondary, textDecoration: "none" }}>Paneli i biznesit</Link>}<button style={secondary} onClick={() => void load()}><RefreshCw size={15} /> Rifresko</button></div>
     </header>
@@ -620,3 +620,5 @@ export default function WebPosPage() {
     `}</style>
   </main>;
 }
+
+export default function WebPosPageRoute() { return <WebPosPage />; }
