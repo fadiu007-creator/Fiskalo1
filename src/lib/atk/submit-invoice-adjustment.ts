@@ -44,7 +44,7 @@ export async function submitInvoiceAdjustmentToATK(
 
   const [{ data: original, error: originalError }, { data: adjustmentItems, error: adjustmentItemsError }, { data: invoiceItems, error: invoiceItemsError }] = await Promise.all([
     supabase.from("fiskalo_atk_fiscal_documents")
-      .select("id,coupon_id,atk_transaction_id,pos_installation_id,status,document_type")
+      .select("id,coupon_id,atk_transaction_id,pos_installation_id,status,document_type,pos_coupon_base64")
       .eq("id", adjustment.original_fiscal_document_id).eq("organization_id", organizationId).single(),
     supabase.from("fiskalo_invoice_adjustment_items")
       .select("original_invoice_item_id,product_id,description,quantity,unit_price,net_amount,vat_amount,total_amount")
@@ -75,9 +75,17 @@ export async function submitInvoiceAdjustmentToATK(
       !Number.isSafeInteger(Number(verification.application_id)) || Number(verification.application_id) <= 0) {
     throw new Error("Verifikimi i POS origjinal nuk përputhet me biznesin ose Application ID mungon.");
   }
-  const keyId = organizationId + ":" + pos.id + ":" + Number(verification.application_id);
-  if (!await hasBrowserPosCertificate(keyId)) {
-    throw new Error("Certifikata ATK TEST nuk përputhet me Application ID aktual. Rifresko POS-in në këtë shfletues që të ri-lëshohet certifikata për ID-në e verifikuar, pastaj krijo kërkesën e re.");
+  // Existing accepted sales were signed with the original browser key stored
+  // under organization:POS. Prefer that key for a correction of the same sale;
+  // the server independently checks that its signed coupon used this exact
+  // Application ID. New installations use the Application-ID-scoped key.
+  const legacyKeyId = organizationId + ":" + pos.id;
+  const scopedKeyId = organizationId + ":" + pos.id + ":" + Number(verification.application_id);
+  const keyId = await hasBrowserPosCertificate(legacyKeyId)
+    ? legacyKeyId
+    : await hasBrowserPosCertificate(scopedKeyId) ? scopedKeyId : "";
+  if (!keyId) {
+    throw new Error("Certifikata ATK TEST e POS-it origjinal nuk gjendet në këtë shfletues. Hape POS-in origjinal në këtë pajisje dhe përfundo regjistrimin e certifikatës TEST.");
   }
 
   const originalItemMap = new Map(invoiceItems.map((line) => [line.id, line]));
