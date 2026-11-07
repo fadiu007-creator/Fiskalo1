@@ -186,7 +186,27 @@ app.MapGet(QueuePath, async (HttpContext context, CancellationToken cancellation
     if (!OperatingSystem.IsWindows()) return Results.Problem("Local encrypted queue currently requires Windows DPAPI.", statusCode: StatusCodes.Status501NotImplemented);
     try {
         var items = await queueStore.GetAllAsync(cancellationToken);
-        return Results.Ok(new { count = items.Count, items = items.Select(item => new { item.IdempotencyKey, item.DocumentType, item.CreatedAtUtc, item.RecoveryDeadlineUtc, item.NextAttemptAtUtc, status = item.Status.ToString(), item.AttemptCount, item.LastError, item.AtkTransactionId }) });
+        var now = DateTimeOffset.UtcNow;
+        var visible = items.Select(item => new
+        {
+            item.IdempotencyKey,
+            item.DocumentType,
+            item.CreatedAtUtc,
+            item.RecoveryDeadlineUtc,
+            item.NextAttemptAtUtc,
+            status = item.Status.ToString(),
+            item.AttemptCount,
+            item.LastError,
+            item.AtkTransactionId,
+            recoveryDeadlineExceeded = item.Status is FiscalQueueStatus.Queued or FiscalQueueStatus.NeedsReconciliation &&
+                item.RecoveryDeadlineUtc <= now
+        }).ToArray();
+        return Results.Ok(new
+        {
+            count = visible.Length,
+            overdueCount = visible.Count(item => item.recoveryDeadlineExceeded),
+            items = visible
+        });
     } catch (Exception ex) when (ex is CryptographicException or IOException or UnauthorizedAccessException) {
         return Results.Problem("Unable to read the protected local fiscal queue.", statusCode: StatusCodes.Status500InternalServerError);
     }
