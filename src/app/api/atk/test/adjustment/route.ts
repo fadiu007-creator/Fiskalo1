@@ -111,7 +111,7 @@ export async function POST(request: Request) {
 
   const [{ data: invoice, error: invoiceError }, { data: original, error: originalError }, { data: pos, error: posError }] = await Promise.all([
     supabase.from("fiskalo_invoices").select("id,organization_id,status,payment_status").eq("id", adjustment.original_invoice_id).eq("organization_id", organizationId).single(),
-    supabase.from("fiskalo_atk_fiscal_documents").select("id,coupon_id,atk_transaction_id,pos_installation_id,status,document_type")
+    supabase.from("fiskalo_atk_fiscal_documents").select("id,coupon_id,atk_transaction_id,pos_installation_id,status,document_type,pos_coupon_base64")
       .eq("id", adjustment.original_fiscal_document_id).eq("organization_id", organizationId).single(),
     supabase.from("fiskalo_atk_pos_installations").select("id,organization_id,atk_branch_id,pos_id,environment,status,location")
       .eq("id", posInstallationId).eq("organization_id", organizationId).single(),
@@ -121,6 +121,18 @@ export async function POST(request: Request) {
   }
   if (originalError || !original || original.document_type !== "sale" || original.status !== "accepted" || !original.atk_transaction_id) {
     return rejectBeforeSubmission("original_atk_sale_not_accepted", "Kuponi origjinal nuk ka pranim të konfirmuar nga ATK. Korrigjimi nuk u dërgua.");
+  }
+  // A correction must use the same certified application identity as the
+  // accepted original sale. This also proves which legacy browser key is valid.
+  try {
+    const originalHeader = readCouponHeader(String(original.pos_coupon_base64 || ""));
+    if (originalHeader.get(7) !== BigInt(applicationId)) {
+      return rejectBeforeSubmission("original_application_id_mismatch",
+        "Application ID i verifikimit nuk përputhet me kuponin origjinal të pranuar nga ATK. Përdor Application ID me të cilin u lëshua shitja origjinale.");
+    }
+  } catch {
+    return rejectBeforeSubmission("original_coupon_identity_unavailable",
+      "Nuk mund të verifikohet Application ID i kuponit origjinal. Korrigjimi nuk u dërgua në ATK.");
   }
   if (posError || !pos || pos.environment !== "test" || pos.status !== "active" || pos.id !== original.pos_installation_id) {
     return rejectBeforeSubmission("original_test_pos_required", "Përdor të njëjtin POS TEST aktiv që e ka dërguar shitjen origjinale. Korrigjimi nuk u dërgua në ATK.");
