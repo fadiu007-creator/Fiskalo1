@@ -28,7 +28,7 @@ export default async function BusinessHome({ searchParams }: { searchParams: Pro
       {isProvider && <Link href="/provider" className="workspace-picker-card provider"><span className="workspace-picker-icon"><Building2 size={23}/></span><strong>Paneli i ofruesit</strong><p>Menaxho softuerin Fiskalo, konfigurimin ATK dhe bizneset kliente.</p><span>Hap hapësirën <ArrowUpRight size={16}/></span></Link>}
       {(memberships ?? []).map((membership) => {
         const org = membership.fiskalo_organizations as {legal_name?:string;trade_name?:string;municipality?:string}|null;
-        return <Link key={membership.organization_id} href={`/app/${membership.organization_id}`} className="workspace-picker-card"><span className="workspace-picker-icon"><Store size={23}/></span><strong>{org?.trade_name || org?.legal_name || "Biznes"}</strong><p>{org?.municipality ?? ""} · Roli: {membership.role}</p><span>Hap panelin e biznesit <ArrowUpRight size={16}/></span></Link>;
+        return <article key={membership.organization_id} className="workspace-picker-card"><span className="workspace-picker-icon"><Store size={23}/></span><strong>{org?.trade_name || org?.legal_name || "Biznes"}</strong><p>{org?.municipality ?? ""} · Roli: {membership.role}</p><div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}><Link href={`/app/${membership.organization_id}`} className="workspace-picker-action">Hap Fiskalo Full <ArrowUpRight size={15}/></Link><Link href={`/app/${membership.organization_id}/basic`} className="workspace-picker-action secondary">Hap Fiskalo Basic <ArrowUpRight size={15}/></Link></div></article>;
       })}
     </section>
     <Link href="/onboarding" className="workspace-picker-add">+ Shto biznes tjetër</Link>
