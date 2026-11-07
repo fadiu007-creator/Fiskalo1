@@ -142,7 +142,7 @@ export async function POST(request: Request) {
     supabase.from("fiskalo_organizations").select("nui,municipality").eq("id", organizationId).single(),
   ]);
   if (adjustmentItemsError || !adjustmentItems?.length || invoiceItemsError || !invoiceItems?.length || organizationError || !organization) {
-    return Response.json({ error: "adjustment_ledger_unavailable" }, { status: 500 });
+    return rejectBeforeSubmission("adjustment_ledger_unavailable", "Të dhënat e faturës ose të artikujve nuk mund të lexohen. Korrigjimi nuk u dërgua në ATK.", 500);
   }
   if (String(organization.nui) !== nui) return rejectBeforeSubmission("nui_mismatch", "NUI nuk përputhet me biznesin. Korrigjimi nuk u dërgua në ATK.");
   const invoiceItemMap = new Map(invoiceItems.map((line) => [line.id, line]));
@@ -172,12 +172,12 @@ export async function POST(request: Request) {
     ? await supabase.from("fiskalo_products").select("id,atk_unit_code,atk_tax_code,atk_item_category_code")
       .eq("organization_id", organizationId).in("id", productIds)
     : { data: [], error: null };
-  if (productsError) return Response.json({ error: "product_mapping_unavailable" }, { status: 500 });
+  if (productsError) return rejectBeforeSubmission("product_mapping_unavailable", "Kodet fiskale të artikujve nuk mund të lexohen. Korrigjimi nuk u dërgua në ATK.", 500);
 
   const couponType = adjustment.adjustment_type === "cancel" ? 2 : 3;
   let header: Map<number, bigint>;
   try { header = readCouponHeader(details); }
-  catch { return Response.json({ error: "invalid_protobuf" }, { status: 400 }); }
+  catch { return rejectBeforeSubmission("invalid_protobuf", "Kuponi i nënshkruar ka format të pavlefshëm. Korrigjimi nuk u dërgua në ATK.", 400); }
   const expectedHeader = new Map<number, bigint>([
     [1, BigInt(nui)], [2, couponId], [3, BigInt(pos.atk_branch_id)],
     [6, BigInt(pos.pos_id)], [7, BigInt(applicationId)], [9, BigInt(couponType)],
@@ -200,7 +200,7 @@ export async function POST(request: Request) {
 
   const { data: existing, error: existingError } = await supabase.from("fiskalo_atk_fiscal_documents")
     .select("id,status,atk_transaction_id").eq("source_adjustment_id", adjustmentId).maybeSingle();
-  if (existingError) return Response.json({ error: "correction_lookup_failed" }, { status: 500 });
+  if (existingError) return rejectBeforeSubmission("correction_lookup_failed", "Nuk u verifikua nëse ekziston një dërgim i mëparshëm. Korrigjimi nuk u dërgua në ATK.", 500);
   if (existing) return Response.json({ error: "adjustment_already_submitted", fiscalDocumentId: existing.id, status: existing.status, transactionId: existing.atk_transaction_id }, { status: 409 });
 
   const qrPayload = details + "|" + signature;
@@ -221,7 +221,7 @@ export async function POST(request: Request) {
         .select("id,status,atk_transaction_id").eq("source_adjustment_id", adjustmentId).maybeSingle();
       if (raced) return Response.json({ error: "adjustment_already_submitted", fiscalDocumentId: raced.id, status: raced.status, transactionId: raced.atk_transaction_id }, { status: 409 });
     }
-    return Response.json({ error: "fiscal_document_save_failed", detail: insertError?.message }, { status: 500 });
+    return rejectBeforeSubmission("fiscal_document_save_failed", "Kuponi nuk u ruajt në Fiskalo dhe nuk u dërgua në ATK. " + (insertError?.message ?? ""), 500);
   }
 
   // The signed coupon is now durably stored and uniquely linked to this adjustment.
