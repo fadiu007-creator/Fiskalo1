@@ -63,11 +63,18 @@ export default function AdjustmentRequestForm(props: Props) {
         if (!closeError && closed === true) {
           status = "rejected";
           setCanRetry(false);
-          setMessage("Nuk u dërgua në ATK. " + detail + " Korrigjimi u mbyll si i refuzuar para dërgimit; sasia është liruar dhe mund të provohet përsëri pasi të rregullohet pengesa.");
+          setCreated(false);
+          setCreatedAdjustmentId("");
+          setMessage("Nuk u dërgua në ATK. " + detail + " Korrigjimi u mbyll si i refuzuar para dërgimit; sasia është liruar. Rregullo pengesën dhe provo përsëri.");
         } else {
           setCanRetry(true);
           setMessage("Nuk u dërgua në ATK. " + detail + " Fiskalo nuk arriti ta mbyllë regjistrimin automatikisht; mos krijo një korrigjim tjetër derisa të rifreskosh faturën.");
         }
+      } else if (status === "rejected") {
+        setCanRetry(false);
+        setCreated(false);
+        setCreatedAdjustmentId("");
+        setMessage("Korrigjimi nuk u pranua nga ATK ose dështoi para dërgimit. " + (fiscalDocument?.last_error || detail) + " Mund të korrigjosh të dhënat dhe të krijosh një kërkesë të re.");
       } else {
         setCanRetry(false);
         setMessage("Statusi fiskal: " + status + ". " + (fiscalDocument?.last_error || detail) + " Mos e dërgo përsëri pa kontrolluar statusin në ATK.");
