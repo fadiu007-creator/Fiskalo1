@@ -83,14 +83,15 @@ export async function submitPaidInvoiceToATK(
   let verification: { nui: string; atk_branch_id: number; pos_id: number; application_id: number } | null = null;
   let keyId = "";
   for (const candidate of positions) {
-    const candidateKey = organizationId + ":" + candidate.id;
-    if (!await hasBrowserPosCertificate(candidateKey)) continue;
     const saved = await supabase.from("fiskalo_atk_pos_verifications")
       .select("nui,atk_branch_id,pos_id,application_id")
       .eq("organization_id", organizationId).eq("pos_installation_id", candidate.id).maybeSingle();
     if (saved.error || !saved.data || saved.data.nui !== org.nui ||
         Number(saved.data.atk_branch_id) !== Number(candidate.atk_branch_id) ||
-        Number(saved.data.pos_id) !== Number(candidate.pos_id)) continue;
+        Number(saved.data.pos_id) !== Number(candidate.pos_id) ||
+        !Number.isSafeInteger(Number(saved.data.application_id)) || Number(saved.data.application_id) <= 0) continue;
+    const candidateKey = organizationId + ":" + candidate.id + ":" + Number(saved.data.application_id);
+    if (!await hasBrowserPosCertificate(candidateKey)) continue;
     pos = candidate;
     verification = saved.data;
     keyId = candidateKey;
