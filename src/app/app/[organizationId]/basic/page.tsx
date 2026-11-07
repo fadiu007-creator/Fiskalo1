@@ -1,1 +1,7 @@
-export { default } from "../pos/page";
+"use client";
+
+import { WebPosPage } from "../pos/page";
+
+export default function FiskaloBasicMvpPage() {
+  return <WebPosPage basicMode />;
+}
