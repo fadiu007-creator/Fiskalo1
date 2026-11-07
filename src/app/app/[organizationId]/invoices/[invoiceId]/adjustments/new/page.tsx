@@ -22,7 +22,7 @@ export default async function NewInvoiceAdjustmentPage({params,searchParams}:Pro
       .eq("id",invoiceId).eq("organization_id",organizationId).maybeSingle(),
     supabase.from("fiskalo_atk_fiscal_documents").select("id,coupon_id,atk_transaction_id,status,document_type")
       .eq("organization_id",organizationId).eq("source_invoice_id",invoiceId).eq("document_type","sale").eq("status","accepted").maybeSingle(),
-    supabase.from("fiskalo_invoice_adjustments").select("id,adjustment_type,amount,status,reason,created_at")
+    supabase.from("fiskalo_invoice_adjustments").select("id,adjustment_type,amount,status,reason,failure_reason,created_at")
       .eq("organization_id",organizationId).eq("original_invoice_id",invoiceId).order("created_at",{ascending:false}),
     supabase.from("fiskalo_invoice_items").select("id,description,quantity,line_subtotal,line_vat")
       .eq("invoice_id",invoiceId).order("id"),
@@ -70,8 +70,8 @@ export default async function NewInvoiceAdjustmentPage({params,searchParams}:Pro
       <p style={{fontSize:13,color:"var(--muted)"}}>Ekziston së paku një kërkesë kthimi/anulimi. Vazhdo vetëm me kthimin e sasive të mbetura të artikujve.</p>
     </section> : <section style={{padding:18,border:"1px solid var(--line)",borderRadius:12,background:"white"}}>
       {priorRows.length ? <div style={{padding:12,background:"#f5f7fa",borderRadius:9,marginBottom:14,fontSize:12}}>
-        <strong>Kërkesat paraprake</strong><br/>{priorRows.map(row=>{const fiscal=fiscalStatusByAdjustment.get(row.id);return <div key={row.id} style={{paddingTop:6}}>{row.adjustment_type==="cancel"?"Anulim":"Kthim"} · {Number(row.amount).toFixed(2)} € · {row.status} · ATK: {fiscal?.status??"nuk është dërguar"}{fiscal?.atk_transaction_id? " · TX "+String(fiscal.atk_transaction_id):""}</div>})}<br/>
-        Shuma e regjistruar: {priorAmount.toFixed(2)} € / {Number(invoice.total).toFixed(2)} €
+        <strong>Historia e korrigjimeve</strong><br/>{priorRows.map(row=>{const fiscal=fiscalStatusByAdjustment.get(row.id);const statusLabel=row.status==="rejected"?"Dështoi — nuk u dërgua / u refuzua":row.status==="accepted"?"Pranuar nga ATK":row.status==="submitted"?"Dërguar — në pritje të konfirmimit":row.status==="awaiting_atk"?"Në pritje të dërgimit":"Anuluar";return <div key={row.id} style={{paddingTop:6}}>{row.adjustment_type==="cancel"?"Anulim":"Kthim"} · {Number(row.amount).toFixed(2)} € · {statusLabel} · ATK: {fiscal?.status??"nuk është dërguar"}{fiscal?.atk_transaction_id? " · TX "+String(fiscal.atk_transaction_id):""}{row.status==="rejected"&&row.failure_reason? <div style={{color:"#a33f36",paddingTop:3}}>{row.failure_reason}</div>:null}</div>})}<br/>
+        Shuma aktive e korrigjuar: {priorAmount.toFixed(2)} € / {Number(invoice.total).toFixed(2)} €
       </div>:null}
       <AdjustmentRequestForm invoiceId={invoiceId} organizationId={organizationId} pendingAdjustmentId={pendingAdjustmentId} total={Number(invoice.total)}
         kind={kind} invoiceNumber={invoice.invoice_number||invoice.id} couponId={String(fiscalDoc.coupon_id)}
