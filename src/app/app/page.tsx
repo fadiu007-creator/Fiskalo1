@@ -3,8 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ArrowUpRight, Building2, Store } from "lucide-react";
 
-export default async function BusinessHome({ searchParams }: { searchParams: Promise<{ switch?: string }> }) {
-  const { switch: forceSwitch } = await searchParams;
+export default async function BusinessHome() {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) redirect("/login");
