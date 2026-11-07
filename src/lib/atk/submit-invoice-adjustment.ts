@@ -175,10 +175,23 @@ export async function submitInvoiceAdjustmentToATK(
     unitPriceEuro: line.unit_price,
     unit,
     quantity: line.quantity,
-    lineTotalCents: Math.round((line.line_subtotal + line.line_vat) * 100),
+    // Keep the original unit price in the ATK item row. The returned net/VAT
+    // amounts below represent the discounted amount; TotalDiscount reconciles
+    // the difference for the returned quantities.
+    lineTotalCents:
+      Math.round(Number(line.quantity) * Number(line.unit_price) * 100) +
+      Math.round(Number(line.quantity) * Number(line.unit_price) * Number(line.vat_rate)),
     taxRate: tax,
     itemType,
   }));
+  const totalDiscountCents = itemRows.reduce((sum, { line }) => {
+    const grossCents =
+      Math.round(Number(line.quantity) * Number(line.unit_price) * 100) +
+      Math.round(Number(line.quantity) * Number(line.unit_price) * Number(line.vat_rate));
+    const discountedCents = Math.round((Number(line.line_subtotal) + Number(line.line_vat)) * 100);
+    return sum + grossCents - discountedCents;
+  }, 0);
+  if (totalDiscountCents < 0) throw new Error("Vlera e zbritjes së kthimit nuk mund të jetë negative.");
   const taxGroups = new Map<string, { totalForTaxCents: number; totalTaxCents: number }>();
   itemRows.forEach(({ line, tax }) => {
     const current = taxGroups.get(tax) ?? { totalForTaxCents: 0, totalTaxCents: 0 };
@@ -204,6 +217,7 @@ export async function submitInvoiceAdjustmentToATK(
     taxGroups: Array.from(taxGroups.entries()).map(([taxRate, values]) => ({ taxRate, ...values })),
     totalTaxCents: vatCents,
     totalNoTaxCents: subtotalCents,
+    totalDiscountCents,
     referenceNo: String(original.coupon_id),
   });
   const details = encodeAtkBase64(coupon);
