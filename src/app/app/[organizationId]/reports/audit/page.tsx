@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import PrintReportButton from "../../daily/print-button";
+import PrintReportButton from "../daily/print-button";
 
 type Props = { params: Promise<{ organizationId: string }> };
 type AuditRow = {
