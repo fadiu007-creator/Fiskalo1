@@ -157,7 +157,7 @@ export default function WebPosPage() {
   const subtotal = roundMoney(lines.reduce((sum, line) => sum + line.lineSubtotal, 0));
   const vatTotal = roundMoney(lines.reduce((sum, line) => sum + line.lineVat, 0));
   const total = roundMoney(subtotal + vatTotal);
-  const grossSubtotal = roundMoney(lines.reduce((sum, line) => sum + (line.product ? Number(line.product.unit_price) * line.quantity : 0), 0));
+  const grossSubtotal = roundMoney(lines.reduce((sum, line) => sum + (line.product ? roundMoney(Number(line.product.unit_price) * line.quantity) : 0), 0));
   const grossVatTotal = roundMoney(lines.reduce((sum, line) => sum + (line.product ? roundMoney(Number(line.product.unit_price) * line.quantity * Number(line.product.vat_rate) / 100) : 0), 0));
   const discountTotal = roundMoney(grossSubtotal + grossVatTotal - total);
 
@@ -325,7 +325,7 @@ export default function WebPosPage() {
     const receiptLines = persistedItems.map((item) => ({
       name: item.description,
       quantity: Number(item.quantity),
-      unitPrice: Number(item.unit_price),
+      unitPrice: Number(item.unit_price) * (100 - Number((item as { discount_percent?: number }).discount_percent ?? appliedDiscountPercent)) / 100,
       vatRate: Number(item.vat_rate),
       lineTotal: Number(item.line_subtotal) + Number(item.line_vat),
     }));
