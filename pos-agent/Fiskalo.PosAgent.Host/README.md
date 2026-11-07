@@ -70,12 +70,14 @@ The signed Protobuf payload and signature are persisted in the DPAPI-protected l
 - Timeout, network error, 5xx or interrupted process: mark NeedsReconciliation.
 - Restart during submission: recover as NeedsReconciliation.
 
+The queue endpoint exposes `recoveryDeadlineExceeded` and `overdueCount`. The 48-hour deadline is monitored; an overdue record remains preserved and queued records continue to be delivered. A deadline overrun must be escalated to the operator/provider and documented. It never authorizes deleting a record or creating a replacement.
+
 For an uncertain result, check ATK test records manually before choosing a resolution:
 - accepted: requires the ATK transaction ID.
 - rejected: requires an operator review note.
-- not_found_confirmed: requires explicit confirmation that no matching ATK record exists. It re-queues the same persisted signed document for a later operator-initiated submission. It does not submit automatically.
+- not_found_confirmed: requires explicit confirmation that no matching ATK record exists. It re-queues the same persisted signed document; the background worker may then submit that same document. It never creates a new coupon ID.
 
-Do not choose not_found_confirmed when ATK is unavailable, when the search is incomplete, or merely because the original request timed out. Expired recovery windows cannot be reopened.
+Do not choose not_found_confirmed when ATK is unavailable, when the search is incomplete, or merely because the original request timed out. A missed recovery deadline is an operational incident; the original fiscal record remains preserved. Do not create a replacement solely because the deadline elapsed.
 
 ## PowerShell scripts
 
