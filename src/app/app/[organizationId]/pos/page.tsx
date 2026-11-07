@@ -314,7 +314,7 @@ export default function WebPosPage() {
     const invoiceNumber = sale.invoice_number;
     const issuedInvoice = { total: Number(sale.invoice_total) };
     const { data: persistedItems, error: persistedItemsError } = await supabase.from("fiskalo_invoice_items")
-      .select("description,quantity,unit_price,vat_rate,line_subtotal,line_vat").eq("invoice_id", invoiceId).order("id");
+      .select("description,quantity,unit_price,vat_rate,line_subtotal,line_vat,discount_percent").eq("invoice_id", invoiceId).order("id");
     if (persistedItemsError || !persistedItems?.length) {
       setBusy(false);
       setIssuedInvoiceId(invoiceId);
@@ -322,10 +322,12 @@ export default function WebPosPage() {
       setError("Shitja u regjistrua, por artikujt e faturës nuk u lexuan. Drafti lokal mbetet për rikuperim; mos krijo shitje të re.");
       return;
     }
+    const { data: savedInvoiceDiscount } = await supabase.from("fiskalo_invoices").select("discount_total").eq("id", invoiceId).maybeSingle();
+    const receiptDiscountTotal = Number(savedInvoiceDiscount?.discount_total ?? discountTotal);
     const receiptLines = persistedItems.map((item) => ({
       name: item.description,
       quantity: Number(item.quantity),
-      unitPrice: Number(item.unit_price) * (100 - Number((item as { discount_percent?: number }).discount_percent ?? appliedDiscountPercent)) / 100,
+      unitPrice: Number(item.unit_price) * (100 - Number(item.discount_percent ?? appliedDiscountPercent)) / 100,
       vatRate: Number(item.vat_rate),
       lineTotal: Number(item.line_subtotal) + Number(item.line_vat),
     }));
@@ -376,7 +378,7 @@ export default function WebPosPage() {
             subtotal: receiptSubtotal,
             vatTotal: receiptVatTotal,
             total: Number(issuedInvoice.total),
-            discountTotal,
+            discountTotal: receiptDiscountTotal,
             qrPayload: receiptQrPayload,
             fiscalStatus: receiptFiscalStatus,
             paperWidthMm: printerSettings.paperWidthMm,
@@ -507,7 +509,7 @@ export default function WebPosPage() {
           </label>}
           <button disabled={busy || !cart.length} onClick={() => void saveCurrentOrderDraft()} style={{ ...secondary, width: "100%" }}>Ruaj porosinë në këtë pajisje</button>
           <button className="pos-checkout-button" disabled={busy || !lines.length} onClick={() => void completeSale()} style={{ ...button, width: "100%", opacity: busy || !lines.length ? 0.55 : 1 }}>{busy ? "Duke regjistruar..." : paymentMethod === "credit" ? "Lësho faturën" : "Përfundo shitjen · " + money(total)}</button>
-          <button disabled={busy || !cart.length} onClick={() => { setCart([]); setConfirmedPayment(false); }} style={{ ...secondary, width: "100%" }}>Pastro shportën</button>
+          <button disabled={busy || !cart.length} onClick={() => { setCart([]); setDiscountPercent("0"); setConfirmedPayment(false); }} style={{ ...secondary, width: "100%" }}>Pastro shportën</button>
         </div>
       </aside>
     </div>
