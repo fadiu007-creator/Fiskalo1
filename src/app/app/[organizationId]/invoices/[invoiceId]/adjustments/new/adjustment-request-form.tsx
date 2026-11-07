@@ -56,12 +56,22 @@ export default function AdjustmentRequestForm(props: Props) {
         supabase.from("fiskalo_invoice_adjustments").select("status").eq("id", adjustmentId).maybeSingle(),
         supabase.from("fiskalo_atk_fiscal_documents").select("status,last_error").eq("source_adjustment_id", adjustmentId).maybeSingle(),
       ]);
-      const status = fiscalDocument?.status || adjustment?.status || "unknown";
+      let status = fiscalDocument?.status || adjustment?.status || "unknown";
       const detail = error instanceof Error ? error.message : "Dërgimi në ATK dështoi.";
-      setCanRetry(status === "awaiting_atk" && !fiscalDocument);
-      setMessage(status === "awaiting_atk"
-        ? detail + " Kërkesa është ruajtur në Fiskalo dhe mund të provohet përsëri pasi të rregullohet pengesa."
-        : "Statusi fiskal: " + status + ". " + (fiscalDocument?.last_error || detail) + " Mos e dërgo përsëri pa kontrolluar statusin në ATK.");
+      if (status === "awaiting_atk" && !fiscalDocument) {
+        const { data: closed, error: closeError } = await supabase.rpc("fiskalo_reject_invoice_adjustment_preflight", { target_adjustment: adjustmentId });
+        if (!closeError && closed === true) {
+          status = "rejected";
+          setCanRetry(false);
+          setMessage("Nuk u dërgua në ATK. " + detail + " Korrigjimi u mbyll si i refuzuar para dërgimit; sasia është liruar dhe mund të provohet përsëri pasi të rregullohet pengesa.");
+        } else {
+          setCanRetry(true);
+          setMessage("Nuk u dërgua në ATK. " + detail + " Fiskalo nuk arriti ta mbyllë regjistrimin automatikisht; mos krijo një korrigjim tjetër derisa të rifreskosh faturën.");
+        }
+      } else {
+        setCanRetry(false);
+        setMessage("Statusi fiskal: " + status + ". " + (fiscalDocument?.last_error || detail) + " Mos e dërgo përsëri pa kontrolluar statusin në ATK.");
+      }
     } finally { setBusy(false); }
   }
 

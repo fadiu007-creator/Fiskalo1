@@ -94,6 +94,12 @@ export async function POST(request: Request) {
     .select("id,organization_id,original_invoice_id,original_fiscal_document_id,adjustment_type,amount,reason,status")
     .eq("id", adjustmentId).eq("organization_id", organizationId).maybeSingle();
   if (adjustmentError || !adjustment) return Response.json({ error: "adjustment_not_found" }, { status: 404 });
+  async function rejectBeforeSubmission(error: string, detail: string, status = 409) {
+    const { error: rejectError } = await supabase.rpc("fiskalo_reject_invoice_adjustment_preflight", { target_adjustment: adjustmentId });
+    if (rejectError) console.error("Fiskalo could not close failed preflight adjustment", rejectError.message);
+    return Response.json({ error, detail, preflightRejected: !rejectError }, { status });
+  }
+
   if (adjustment.status !== "awaiting_atk") {
     const { data: existing } = await supabase.from("fiskalo_atk_fiscal_documents")
       .select("id,status,atk_transaction_id").eq("source_adjustment_id", adjustmentId).maybeSingle();
@@ -108,13 +114,13 @@ export async function POST(request: Request) {
       .eq("id", posInstallationId).eq("organization_id", organizationId).single(),
   ]);
   if (invoiceError || !invoice || invoice.status !== "issued" || invoice.payment_status !== "paid") {
-    return Response.json({ error: "original_invoice_not_eligible" }, { status: 409 });
+    return rejectBeforeSubmission("original_invoice_not_eligible", "Fatura origjinale nuk është e lëshuar dhe e paguar. Korrigjimi nuk u dërgua në ATK.");
   }
   if (originalError || !original || original.document_type !== "sale" || original.status !== "accepted" || !original.atk_transaction_id) {
-    return Response.json({ error: "original_atk_sale_not_accepted" }, { status: 409 });
+    return rejectBeforeSubmission("original_atk_sale_not_accepted", "Kuponi origjinal nuk ka pranim të konfirmuar nga ATK. Korrigjimi nuk u dërgua.");
   }
   if (posError || !pos || pos.environment !== "test" || pos.status !== "active" || pos.id !== original.pos_installation_id) {
-    return Response.json({ error: "original_test_pos_required", detail: "Use the same active ATK TEST POS that submitted the original sale." }, { status: 409 });
+    return rejectBeforeSubmission("original_test_pos_required", "Përdor të njëjtin POS TEST aktiv që e ka dërguar shitjen origjinale. Korrigjimi nuk u dërgua në ATK.");
   }
   const { data: verification, error: verificationError } = await supabase.from("fiskalo_atk_pos_verifications")
     .select("nui,atk_branch_id,pos_id,application_id")
@@ -123,7 +129,7 @@ export async function POST(request: Request) {
       Number(verification.atk_branch_id) !== Number(pos.atk_branch_id) ||
       Number(verification.pos_id) !== Number(pos.pos_id) ||
       Number(verification.application_id) !== applicationId) {
-    return Response.json({ error: "pos_verification_missing", detail: "The original POS has no matching ATK TEST verification." }, { status: 409 });
+    return rejectBeforeSubmission("pos_verification_missing", "POS-i origjinal nuk ka verifikim ATK TEST të sinkronizuar në Fiskalo. Korrigjimi nuk u dërgua në ATK.");
   }
 
   const [{ data: adjustmentItems, error: adjustmentItemsError }, { data: invoiceItems, error: invoiceItemsError }, { data: organization, error: organizationError }] = await Promise.all([
@@ -138,7 +144,7 @@ export async function POST(request: Request) {
   if (adjustmentItemsError || !adjustmentItems?.length || invoiceItemsError || !invoiceItems?.length || organizationError || !organization) {
     return Response.json({ error: "adjustment_ledger_unavailable" }, { status: 500 });
   }
-  if (String(organization.nui) !== nui) return Response.json({ error: "nui_mismatch" }, { status: 409 });
+  if (String(organization.nui) !== nui) return rejectBeforeSubmission("nui_mismatch", "NUI nuk përputhet me biznesin. Korrigjimi nuk u dërgua në ATK.");
   const invoiceItemMap = new Map(invoiceItems.map((line) => [line.id, line]));
   const adjustedLines = adjustmentItems.map((item) => {
     const originalLine = invoiceItemMap.get(item.original_invoice_item_id);
@@ -153,13 +159,13 @@ export async function POST(request: Request) {
       vat_rate: Number(originalLine.vat_rate),
     };
   });
-  if (adjustedLines.some((line) => !line)) return Response.json({ error: "adjustment_item_mismatch" }, { status: 409 });
+  if (adjustedLines.some((line) => !line)) return rejectBeforeSubmission("adjustment_item_mismatch", "Artikujt e korrigjimit nuk përputhen me faturën origjinale. Korrigjimi nuk u dërgua.");
   const lines = adjustedLines as NonNullable<(typeof adjustedLines)[number]>[];
   const total = Number(adjustment.amount);
   const subtotal = lines.reduce((sum, line) => sum + line.line_subtotal, 0);
   const vatTotal = lines.reduce((sum, line) => sum + line.line_vat, 0);
   if (Math.round(total * 100) !== totalCents || Math.round((subtotal + vatTotal) * 100) !== totalCents) {
-    return Response.json({ error: "adjustment_total_mismatch" }, { status: 409 });
+    return rejectBeforeSubmission("adjustment_total_mismatch", "Totali i korrigjimit nuk përputhet me shumën e nënshkruar. Korrigjimi nuk u dërgua.");
   }
   const productIds = Array.from(new Set(lines.map((line) => line.product_id).filter((id): id is string => Boolean(id))));
   const { data: products, error: productsError } = productIds.length
@@ -178,10 +184,10 @@ export async function POST(request: Request) {
     [13, BigInt(totalCents)], [17, BigInt(original.coupon_id)],
   ]);
   for (const [field, expected] of expectedHeader) {
-    if (header.get(field) !== expected) return Response.json({ error: "coupon_header_mismatch", detail: "Signed correction coupon identifiers, type, original reference or total do not match Fiskalo." }, { status: 409 });
+    if (header.get(field) !== expected) return rejectBeforeSubmission("coupon_header_mismatch", "Të dhënat e kuponit të nënshkruar nuk përputhen me faturën dhe POS-in. Korrigjimi nuk u dërgua.");
   }
   if (header.get(18) && header.get(18) !== BigInt(0)) {
-    return Response.json({ error: "unsupported_transaction_reference", detail: "The optional ATK TransactionNo field is intentionally left unset pending ATK confirmation." }, { status: 409 });
+    return rejectBeforeSubmission("unsupported_transaction_reference", "Referenca opsionale e transaksionit nuk mbështetet ende. Korrigjimi nuk u dërgua.");
   }
   const payloadValidation = validateAtkCouponPayload(details, {
     nui, couponId: couponId.toString(), couponType, referenceCouponId: String(original.coupon_id),
@@ -190,7 +196,7 @@ export async function POST(request: Request) {
     total, subtotal, vatTotal, lines, products: products ?? [],
     payments: [{ amount: total, payment_method: refundPaymentMethod }],
   });
-  if (!payloadValidation.ok) return Response.json({ error: "correction_payload_mismatch", detail: payloadValidation.detail }, { status: 409 });
+  if (!payloadValidation.ok) return rejectBeforeSubmission("correction_payload_mismatch", payloadValidation.detail + " Korrigjimi nuk u dërgua në ATK.");
 
   const { data: existing, error: existingError } = await supabase.from("fiskalo_atk_fiscal_documents")
     .select("id,status,atk_transaction_id").eq("source_adjustment_id", adjustmentId).maybeSingle();
