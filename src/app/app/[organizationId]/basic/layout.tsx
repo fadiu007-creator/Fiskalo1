@@ -1,9 +1,10 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Boxes, FileBarChart2, FileText, Settings2, ShoppingCart } from "lucide-react";
 
-type Props = { children: React.ReactNode; params: Promise<{ organizationId: string }> };
+type Props = { children: ReactNode; params: Promise<{ organizationId: string }> };
 export default async function FiskaloBasicLayout({ children, params }: Props) {
   const { organizationId } = await params;
   const supabase = await createClient();
