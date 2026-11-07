@@ -435,6 +435,67 @@ if (OperatingSystem.IsWindows())
     }
 }
 
+
+if (OperatingSystem.IsWindows())
+{
+    // Deliver durable, previously-unsent fiscal records automatically after
+    // connectivity returns. Ambiguous in-flight submissions are moved to
+    // NeedsReconciliation and are deliberately excluded from this worker.
+    app.Lifetime.ApplicationStarted.Register(() =>
+    {
+        _ = Task.Run(async () =>
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
+            var stoppingToken = app.Lifetime.ApplicationStopping;
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    var dueItems = await queueStore.GetDueAsync(cancellationToken: stoppingToken);
+                    foreach (var item in dueItems)
+                    {
+                        try
+                        {
+                            // Atomic state transition prevents two workers or a
+                            // foreground request from submitting the same item.
+                            await queueStore.MarkSubmittingAsync(item.IdempotencyKey, stoppingToken);
+                            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+                            var signed = new SignedAtkCoupon(item.PayloadBase64, item.SignatureBase64, "");
+                            var result = await new AtkTestClient(http).SubmitSignedPosCouponAsync(signed, stoppingToken);
+                            await queueStore.MarkAcceptedAsync(item.IdempotencyKey, result.TransactionId.ToString(), stoppingToken);
+                            Console.WriteLine("ATK TEST queued document accepted: " + item.IdempotencyKey);
+                        }
+                        catch (AtkApiException ex) when ((int)ex.StatusCode >= 400 && (int)ex.StatusCode < 500)
+                        {
+                            await queueStore.MarkRejectedAsync(item.IdempotencyKey,
+                                "ATK rejected the queued test coupon with HTTP " + (int)ex.StatusCode, stoppingToken);
+                        }
+                        catch (Exception ex) when (ex is AtkApiException or HttpRequestException or TaskCanceledException or IOException)
+                        {
+                            // A timeout or dropped connection can happen after ATK
+                            // received the request. Never auto-resubmit an uncertain
+                            // transaction; require reconciliation against ATK first.
+                            await queueStore.MarkNeedsReconciliationAsync(item.IdempotencyKey,
+                                "Automatic delivery outcome is uncertain. Check ATK before retrying.", stoppingToken);
+                        }
+                    }
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+                catch (Exception ex) when (ex is IOException or CryptographicException or UnauthorizedAccessException)
+                {
+                    Console.Error.WriteLine("Fiscal queue worker could not access the protected queue; records remain stored.");
+                }
+
+                try
+                {
+                    if (!await timer.WaitForNextTickAsync(stoppingToken)) break;
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            }
+        }, app.Lifetime.ApplicationStopping);
+    });
+}
+
 app.Run();
 
 static bool HasValidSession(HttpContext context, string? expectedToken)
