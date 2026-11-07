@@ -151,7 +151,7 @@ export default function WebPosPage() {
     const product = products.find((item) => item.id === line.productId);
     const quantity = Number(line.quantity);
     const lineSubtotal = product && Number.isFinite(quantity) ? roundMoney(Number(product.unit_price) * quantity * (100 - appliedDiscountPercent) / 100) : 0;
-    const lineVat = product && Number.isFinite(quantity) ? roundMoney(Number(product.unit_price) * quantity * Number(product.vat_rate) / 100) : 0;
+    const lineVat = product && Number.isFinite(quantity) ? roundMoney(Number(product.unit_price) * quantity * (100 - appliedDiscountPercent) / 100 * Number(product.vat_rate) / 100) : 0;
     return { ...line, product, quantity, lineSubtotal, lineVat, lineTotal: lineSubtotal + lineVat };
   }).filter((line) => line.product);
   const subtotal = roundMoney(lines.reduce((sum, line) => sum + line.lineSubtotal, 0));
