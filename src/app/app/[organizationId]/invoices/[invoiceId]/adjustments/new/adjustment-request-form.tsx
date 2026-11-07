@@ -59,7 +59,7 @@ export default function AdjustmentRequestForm(props: Props) {
       let status = fiscalDocument?.status || adjustment?.status || "unknown";
       const detail = error instanceof Error ? error.message : "Dërgimi në ATK dështoi.";
       if (status === "awaiting_atk" && !fiscalDocument) {
-        const { data: closed, error: closeError } = await supabase.rpc("fiskalo_reject_invoice_adjustment_preflight", { target_adjustment: adjustmentId });
+        const { data: closed, error: closeError } = await supabase.rpc("fiskalo_reject_invoice_adjustment_preflight", { target_adjustment: adjustmentId, target_detail: detail });
         if (!closeError && closed === true) {
           status = "rejected";
           setCanRetry(false);

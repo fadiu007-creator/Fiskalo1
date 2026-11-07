@@ -95,7 +95,7 @@ export async function POST(request: Request) {
     .eq("id", adjustmentId).eq("organization_id", organizationId).maybeSingle();
   if (adjustmentError || !adjustment) return Response.json({ error: "adjustment_not_found" }, { status: 404 });
   async function rejectBeforeSubmission(error: string, detail: string, status = 409) {
-    const { error: rejectError } = await supabase.rpc("fiskalo_reject_invoice_adjustment_preflight", { target_adjustment: adjustmentId });
+    const { error: rejectError } = await supabase.rpc("fiskalo_reject_invoice_adjustment_preflight", { target_adjustment: adjustmentId, target_detail: detail });
     if (rejectError) console.error("Fiskalo could not close failed preflight adjustment", rejectError.message);
     return Response.json({ error, detail, preflightRejected: !rejectError }, { status });
   }

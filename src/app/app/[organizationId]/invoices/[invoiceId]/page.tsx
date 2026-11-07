@@ -15,6 +15,7 @@ type CustomerOption = { id: string; name: string };
 const fieldStyle: React.CSSProperties = { width: "100%", minWidth: 0, border: "1px solid var(--line)", borderRadius: 8, padding: "10px 11px", background: "white", color: "var(--ink)" };
 type Payment = { id: string; amount: number; payment_method: string; reference: string | null; created_at: string };
 type FiscalDocument = { status: string; coupon_id: number | string | null; atk_transaction_id: string | null; accepted_at: string | null; occurred_at: string | null; qr_payload: string | null };
+type InvoiceAdjustment = { id: string; adjustment_type: "cancel" | "return"; amount: number; reason: string; status: string; failure_reason: string | null; created_at: string };
 
 export default function InvoiceDetailPage() {
   const params = useParams<{ organizationId: string; invoiceId: string }>();
@@ -32,6 +33,7 @@ export default function InvoiceDetailPage() {
   const [draftMessage, setDraftMessage] = useState("");
   const [payments, setPayments] = useState<Payment[]>([]);
   const [fiscalDocument, setFiscalDocument] = useState<FiscalDocument | null>(null);
+  const [adjustments, setAdjustments] = useState<InvoiceAdjustment[]>([]);
   const [paymentForm, setPaymentForm] = useState({ amount: "", method: "cash", reference: "" });
   const [paymentBusy, setPaymentBusy] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState("");
@@ -45,7 +47,7 @@ export default function InvoiceDetailPage() {
 
   useEffect(() => {
     async function load() {
-      const [inv, business, items, paymentRows, productRows, customerRows, fiscalDocumentResult] = await Promise.all([
+      const [inv, business, items, paymentRows, productRows, customerRows, fiscalDocumentResult, adjustmentRows] = await Promise.all([
         supabase.from("fiskalo_invoices").select("*").eq("id", params.invoiceId).eq("organization_id", params.organizationId).single(),
         supabase.from("fiskalo_organizations").select("legal_name,trade_name,nui,fiscal_number,address,municipality,phone,email").eq("id", params.organizationId).single(),
         supabase.from("fiskalo_invoice_items").select("*").eq("invoice_id", params.invoiceId),
@@ -53,8 +55,9 @@ export default function InvoiceDetailPage() {
         supabase.from("fiskalo_products").select("id,name,unit_price,vat_rate,stock_quantity,track_stock,is_active").eq("organization_id", params.organizationId).eq("is_active", true).order("name"),
         supabase.from("fiskalo_customers").select("id,name").eq("organization_id", params.organizationId).order("name"),
         supabase.from("fiskalo_atk_fiscal_documents").select("status,coupon_id,atk_transaction_id,accepted_at,occurred_at,qr_payload").eq("organization_id", params.organizationId).eq("source_invoice_id", params.invoiceId).eq("document_type", "sale").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+        supabase.from("fiskalo_invoice_adjustments").select("id,adjustment_type,amount,reason,status,failure_reason,created_at").eq("organization_id", params.organizationId).eq("original_invoice_id", params.invoiceId).order("created_at", { ascending: false }),
       ]);
-      if (inv.error || business.error || items.error || paymentRows.error || productRows.error || customerRows.error || !inv.data || !business.data) {
+      if (inv.error || business.error || items.error || paymentRows.error || productRows.error || customerRows.error || adjustmentRows.error || !inv.data || !business.data) {
         setError("Fatura nuk u gjet ose nuk ke qasje.");
         setLoading(false);
         return;
@@ -70,6 +73,7 @@ export default function InvoiceDetailPage() {
       setDraftLines(loadedLines.map((line) => ({ product_id: line.product_id || "", quantity: String(line.quantity) })));
       setPayments((paymentRows.data ?? []) as Payment[]);
       setFiscalDocument(fiscalDocumentResult.data as FiscalDocument | null);
+      setAdjustments((adjustmentRows.data ?? []) as InvoiceAdjustment[]);
       if (inv.data.customer_id) {
         const { data } = await supabase.from("fiskalo_customers").select("name,business_number,address,email").eq("id", inv.data.customer_id).single();
         setCustomer(data);
@@ -276,6 +280,29 @@ export default function InvoiceDetailPage() {
         </form>}
         {invoice.status === "issued" && remainingBalance <= 0.005 && <p role="status" style={{ margin: "14px 0 0", fontSize: 12 }}>Fatura është paguar plotësisht. Nuk ka bilanc të mbetur.</p>}
       </section>
+      {adjustments.length > 0 && <section className="no-print" style={{ marginTop: 22, padding: 16, border: "1px solid var(--line)", borderRadius: 10, background: "white" }}>
+        <h2 style={{ fontSize: 15, margin: "0 0 12px" }}>Kthimet dhe anulimet</h2>
+        <div style={{ display: "grid", gap: 10 }}>
+          {adjustments.map((adjustment) => {
+            const statusLabel: Record<string,string> = {
+              awaiting_atk: "Në pritje të dërgimit",
+              submitted: "Dërguar në ATK · në pritje të konfirmimit",
+              accepted: "Pranuar nga ATK",
+              rejected: "Nuk u dërgua / u refuzua",
+              voided: "Anuluar në Fiskalo",
+            };
+            return <div key={adjustment.id} style={{ padding: 12, borderRadius: 8, background: "var(--canvas)", display: "grid", gap: 5, fontSize: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                <strong>{adjustment.adjustment_type === "cancel" ? "Anulim" : "Kthim"} · {fmt(Number(adjustment.amount))}</strong>
+                <strong>{statusLabel[adjustment.status] || adjustment.status}</strong>
+              </div>
+              <span style={{ color: "var(--muted)" }}>{new Date(adjustment.created_at).toLocaleString("sq-XK")} · Arsyeja: {adjustment.reason}</span>
+              {adjustment.status === "rejected" && <span style={{ color: "#a33f36" }}>{adjustment.failure_reason || "Korrigjimi nuk u dërgua në ATK. Mund të provohet përsëri pasi të rregullohet pengesa."}</span>}
+              {adjustment.status === "submitted" && <span style={{ color: "var(--muted)" }}>Mos e ridërgo pa kontrolluar pranimin në ATK.</span>}
+            </div>;
+          })}
+        </div>
+      </section>}
       {invoice.notes && <p style={{ marginTop: 24, fontSize: 12 }}>Shënim: {invoice.notes}</p>}
       <footer style={{ borderTop: "1px solid var(--line)", marginTop: 30, paddingTop: 16, color: "var(--muted)", fontSize: 11, lineHeight: 1.6 }}>Dokument i krijuar në Fiskalo. Ky dokument nuk është fiskalizuar zyrtarisht dhe nuk përbën kupon fiskal të certifikuar nga ATK.</footer>
     </article>
