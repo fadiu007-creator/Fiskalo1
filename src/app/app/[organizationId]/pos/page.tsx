@@ -168,6 +168,10 @@ export default function WebPosPage() {
   if (loading) return <main style={{ maxWidth: 1200, margin: "0 auto", padding: 24 }}>Duke hapur POS...</main>;
 
   return <main style={{ maxWidth: 1440, margin: "0 auto", padding: "18px clamp(12px,3vw,28px) 50px" }}>
+    <nav aria-label="Versioni i Fiskalo" className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+      <Link href={`/app/${organizationId}`} style={{ ...secondary, textDecoration: "none" }}>Versioni aktual</Link>
+      <Link href={`/app/${organizationId}/basic`} aria-current="page" style={{ ...button, textDecoration: "none" }}>Fiskalo Basic MVP</Link>
+    </nav>
     <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
       <div><Link href={`/app/${organizationId}`} style={{ color: "var(--brand)", fontWeight: 750 }}>← Paneli i biznesit</Link><h1 style={{ margin: "8px 0 0", fontSize: 27 }}>Pika e shitjes</h1><div style={{ color: "var(--muted)", fontSize: 12 }}>POS për shitje dhe fatura të brendshme</div></div>
       <button style={secondary} onClick={() => void load()}>Rifresko produktet</button>
