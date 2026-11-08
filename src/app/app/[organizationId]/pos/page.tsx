@@ -505,6 +505,7 @@ export function WebPosPage({ basicMode = false }: { basicMode?: boolean } = {}) 
       </div>
       {issuedQrPayload && <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap", borderTop: "1px solid var(--line)", marginTop: 12, paddingTop: 14 }}>
         <div style={{ flex: "1 1 220px" }}>
+          <img src="/rks-coat-of-arms.svg" alt="Stema e Republikës së Kosovës" width={54} height={60} style={{ objectFit: "contain", display: "block", marginBottom: 8 }} />
           <strong>Kodi QR i kuponit</strong>
           <p style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5, margin: "5px 0" }}>Klienti mund ta skanojë për të verifikuar të dhënat e nënshkruara të kuponit në sistemin e ATK-së.</p>
           <span className="status-pill">{issuedFiscalStatus === "accepted" ? "Pranuar nga ATK TEST" : "ATK TEST · " + (issuedFiscalStatus || "në pritje")}</span>
