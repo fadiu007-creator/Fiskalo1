@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, feature/web-pos-checkout]
   pull_request:
-    branches: [main]
+    branches: [main, feature/web-pos-checkout]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
