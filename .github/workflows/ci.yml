@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, feature/web-pos-checkout]
+    branches: [main, feature/web-pos-checkout, integration/fiskalo-full-sync]
   pull_request:
     branches: [main, feature/web-pos-checkout]
 
