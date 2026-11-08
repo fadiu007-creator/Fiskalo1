@@ -81,18 +81,12 @@ public sealed class FiscalQueueStore
         try
         {
             var items = await LoadAsync(cancellationToken);
-            var expired = false;
-            for (var i = 0; i < items.Count; i++)
-            {
-                if (items[i].Status == FiscalQueueStatus.Queued && items[i].RecoveryDeadlineUtc <= timestamp)
-                {
-                    items[i] = items[i] with { Status = FiscalQueueStatus.Expired };
-                    expired = true;
-                }
-            }
-            if (expired) await SaveAsync(items, cancellationToken);
+            // The 48-hour recovery deadline is an operational compliance target,
+            // not permission to discard or stop transmitting an unsent fiscal record.
+            // Keep overdue documents encrypted and eligible for automatic delivery;
+            // the host exposes RecoveryDeadlineUtc so it can raise an overdue alert.
             return items.Where(x => x.Status == FiscalQueueStatus.Queued &&
-                    x.NextAttemptAtUtc <= timestamp && x.RecoveryDeadlineUtc > timestamp)
+                    x.NextAttemptAtUtc <= timestamp)
                 .OrderBy(x => x.CreatedAtUtc)
                 .ToArray();
         }
@@ -111,13 +105,14 @@ public sealed class FiscalQueueStore
             EnsureQueued(item);
             var attempts = checked(item.AttemptCount + 1);
             var delaySeconds = Math.Min(15 * Math.Pow(2, Math.Min(attempts - 1, 10)), MaximumRetryDelay.TotalSeconds);
-            var deadlineReached = timestamp >= item.RecoveryDeadlineUtc;
             return item with
             {
                 AttemptCount = attempts,
                 NextAttemptAtUtc = timestamp.AddSeconds(delaySeconds),
                 LastError = Truncate(error, 500),
-                Status = deadlineReached ? FiscalQueueStatus.Expired : FiscalQueueStatus.Queued
+                // Never discard an unsent fiscal document when the recovery
+                // target is missed. Keep retrying and surface the overdue deadline.
+                Status = FiscalQueueStatus.Queued
             };
         }, cancellationToken);
     }
@@ -264,8 +259,9 @@ public sealed class FiscalQueueStore
         return MutateAsync(idempotencyKey, item =>
         {
             EnsureNeedsReconciliation(item);
-            if (item.RecoveryDeadlineUtc <= timestamp)
-                return item with { Status = FiscalQueueStatus.Expired, LastError = "Operator confirmed no ATK record, but the recovery window expired. Create a new reviewed test document." };
+            // Even after the target window, preserve and submit the same
+            // signed record once the operator has confirmed ATK has no matching
+            // transaction. Never create a replacement solely because time elapsed.
             return item with
             {
                 Status = FiscalQueueStatus.Queued,

@@ -8,8 +8,18 @@
     "android": {
       "package": "com.fiskalo.pos",
       "versionCode": 1,
-      "permissions": []
+      "permissions": [
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH_SCAN"
+      ],
+      "blockedPermissions": [],
+      "usesFeatures": [{ "name": "android.hardware.usb.host", "required": false }],
+      "usesCleartextTraffic": false
     },
-    "plugins": ["expo-secure-store"]
+    "plugins": [
+      "expo-secure-store"
+    ]
   }
 }

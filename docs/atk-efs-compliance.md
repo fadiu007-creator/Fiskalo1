@@ -1,93 +1,124 @@
-# ATK SEF compliance and certification plan
+# Fiskalo ATK SEF compliance and release status
 
-**Status: not certified; official fiscalization is disabled.** Fiskalo's current business MVP creates internal invoices and operational records. It does not issue ATK fiscal coupons, sign coupons with an ATK-recognized certificate, transmit transactions to ATK, or provide a valid ATK QR/verification number. It must not be sold or installed as a certified SEF until the required approval is obtained.
+**Status: ATK TEST integration is partial; Fiskalo provider/software is not certified; production fiscalization remains disabled.** This document separates software features from ATK authorization. A successful software build or TEST coupon response is not an ATK certification.
 
-## Controlling official sources
+## Controlling references
 
 1. [Administrative Instruction (MFPT) No. 01/2026](https://apps.atk-ks.org/sefaplikimi/uploads/documents/87a43adf-6ee2-42e5-a5af-043c031f514f.pdf), dated 27 April 2026.
 2. [Specific Technical and Functional Requirements for PEF/SF/SEF](https://apps.atk-ks.org/sefaplikimi/uploads/documents/150ab6cc-084f-490d-b5fc-d8639d0287dc.pdf), published 29 May 2026.
 3. [ATK SEF application and certification portal](https://apps.atk-ks.org/sefaplikimi/).
 4. [ATK EDI notice: Unique Fiscalization Code](https://www.atk-ks.org/njoftim-per-tatimpagues-publikohet-versioni-i-ri-i-sistemit-elektronik-edi/).
-5. [ATK implementation examples and integration guide](https://github.com/fiskalizimi).
+5. [ATK implementation examples](https://github.com/fiskalizimi/pos-golang).
 
-Re-check the portal before every implementation release. The ATK may publish updated specifications, test environments, tax mappings, and protocol versions.
+Re-check the ATK portal and technical package before each release. The public Go repository is an implementation example, not a substitute for the current official specification or ATK written confirmation.
 
-## Regulatory gates before commercial SEF use
+## Release gates
 
-### 1. Fiskalo developer and software certification
+### TEST
+TEST mode may be used only with an ATK-authorized test taxpayer, the test Application ID/fiscalization number supplied by ATK, a verified TEST POS and a certificate issued by ATK for that POS. Test data and certificates must never be reused for production.
 
-Under Articles 35 of Administrative Instruction 01/2026:
-- The SEF developer/maintainer applies to the ATK commission for registration and certification.
-- The developer must be authorized before offering SEF or maintenance services in Kosovo.
-- Selling or installing the SEF at taxpayers is allowed only after certification.
-- After registration, the developer/software solution receives a unique SEF code. That code and the developer's NUI/NF must be integrated into the software before it is handed to taxpayers.
-- The taxpayer must notify ATK which software solution and developer are being used.
+### PRODUCTION
+Production fiscalization MUST remain disabled until all of the following are true:
 
-The ATK portal provides the application, testing, certification and maintenance process. The required application evidence must be prepared from the current portal forms; do not assume that a code review alone constitutes certification.
+- Fiskalo's legal provider has completed ATK developer/maintainer registration and authorization.
+- The Fiskalo software solution has passed ATK testing and received formal certification and its assigned SEF/software-solution code.
+- Production provider metadata (NUI/NF, SEF code, solution name and version) is configured from ATK-issued values.
+- The taxpayer has obtained its production Unique Fiscalization Code through ATK EDI.
+- Each production POS has its own ATK-approved key/certificate and matching taxpayer, unit, POS and software-solution identifiers.
+- Production Sale, Cancel and Return scenarios and any other ATK-prescribed tests have passed.
+- ATK's formal approval and production endpoint/credential activation have been received.
 
-### 2. Taxpayer and POS onboarding
+No internal toggle, test certificate, fabricated code, or successful TEST coupon may bypass these gates.
 
-ATK's EDI service “Kërkesë për Fiskalizim” provides the taxpayer's **Unique Fiscalization Code**, which ATK identifies as a prerequisite for using SEF.
+## Functional requirements
 
-For each installed SEF/POS, Article 34 requires a digital certificate and a separately generated private key. The registration data includes:
-- Taxpayer NUI/NF
-- Business unit number
-- POS number
-- Software solution code
-- Fiscalization number obtained through ATK EDI
+### Fiscal documents
+- Separate internal invoices/B2B tax documents from B2C fiscal POS coupons.
+- Implement ATK-defined Sale, Cancel and Return coupon types.
+- Cancel and Return coupons must reference the original Sale coupon ID; retain the original fiscal document and append an immutable correction record.
+- Preserve the exact signed Protobuf details, signature, QR payload, request/response, ATK transaction ID, timestamps and submission attempts.
+- Coupon IDs must be unique across the taxpayer/business, not merely unique within one POS.
+- Use ATK monetary precision: unit price in EUR × 10,000; totals, tax and payments in cents.
+- Validate product unit, item category, VAT/tax code and payment type against the current official ATK catalogues.
+- Do not label any receipt fiscalized until ATK has returned and Fiskalo has durably saved a valid accepted response/transaction ID.
 
-No application ID, taxpayer fiscalization code, POS identifier, certificate, QR code, or verification number may be fabricated or substituted with an internal Fiskalo identifier.
+The public [ATK C# Protobuf example](https://github.com/fiskalizimi/pos-csharp) defines `CANCEL=2`, `RETURN=3`, and `ReferenceNo` as the original Sale `CouponId`. It documents the ATK response `transaction_id` as a server-returned uint64. The sample does not specify correction-payment/refund semantics or whether the `TransactionNo` request field must be populated for a correction; those details require ATK confirmation and TEST evidence before automatic submission is enabled.
 
-### 3. Security and device-key architecture
+### Device security and connectivity
+- Generate a separate key for each registered POS and keep private keys on that device.
+- Never store private keys in Supabase, Cloudflare secrets, GitHub, logs or cloud backups.
+- Confirm with ATK that the selected local key store and device architecture are acceptable before production.
+- Maintain an encrypted durable local fiscal journal/queue, idempotent submission and reconciliation after ambiguous timeouts.
+- Implement certificate expiry, renewal, revocation and POS re-onboarding.
+- Keep operator identity, software version and audit events with every fiscal transaction.
 
-- Every fiscal coupon must be electronically signed and the SEF identified by its digital certificate.
-- ATK communication must use HTTPS and the documented ATK protocol/data format.
-- Private keys must be generated and protected for each installed SEF/POS. Do not put private keys in Supabase tables, Cloudflare variables, GitHub secrets, logs, or normal application backups.
-- The production design must provide a local secure key store/signing component on each registered POS device, or another ATK-approved secure arrangement.
-- Cloudflare/Supabase may coordinate business data and submission status, but they must not become a shared store for POS private keys.
+### Reporting and operational controls
+- Provide internal daily sales, VAT, payment-method, shift, cash-movement and fiscal-transmission reports.
+- Provide a live internal X-style cash-position snapshot for the current business date and immutable end-of-shift Z-style close snapshots for operational control. These are not official ATK reports and are never submitted to ATK.
+- Do not assume that a PEF/SF X/Z submission endpoint applies to SEF. Send reports to ATK only when the current SEF technical specification explicitly requires it.
+- Keep internal reports clearly labelled as internal; do not present them as official ATK tax reports.
 
-### 4. Fiscal transaction requirements from the May 2026 technical specification
+## Current ATK amendment — 22 June 2026
 
-The implementation must cover, at minimum:
-- Unique transaction IDs and immutable records (write-once/read-many).
-- Audit history for sales, cancellations, corrections and configuration changes.
-- Fiscal coupon generation, digital signature, QR code and real-time ATK reporting.
-- Secure local retention and automatic retransmission after internet/ATK communication is restored.
-- Cancellation and goods-return coupons linked to the original coupon; no silent deletion of fiscal transactions.
-- Multilingual operation and required print/preview/electronic receipt formats.
-- ATK-required reporting and verification.
-- Four-decimal unit-price precision and two-decimal total amounts.
-- ATK tax-category letters and product/service categories from the published specification.
-- POS/operator identifiers, daily coupon sequence and ATK verification number on fiscal receipts.
+The ATK portal publishes a signed amendment to the 29 May 2026 technical/functional requirements:
+[Amendment PDF](https://apps.atk-ks.org/sefaplikimi/uploads/documents/4994a4cd-75c8-46fd-bb7c-d541e4aa0e40.pdf).
 
-The current app's simplified VAT selector is not an implementation of ATK's tax-category codes. Tax mappings must be taken from the current official technical documents and validated with ATK/accounting specialists.
+The amendment adds/clarifies these SEF obligations:
 
-## Implementation status
+- Installation and use must be supported on at least one suitable device/work environment (PC, laptop, tablet, mobile phone or another suitable electronic device).
+- Transaction data must be stored in a protected way that preserves integrity through faults or interruption.
+- During an internet outage, the device must retain transactions and automatically transmit them when connectivity returns.
+- Locally retained fiscal data must be encrypted using advanced encryption standards.
+- Access to unsent data is restricted to a request by ATK or another competent state authority.
+- Untransmitted data must be exportable in suitable CSV/PDF formats only upon such a request.
 
-| Area | Current status |
+These are not optional UX enhancements. The browser now encrypts saved order drafts with AES-256-GCM using a non-extractable key stored in IndexedDB, and the Windows POS Agent has a DPAPI-protected local fiscal journal. These are implementation foundations, not proof that the complete signed fiscal transaction is locally journalled before checkout confirmation. The Windows Agent queue is not yet integrated as the Web POS checkout's offline fiscal path. The Windows POS Agent has an encrypted DPAPI journal and an automatic delivery worker for queued, never-submitted documents. It still needs checkout integration, a complete installer/service lifecycle, a controlled authority-request export workflow, and verification on the target device. Ambiguous in-flight requests remain locked for reconciliation to prevent duplicate coupons.
+
+The 48-hour recovery timestamp in the queue is an operational target/alert deadline, not a reason to delete or permanently suppress an unsent fiscal record. The queue now retains overdue records and continues automatic delivery attempts when their state is safely Queued. If a request may already have reached ATK, it remains NeedsReconciliation and is never blindly retried.
+
+## Current implementation status
+
+| Capability | Status |
 |---|---|
-| Business workspaces, roles and RLS | Implemented in the business MVP |
-| Products, customers, expenses and inventory | Implemented in the business MVP |
-| Internal invoices and payment ledger | Implemented; not fiscal coupons |
-| Immutable issued invoices and audit events | Implemented for the internal invoice workflow |
-| Four-decimal unit-price storage | Implemented |
-| ATK fiscal receipt schema and submission outbox | Not implemented |
-| ATK certificate / private-key provisioning | Not implemented |
-| POS-local signing agent / secure key store | Not implemented |
-| Offline fiscal coupon queue and retry | Not implemented |
-| ATK tax-category mapping and fiscal QR | Not implemented |
-| ATK test suite, commission review and certification | Not completed |
+| Business workspace, membership roles and tenant-scoped data | Implemented in application; verify each deployment's live RLS/schema |
+| Product ATK unit, VAT and item-category mapping fields | Implemented; all 31 official unit codes and all 35 published item-category codes are now present in the product dropdowns; VAT codes A/C/D/E are mapped |
+| TEST POS onboarding UI, verification, CSR and certificate flow | Implemented in Web POS; requires per-device and ATK test evidence |
+| Browser-local P-256 signing key | TEST prototype only; IndexedDB is not an approved production hardware keystore |
+| Paid Web POS Sale coupon creation and TEST submission | Implemented; runbook records four accepted TEST Sale documents |
+| ATK response/transaction ID storage and duplicate-sale guard | Implemented for Sale flow |
+| Ambiguous ATK response state | Implemented as pending/reconciliation-required; do not blindly retry |
+| Cancel and Return ATK submission | Signed TEST submission paths now exist for both types. They reference the original Sale CouponId, use the same original TEST POS/certificate, validate item-level quantities/net/VAT against the adjustment ledger, persist a linked fiscal document and prevent duplicate submission. ATK acceptance for both scenarios is still unverified; payment/refund semantics and optional Protobuf `TransactionNo` require ATK TEST confirmation before certification |
+| Encrypted Windows local journal | DPAPI-protected journal implemented; Windows/Ubuntu CI build and queue tests pass; host checkout integration and physical-device verification remain |
+| Automatic recovery after connectivity returns | Worker automatically submits safely queued/not-yet-submitted records; POS Agent CI passes on Windows and Ubuntu; real outage/reconnect and ATK reconciliation tests remain; ambiguous submissions require reconciliation |
+| Authority-request export of untransmitted data (CSV/PDF) | Not implemented; must be access-controlled and available only on documented ATK/competent-authority request |
+| Encrypted browser order drafts | AES-256-GCM encryption and legacy-draft migration implemented; this stores an order draft, not a complete offline fiscal coupon |
+| Audit-log export for external review | Owner/administrator-only CSV export and print-to-PDF page implemented; retention period and authority-request handling still require policy validation |
+| ATK receipt identifiers and tax breakdown | Thermal receipt now includes NUI/fiscal/VAT numbers, branch/POS/SEF identifier, coupon ID, verification number, operator identity and VAT-rate breakdown when ATK data is available; physical print and exact ATK sample comparison remain |
+| Android key/coupon workflow | Standalone internal-test APK build succeeds; physical-device certificate, ATK submission and printer tests remain |
+| Complete official X/Z report submission for SEF | Not established by the inspected public SEF sample; do not claim implemented or required without current ATK confirmation |
+| Internal daily sales/payment/shift/fiscal status report | Implemented; internal management report only |
+| 24/7 operation and 48-hour repair SLA | Infrastructure availability and a documented provider support/repair SLA are not yet evidenced |
+| Offline fiscal coupon creation and sequential OFFLINE numbering | Not implemented end to end in Web POS; saved encrypted order drafts are not an offline fiscal coupon |
+| Automatic retry for all untransmitted/rejected coupons | Partial: safely queued Agent records retry automatically; Web POS offline sales and rejected/ambiguous transaction retry policy remain incomplete |
+| Official-language support (Albanian and Serbian) | Not complete; current cashier/admin UI is primarily Albanian |
+| Provider SEF code and developer NUI/NF in certified payload/configuration | Awaiting ATK-issued provider identifiers and confirmation of exact integration fields; not configured |
+| Full fiscal receipt preview / electronic delivery | QR preview exists and thermal receipt output was expanded; full sample-matched preview and consent-based electronic delivery still require validation |
+| Internal live X cash snapshot and immutable Z shift-close snapshot | Implemented in Fiskalo; internal only, role-scoped, not submitted to ATK |
+| POS Agent and production-grade key custody | Not complete |
+| Provider/software ATK certification | Not complete |
+| Production fiscalization | Disabled by design; not authorized |
 
-## Next SEF engineering milestones
+## Required work before certification
 
-1. Obtain the developer's legal/business details and complete the ATK SEF developer/software application.
-2. Read and version the full implementation specification and official sample code; record the exact schema, protobuf definitions, certificate flow, endpoints, and response/error semantics.
-3. Design the local POS signing component and its secure per-device key lifecycle.
-4. Add fiscal device/configuration, fiscal receipt, immutable submission/outbox, retry, cancellation/return and ATK response records, all isolated under the `fiskalo_` namespace.
-5. Implement the official tax-category and product-category mappings from ATK's published lists.
-6. Run the official ATK test workflow, fix every failed case, submit the certification package and wait for formal approval.
-7. Enable fiscalization in production only after the developer/software and taxpayer/POS prerequisites are satisfied.
+1. Obtain ATK's latest complete test scenarios and written confirmation of protocol details that are unclear in public examples.
+2. Complete Cancel and Return flows, including original-coupon references, item/amount reconciliation, unique IDs, signature, response persistence and audit trail.
+3. Validate signed Cancel and partial/full Return against ATK's prescribed TEST cases, including the chosen refund payment method and the optional `TransactionNo` field. The current correction implementation leaves `TransactionNo` unset because the public sample does not define its correction semantics. Complete the durable offline journal, required recovery window, reconciliation and operator alerts.
+4. Complete and physically test the approved POS Agent / Android device-key and printing architecture.
+5. Validate all official ATK unit, item-category, tax and payment catalogues against the live product UI and coupon validator. The 31-unit and 35-category catalogues are now populated from the published technical tables.
+6. Run every ATK-prescribed test for every required POS environment and retain evidence.
+7. Submit the provider/software certification package and wait for ATK's formal decision.
+8. Enable production only after every release gate above has been evidenced.
 
 ## Safety rule
 
-Until the certification gates are completed, all customer-facing documents must remain clearly marked as **not officially fiscalized**. Do not generate a fake ATK QR code, NUIKF/verification number, fiscalization code, or claim ATK approval.
+Until ATK formally certifies Fiskalo and issues production credentials, every non-ATK document must remain clearly marked as an internal/non-fiscal document. Never fabricate an ATK QR code, verification number, transaction ID, fiscalization code, certificate or approval.

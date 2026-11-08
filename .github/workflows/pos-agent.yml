@@ -2,7 +2,7 @@ name: POS Agent CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/web-pos-checkout]
     paths:
       - "pos-agent/**"
       - ".github/workflows/pos-agent.yml"

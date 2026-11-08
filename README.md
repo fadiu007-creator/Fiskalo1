@@ -17,16 +17,27 @@ Implemented:
 - Inventory deduction, audited manual stock adjustments, and stock movement records
 - Supplier register, purchase drafts, atomic stock receiving, supplier payment ledger and outstanding balances
 - Date-filtered management reports and CSV exports
+- Daily operational sales/payment/cashier report with date selection and print-to-PDF; explicitly distinguished from an official ATK Z/tax report
 - ATK preparation foundation: taxpayer fiscalization-number profile, test POS registry, fiscal document/event schema and provider production lock
+- Provider-only ATK public taxpayer lookup capture and audit history (manual capture; no unsupported ATK API scraping)
 - Responsive browser POS for product search, cart, invoice issue and confirmed/manual payment ledger posting
+- Shared web/Android POS checkout through one atomic, idempotent database transaction; network retries reuse the original invoice instead of creating duplicates
+- Local pending-order recovery in browser IndexedDB and Android SecureStore; pending drafts are explicitly not invoices and require reconnection and cashier confirmation
+- Android fiscal receipt printing is blocked unless the linked ATK document is accepted and has an official QR payload
 - Android-native POS client scaffold (Expo/React Native) with Supabase sign-in, business selection, cart, invoice issue and payment recording
 - Fiskalo invoice-to-ATK coupon mapping core with explicit ATK catalogue/payment inputs and Sale/Cancel/Return reference validation
 - .NET 8 POS protocol core based on ATK's official C# sample: Protobuf models, P-256 CSR helpers, ECDSA coupon signing, money conversion and test-only HTTP client
 - Row Level Security on all Fiskalo tables
+
+Recent migrations applied to the existing `zikos` project include:
+- `20261105003000_fiskalo_product_plan_limits.sql` — server-enforced product caps for Starter (10), Standard (50), and Pro (100)
+- `20261105003100_fiskalo_provider_plan_assignment.sql` — provider-admin-only plan assignment
+- `20261105010000_fiskalo_atomic_pos_checkout.sql` and `20261105010200_fiskalo_pos_rpc_invoker.sql` — atomic, idempotent POS checkout with caller RLS
 - Cloudflare Workers deployment configuration (OpenNext)
 
 Not yet part of this MVP:
 - Certified ATK EFS fiscalization and electronic submission
+- Official ATK Z/tax report generation and submission, and ATK periodic tax-report submission (must follow the current SEF technical contract; internal daily report is not an ATK filing)
 - Android-native ATK signing/certificate support (current local signing agent is Windows-only)
 - Certified fiscal receipt/QR workflow and hardware integrations
 - Accountant multi-client workspace
@@ -77,8 +88,9 @@ Apply migrations in order:
 Required public environment variables:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` (server-only; required for creating worker Auth accounts from the business team page)
 
-For local development, copy `.env.example` to `.env.local` and fill in those values. Never commit service-role keys, signing keys, or production credentials. The service-role key is not required by the current client MVP.
+For local development, copy `.env.example` to `.env.local` and fill in those values. Never commit service-role keys, signing keys, or production credentials. The service-role key is used only by the server-side `/api/team/add-worker` route. Never expose it through a `NEXT_PUBLIC_` variable, commit its value, or send it to the browser.
 
 Configure the Supabase Auth site URL and redirect allow-list to include the deployed Fiskalo origin and `/auth/callback`, plus `/reset-password` as a recovery destination.
 
@@ -98,7 +110,11 @@ The repository contains `wrangler.jsonc` and `open-next.config.ts`.
 - Deploy: `npm run deploy`
 - Generate Worker types: `npm run cf-typegen`
 
-Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` as Cloudflare Worker environment variables before deployment. Cloudflare deployment also requires GitHub Actions secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, plus build secrets `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. For a first-time Worker creation, the token needs Workers Admin access; if the Worker already exists, Workers Editor is sufficient. Add Workers Routes Write only if deployment also changes a custom domain/route. Set the two Supabase values as Worker runtime variables in the Cloudflare dashboard as well. Then run the manual `Deploy Fiskalo to Cloudflare Workers` workflow from GitHub Actions.
+Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` as Cloudflare Worker environment variables before deployment. Add the Supabase project's service-role key as a GitHub Actions repository secret named `SUPABASE_SERVICE_ROLE_KEY`; the deploy workflow syncs it to the Worker as an encrypted Cloudflare secret before deployment. If this secret is absent, worker-account creation returns the explicit server-configuration error. Cloudflare deployment also requires GitHub Actions secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, plus build secrets `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. For a first-time Worker creation, the token needs Workers Admin access; if the Worker already exists, Workers Editor is sufficient. Add Workers Routes Write only if deployment also changes a custom domain/route. Set the two Supabase values as Worker runtime variables in the Cloudflare dashboard as well. Then run the manual `Deploy Fiskalo to Cloudflare Workers` workflow from GitHub Actions.
+
+## Provider workspace and ATK taxpayer checks
+
+The `/provider` workspace is restricted to users in `fiskalo_provider_users`. It includes a provider-only ATK taxpayer lookup section for searching the official ATK public page and recording its published result fields against a customer business. Lookup records are auditable and protected by provider-only RLS policies. Customer onboarding does not expose this feature. ATK has not published a supported third-party API contract for this public search, so the lookup is manual and is not represented as an automated ATK verification.
 
 ## ATK SEF certification roadmap
 

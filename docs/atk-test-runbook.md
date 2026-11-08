@@ -1,6 +1,6 @@
 # Fiskalo — ATK pre-application test runbook
 
-**Status:** Preparation only. No ATK test taxpayer has been verified and no test coupon has been submitted by this project.
+**Status (3 November 2026):** Web POS ATK TEST onboarding and Sale submission have been exercised successfully; four accepted test sale documents are recorded, including a recent €11.80 cash sale. Android automatic TEST submission is now implemented in source but still requires CI completion and physical-device verification. Production certification is not complete.
 
 ## 1. Understand the identifiers
 
@@ -85,11 +85,11 @@ The formal certification application requires technical testing under the same N
 
 ## 7. Important current Fiskalo limitations
 
-- Web POS and Android POS currently issue Fiskalo internal invoices; they are not yet ATK-fiscalizing checkout clients.
+- Web POS automatically submits fully paid sales to ATK TEST after payment registration; four accepted test sale documents are recorded. Android now has automatic TEST coupon submission wired into paid checkout, but no Android device submission has yet been verified.
 - The browser key vault stores a non-extractable P-256 CryptoKey in IndexedDB. This is browser-profile storage, not a hardware-backed key store and not yet confirmed by ATK as an acceptable SEF key custody model.
 - The Android module creates P-256 keys in Android Keystore and generates a CSR locally. It has not yet been compiled into an APK or tested on a physical device; hardware-backed protection depends on the device.
 - Android and browser ATK coupon signing/submission, certificate lifecycle, durable offline queue and reconciliation are not yet complete.
-- No ATK test request, certificate or coupon has been submitted by this development work.
+- Web POS has submitted ATK TEST Sale coupons and received four accepted responses. Do not treat this as proof of Cancel/Return test completion or formal SEF certification.
 - Production fiscalization remains disabled until the provider and Fiskalo SEF solution are formally authorized/certified and the production taxpayer identifiers/credentials are issued.
 
 ## Official references

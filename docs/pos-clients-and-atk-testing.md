@@ -5,7 +5,7 @@
 | Client | Current capability | ATK test capability |
 |---|---|---|
 | Web POS | Responsive browser checkout; internal Fiskalo invoices and payment ledger; experimental browser-local P-256 CSR | CSR generation prototype; ATK verify/certificate workflow is available through the paired Windows Agent. Browser-only certificate acceptance and coupon submission are not complete. |
-| Android POS | Native Expo/React Native checkout; internal invoices and payment ledger; native Android Keystore P-256 key/CSR | Android CSR generation, authenticated server-proxied ATK test verification and test-certificate request, and local certificate/public-key match check are implemented in source. Not yet physically tested. No Android Protobuf coupon submission or durable fiscal queue yet. |
+| Android POS | Native Expo/React Native checkout; internal invoices and payment ledger; native Android Keystore P-256 key/CSR | Source now includes ATK TEST verification/certificate onboarding, native ECDSA signing, Protobuf Sale coupon construction, paid-invoice submission and duplicate-invoice safeguards. Not yet physically tested or verified by a new Android ATK coupon. No durable offline fiscal queue or reconciliation yet. |
 | Windows POS Agent | Local signing key, ATK test certificate onboarding, signed test-coupon submission and encrypted queue | Test-only end-to-end path in source; still requires authorized ATK identifiers and actual test runs. |
 
 The browser and Android clients are sales-entry clients. They do not independently make Fiskalo an ATK-certified EFS. The current local signing implementation is Windows-specific because it uses Windows DPAPI for key and queue protection.
@@ -37,16 +37,16 @@ The mapper deliberately does not convert a Fiskalo VAT percentage into an ATK ta
 
 ## Android scope
 
-The Android project in mobile-pos/ is a native client for ordinary Fiskalo sales/invoice management. It uses the existing Supabase Auth and RLS tenant boundaries and stores the login session in Android SecureStore. The Android workflow now attempts to assemble a debug APK and upload it as a 14-day GitHub Actions artifact; the first build is still running and is not yet verified. It has not been exercised on physical hardware.
+The Android project in mobile-pos/ is a native client for ordinary Fiskalo sales/invoice management. It uses the existing Supabase Auth and RLS tenant boundaries and stores the login session in Android SecureStore. The Android workflow assembles a debug APK and uploads it as a 14-day GitHub Actions artifact. The latest branch-head build is queued; an earlier commit's TypeScript check passed, but its native APK build has not yet completed. The current source has not been exercised on physical hardware.
 
-Remaining Android ATK milestones: verify CSR/certificate onboarding on a physical Android device against an ATK-authorized test taxpayer; implement the ATK Protobuf coupon encoder and validate its ECDSA signature encoding against the official reference; add signed Sale/Cancel/Return submission, encrypted durable queue and manual reconciliation; then collect ATK test evidence. Do not copy a Windows DPAPI private key into Android.
+Remaining Android ATK milestones: complete current-head TypeScript and native APK CI; install and test the APK on a physical Android device; verify CSR/certificate onboarding against an ATK-authorized test taxpayer; submit one controlled Android TEST Sale and compare its ECDSA signature/payload with the official reference; add Cancel/Return, encrypted durable offline queue and manual reconciliation; then collect ATK test evidence. Do not copy a Windows DPAPI private key into Android.
 
 ## Explicit limitations
 
 - Neither POS client is an ATK-certified EFS.
 - Card acquiring is not integrated; card payments are only entered after an external terminal/provider confirms success.
 - No production ATK endpoint or production submission switch is enabled.
-- No test coupon has been sent as part of this implementation batch.
+- No new Android test coupon has been sent as part of this implementation batch; the source integration is not yet end-to-end verified on a device.
 - The Android app has not yet been installed or tested on a physical device.
 
 ## Browser and Android key-storage prototype (2 November 2026)
@@ -72,9 +72,26 @@ Administrative Instruction (MF) 01/2026, Article 34(3), requires the taxpayer to
 References: [ATK Administrative Instruction 01/2026, Article 34](https://apps.atk-ks.org/sefaplikimi/) and [official ATK C# POS integration](https://github.com/fiskalizimi/pos-csharp).
 
 
+## Web ATK onboarding update — 3 November 2026
+
+- The business dashboard exposes a direct **ATK / POS** action in its top header, in addition to the module tab, so the onboarding screen is easier to find on narrow/mobile layouts.
+- The Web flow can call the authenticated Fiskalo server routes for ATK TEST taxpayer/POS verification and CSR signing. The CSR private key remains in the browser's IndexedDB as a non-extractable Web Crypto key; the signed certificate is accepted only after the browser checks its public key against the locally stored key.
+- This remains an experimental browser-key workflow. It is not ATK-approved hardware-backed storage and must not be used for production fiscalization.
+- The latest code is on the feature branch and is not visible on the live deployment until the PR is reviewed, merged and deployed.
+- ATK test endpoint calls still require an ATK-authorized test identity and successful network access. No successful live ATK response or test coupon is claimed by this update.
+
 ## Current implementation milestone — 2 November 2026
 
 - Dashboard labels now explain that the ATK unit number comes from the taxpayer's registered unit/location records, and that the POS number is unique per register. Fiskalo's internal branch UUID is explicitly not the ATK unit number.
 - Android native module exposes Android Keystore P-256 CSR generation, P1363 ECDSA signing and X.509 certificate public-key matching.
 - Android app has ATK TEST fiscalization number/Application ID fields, server-proxied Verify and Sign CSR actions, and local certificate-match validation.
 - Android CI now runs native compilation and attempts to assemble a debug APK, then upload the APK as an Actions artifact. Latest run must complete successfully before claiming an installable APK exists.
+
+
+## Web POS ATK Protobuf milestone — 3 November 2026
+
+- Added `src/lib/atk/protobuf.ts`, a browser-compatible encoder for the official ATK `PosCoupon` Protobuf field layout.
+- The encoder validates required identifiers, coupon type/reference rules, explicit one-character ATK tax codes, payment type codes, and reconciliation of item, payment, tax-group and coupon totals.
+- Monetary representation follows the official integration reference: item unit price is encoded in 1/10,000 EUR units; coupon, line, payment and tax totals are encoded in cents.
+- This is a serialization foundation only. It does not infer ATK tax/unit/item codes, build a coupon from the live invoice database, verify a registered certificate, submit to `/pos/coupon`, persist ATK responses, or provide an offline queue.
+- The next implementation step is a server-authorized, idempotent TEST submission flow that binds the signed payload to an issued invoice and a verified POS installation. Do not send arbitrary browser-supplied Protobuf payloads directly to ATK.

@@ -1,18 +1,26 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, SafeAreaView, ScrollView, Share, StatusBar, Text, TextInput, TouchableOpacity, View } from "react-native";
 import FiskaloAtkCrypto from "fiskalo-atk-crypto";
+import { PrinterPanel } from "./src/PrinterPanel";
+import { printAndroidReceipt } from "./src/thermalReceipt";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import * as SecureStore from "expo-secure-store";
 import { supabase } from "./src/supabase";
+import { encodeAtkBase64, encodeAtkPosCoupon } from "./src/lib/atk/protobuf";
 
 type Org = { organization_id: string; role: string; fiskalo_organizations: { legal_name: string; municipality: string; nui: string } | null };
-type Product = { id: string; name: string; sku: string | null; unit_price: number; vat_rate: number; stock_quantity: number; track_stock: boolean; item_type: string; is_active: boolean };
+type Product = {
+  id: string; name: string; sku: string | null; pos_category: string; unit_price: number; vat_rate: number;
+  stock_quantity: number; track_stock: boolean; item_type: string; is_active: boolean;
+  atk_unit_code: string | null; atk_tax_code: string | null; atk_item_category_code: string | null;
+};
 type Customer = { id: string; name: string };
 type CartLine = { product: Product; quantity: number };
 const ink = "#17212b";
 const brand = "#245b50";
 const line = "#dce3e1";
 const money = (n: number) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR" }).format(n);
+const makeRequestId = () => "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => { const r = Math.floor(Math.random() * 16); return (c === "x" ? r : (r & 3) | 8).toString(16); });
 
 export default function App() {
   const [email, setEmail] = useState("");
@@ -39,10 +47,16 @@ export default function App() {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "bank_transfer" | "credit">("cash");
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+  const [activeShift, setActiveShift] = useState<{ id: string; opening_cash: number; opened_at: string } | null>(null);
+  const [openingCash, setOpeningCash] = useState("0");
+  const [countedCash, setCountedCash] = useState("");
   const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState("Të gjitha");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  const canManageATK = organizations.some((org) => org.organization_id === organizationId && ["owner", "administrator"].includes(org.role));
 
   const total = useMemo(() => cart.reduce((sum, row) => {
     const base = Number(row.product.unit_price) * row.quantity;
@@ -78,20 +92,83 @@ export default function App() {
   }
 
   async function selectOrganization(org: Org) {
+    if (org.role === "accountant") { setError("Roli Kontabilist mund t’i kontrollojë faturat, por nuk mund të përdorë arkën e shitjeve."); return; }
     setBusy(true); setError(""); setMessage("");
     const { data: p, error: pError } = await supabase.from("fiskalo_products")
-      .select("id,name,sku,unit_price,vat_rate,stock_quantity,track_stock,item_type,is_active")
+      .select("id,name,sku,pos_category,unit_price,vat_rate,stock_quantity,track_stock,item_type,is_active,atk_unit_code,atk_tax_code,atk_item_category_code")
       .eq("organization_id", org.organization_id).eq("is_active", true).order("name");
     const { data: c, error: cError } = await supabase.from("fiskalo_customers")
       .select("id,name").eq("organization_id", org.organization_id).order("name");
+    let providerApplicationId = "";
+    if (["owner", "administrator"].includes(org.role)) {
+      const { data: applicationId, error: applicationIdError } = await supabase.rpc("fiskalo_get_business_application_id", { target_org: org.organization_id });
+      if (applicationIdError) { setBusy(false); setError("Application ID i ofruesit nuk u lexua: " + applicationIdError.message); return; }
+      providerApplicationId = applicationId ? String(applicationId) : "";
+    }
     setBusy(false);
     if (pError || cError) { setError(pError?.message ?? cError?.message ?? "Nuk u ngarkuan të dhënat."); return; }
+    const { data: authForShift } = await supabase.auth.getUser();
+    const { data: openShift, error: shiftError } = authForShift.user
+      ? await supabase.from("fiskalo_cashier_shifts").select("id,opening_cash,opened_at").eq("organization_id", org.organization_id).eq("opened_by", authForShift.user.id).eq("status", "open").maybeSingle()
+      : { data: null, error: null };
+    if (shiftError) { setBusy(false); setError("Ndërrimi i arkës nuk u lexua: " + shiftError.message); return; }
+    setActiveShift(openShift as { id: string; opening_cash: number; opened_at: string } | null);
+    setOpeningCash("0"); setCountedCash("");
     setOrganizationId(org.organization_id);
     setOrganizationName(org.fiskalo_organizations?.legal_name ?? "Biznesi");
     setOrganizationNui(org.fiskalo_organizations?.nui ?? "");
+    if (providerApplicationId) setAtkApplicationId(providerApplicationId);
     setAtkCsr(""); setAtkFingerprint(""); setAtkHardwareBacked(null);
     setProducts((p ?? []) as Product[]);
     setCustomers((c ?? []) as Customer[]);
+    const pendingRaw = await SecureStore.getItemAsync("fiskalo-pos-pending-sale:" + org.organization_id);
+    if (pendingRaw) {
+      try {
+        const pending = JSON.parse(pendingRaw) as { items: Array<{ product_id: string; quantity: number }>; customer_id: string; payment_method: "cash" | "card" | "bank_transfer" | "credit" };
+        const restored = pending.items.map((item) => {
+          const product = (p ?? []).find((row) => row.id === item.product_id);
+          return product ? { product: product as Product, quantity: item.quantity } : null;
+        });
+        if (restored.length && restored.every(Boolean)) {
+          setCart(restored as CartLine[]);
+          setCustomerId(pending.customer_id ?? "");
+          setPaymentMethod(pending.payment_method);
+          setPaymentConfirmed(false);
+          setMessage("U rikthye një porosi e papërfunduar. Vazhdo me të njëjtën shportë për të shmangur faturën e dyfishtë.");
+        } else setError("Porosia e papërfunduar u gjet, por disa produkte mungojnë në katalog. Mos e fshi.");
+      } catch { setError("Porosia lokale nuk mund të lexohet. Kontrollo faturat para se të krijosh shitje të re."); }
+    }
+  }
+
+  async function openCashierShift() {
+    const amount = Number(openingCash.replace(",", "."));
+    if (!Number.isFinite(amount) || amount < 0) { setError("Shkruaj shumën fillestare të arkës."); return; }
+    setBusy(true); setError(""); setMessage("");
+    const { error: openError } = await supabase.rpc("fiskalo_open_cashier_shift", { target_org: organizationId, opening_amount: amount });
+    if (openError) { setBusy(false); setError(openError.message); return; }
+    const { data: auth } = await supabase.auth.getUser();
+    const { data, error: readError } = auth.user
+      ? await supabase.from("fiskalo_cashier_shifts").select("id,opening_cash,opened_at").eq("organization_id", organizationId).eq("opened_by", auth.user.id).eq("status", "open").maybeSingle()
+      : { data: null, error: new Error("Sesioni ka skaduar.") };
+    setBusy(false);
+    if (readError || !data) { setError(readError?.message ?? "Ndërrimi u hap, por nuk u lexua."); return; }
+    setActiveShift(data as { id: string; opening_cash: number; opened_at: string });
+    setMessage("Ndërrimi i arkës u hap.");
+  }
+
+  async function closeCashierShift() {
+    if (!activeShift) return;
+    const amount = Number(countedCash.replace(",", "."));
+    if (!Number.isFinite(amount) || amount < 0) { setError("Shkruaj shumën e numëruar në fund të ndërrimit."); return; }
+    setBusy(true); setError(""); setMessage("");
+    const { data, error: closeError } = await supabase.rpc("fiskalo_close_cashier_shift", {
+      target_shift: activeShift.id, counted_amount: amount, closing_note: null,
+    });
+    setBusy(false);
+    if (closeError) { setError(closeError.message); return; }
+    const result = Array.isArray(data) ? data[0] : data;
+    setActiveShift(null); setCountedCash("");
+    setMessage("Ndërrimi u mbyll. Gjendja e pritur: " + money(Number(result?.expected ?? 0)) + "; diferenca: " + money(Number(result?.difference ?? 0)) + ".");
   }
 
   function add(product: Product) {
@@ -105,47 +182,144 @@ export default function App() {
 
   async function checkout() {
     setError(""); setMessage("");
+    if (paymentMethod === "cash" && !activeShift) { setError("Hap ndërrimin e arkës para se të pranosh pagesë me para në dorë."); return; }
     if (!cart.length) { setError("Shporta është bosh."); return; }
     if (paymentMethod !== "credit" && !paymentConfirmed) { setError("Konfirmo se pagesa është pranuar."); return; }
+    if (paymentMethod !== "credit") {
+      const unmapped = cart.filter(({ product }) => {
+        const vat = Number(product.vat_rate);
+        const tax = product.atk_tax_code?.trim() ?? "";
+        const taxMatches = vat === 8 ? tax === "D" : vat === 18 ? tax === "E" : vat === 0 ? ["A", "C"].includes(tax) : false;
+        return !product.atk_unit_code?.trim() || !product.atk_item_category_code?.trim() || !taxMatches;
+      });
+      if (unmapped.length) {
+        setError("Plotëso kodet zyrtare ATK për: " + unmapped.map((row) => row.product.name).join(", ") + ". Shitja nuk u krijua.");
+        return;
+      }
+    }
     const invalidStock = cart.find((row) => row.product.track_stock && row.quantity > Number(row.product.stock_quantity));
     if (invalidStock) { setError("Stok i pamjaftueshëm: " + invalidStock.product.name); return; }
 
     setBusy(true);
-    const { data: auth } = await supabase.auth.getUser();
-    if (!auth.user) { setBusy(false); setError("Sesioni ka skaduar."); return; }
-    const { data: invoice, error: invoiceError } = await supabase.from("fiskalo_invoices").insert({
-      organization_id: organizationId, created_by: auth.user.id, customer_id: customerId || null,
-      payment_method: paymentMethod, payment_status: "unpaid", issue_date: new Date().toISOString().slice(0, 10),
-    }).select("id").single();
-    if (invoiceError || !invoice) { setBusy(false); setError(invoiceError?.message ?? "Fatura nuk u krijua."); return; }
-
-    const { error: itemError } = await supabase.from("fiskalo_invoice_items").insert(cart.map((row) => ({
-      invoice_id: invoice.id, product_id: row.product.id, description: row.product.name,
-      quantity: row.quantity, unit_price: Number(row.product.unit_price), vat_rate: Number(row.product.vat_rate),
-    })));
-    if (itemError) { setBusy(false); setError("Drafti u krijua, por artikujt nuk u ruajtën: " + itemError.message); return; }
-
-    const { data: invoiceNumber, error: issueError } = await supabase.rpc("fiskalo_issue_invoice", { target_invoice: invoice.id });
-    if (issueError) { setBusy(false); setError("Fatura mbeti draft: " + issueError.message); return; }
-
-    const { data: issuedInvoice, error: issuedReadError } = await supabase.from("fiskalo_invoices").select("total").eq("id", invoice.id).eq("organization_id", organizationId).single();
-    if (issuedReadError || !issuedInvoice) { setBusy(false); setError("Fatura u lëshua, por totali nuk u lexua. Kontrolloje para pagesës."); return; }
-
-    if (paymentMethod !== "credit") {
-      const { error: payError } = await supabase.rpc("fiskalo_record_payment", {
-        target_invoice: invoice.id, payment_amount: Number(issuedInvoice.total), method: paymentMethod, payment_reference: null,
-      });
-      if (payError) { setBusy(false); setError("Fatura " + invoiceNumber + " u lëshua, por pagesa nuk u regjistrua: " + payError.message); return; }
+    const pendingKey = "fiskalo-pos-pending-sale:" + organizationId;
+    let requestId: string;
+    try {
+      const pendingRaw = await SecureStore.getItemAsync(pendingKey);
+      if (pendingRaw) {
+        const pending = JSON.parse(pendingRaw) as { id: string; items: Array<{ product_id: string; quantity: number }>; customer_id: string; payment_method: string };
+        const currentItems = cart.map((row) => ({ product_id: row.product.id, quantity: row.quantity })).sort((a,b) => a.product_id.localeCompare(b.product_id));
+        const savedItems = [...pending.items].sort((a,b) => a.product_id.localeCompare(b.product_id));
+        if (JSON.stringify(savedItems) !== JSON.stringify(currentItems) || pending.customer_id !== customerId || pending.payment_method !== paymentMethod) {
+          setBusy(false);
+          setError("Ekziston një porosi me rezultat të pakonfirmuar. Rikthe shportën e ruajtur dhe provo përsëri; mos ndrysho artikujt ose pagesën.");
+          return;
+        }
+        requestId = pending.id;
+      } else {
+        requestId = makeRequestId();
+        await SecureStore.setItemAsync(pendingKey, JSON.stringify({
+          id: requestId,
+          items: cart.map((row) => ({ product_id: row.product.id, quantity: row.quantity })),
+          customer_id: customerId,
+          payment_method: paymentMethod,
+        }));
+      }
+    } catch (draftError) {
+      setBusy(false);
+      setError("Porosia nuk u ruajt në mënyrë të sigurt në pajisje: " + (draftError instanceof Error ? draftError.message : "Gabim i ruajtjes."));
+      return;
     }
-    setBusy(false); setCart([]); setCustomerId(""); setPaymentConfirmed(false); setPaymentMethod("cash");
-    setMessage("Fatura " + invoiceNumber + " u lëshua. " + (paymentMethod === "credit" ? "Mbeti e papaguar." : "Pagesa u regjistrua."));
-    await selectOrganization({ organization_id: organizationId, role: "", fiskalo_organizations: { legal_name: organizationName, municipality: "", nui: organizationNui } });
+
+    const { data: saleRows, error: saleError } = await supabase.rpc("fiskalo_create_pos_sale", {
+      target_org: organizationId,
+      request_id: requestId,
+      target_customer: customerId || null,
+      target_payment_method: paymentMethod,
+      sale_items: cart.map((row) => ({ product_id: row.product.id, quantity: row.quantity })),
+    });
+    const sale = Array.isArray(saleRows) ? saleRows[0] : saleRows;
+    if (saleError || !sale?.invoice_id) {
+      setBusy(false);
+      setError("Rezultati i shitjes nuk u konfirmua. Porosia ruhet me të njëjtën ID; provo përsëri pa nisur shitje të re. " + (saleError?.message ?? "Përgjigje e pavlefshme nga serveri."));
+      return;
+    }
+    const invoiceId = String(sale.invoice_id);
+    const invoiceNumber = sale.invoice_number;
+    const issuedInvoice = { total: Number(sale.invoice_total) };
+    const { data: persistedItems, error: persistedItemsError } = await supabase.from("fiskalo_invoice_items")
+      .select("description,quantity,unit_price,vat_rate,line_subtotal,line_vat").eq("invoice_id", invoiceId).order("id");
+    if (persistedItemsError || !persistedItems?.length) {
+      setBusy(false);
+      setError("Fatura u regjistrua, por artikujt nuk u lexuan. Porosia mbetet e ruajtur; provo përsëri me të njëjtën ID.");
+      return;
+    }
+    const receiptLines = persistedItems.map((item) => ({
+      name: item.description, quantity: Number(item.quantity), unitPrice: Number(item.unit_price),
+      vatRate: Number(item.vat_rate), lineTotal: Number(item.line_subtotal) + Number(item.line_vat),
+    }));
+    const subtotal = persistedItems.reduce((sum, item) => sum + Number(item.line_subtotal), 0);
+    const vatTotal = persistedItems.reduce((sum, item) => sum + Number(item.line_vat), 0);
+
+    let fiscalMessage = "";
+    let fiscalConfirmed = paymentMethod === "credit";
+    let fiscalQrPayload: string | null = null;
+    if (paymentMethod !== "credit") {
+      try {
+        fiscalMessage = " " + await submitAndroidPaidInvoiceToATK(invoiceId);
+      } catch (fiscalError) {
+        fiscalMessage = " Pagesa u regjistrua, por fiskalizimi automatik nuk u konfirmua: " +
+          (fiscalError instanceof Error ? fiscalError.message : "Gabim i panjohur.") +
+          " Kontrollo statusin ATK para çdo prove tjetër.";
+      }
+      const { data: fiscalDocument, error: fiscalReadError } = await supabase.from("fiskalo_atk_fiscal_documents")
+        .select("qr_payload,status").eq("organization_id", organizationId).eq("source_invoice_id", invoiceId).maybeSingle();
+      if (fiscalReadError) {
+        fiscalMessage += " Statusi i ATK-së nuk u lexua: " + fiscalReadError.message;
+      } else {
+        fiscalQrPayload = typeof fiscalDocument?.qr_payload === "string" ? fiscalDocument.qr_payload : null;
+        fiscalConfirmed = fiscalDocument?.status === "accepted" && Boolean(fiscalQrPayload);
+      }
+    }
+    if (paymentMethod !== "credit" && await SecureStore.getItemAsync("fiskalo-printer-android-auto") === "true") {
+      if (!fiscalConfirmed || !fiscalQrPayload) {
+        fiscalMessage += " Printimi fiskal u ndal: mungon pranimi nga ATK ose QR-ja zyrtare.";
+      } else {
+        try {
+          await printAndroidReceipt({
+            businessName: organizationName,
+            nui: organizationNui,
+            municipality: "",
+            invoiceNumber: String(invoiceNumber ?? ""),
+            issuedAt: new Date().toLocaleString("sq-XK"),
+            paymentMethod: ({ cash: "PARA NE DORE", card: "KARTELE", bank_transfer: "TRANSFER BANKAR", credit: "ME AFAT" })[paymentMethod],
+            items: receiptLines,
+            subtotal,
+            vatTotal,
+            total: Number(issuedInvoice.total),
+            qrPayload: fiscalQrPayload,
+            fiscalStatus: "accepted",
+          });
+          fiscalMessage += " Kuponi ATK TEST u dërgua te printeri.";
+        } catch (printError) {
+          fiscalMessage += " Printimi automatik nuk u krye: " + (printError instanceof Error ? printError.message : "Gabim i panjohur.");
+        }
+      }
+    }
+    setBusy(false);
+    if (fiscalConfirmed) {
+      await SecureStore.deleteItemAsync(pendingKey);
+      setCart([]); setCustomerId(""); setPaymentConfirmed(false); setPaymentMethod("cash");
+      setMessage("Fatura " + invoiceNumber + " u lëshua. " + (paymentMethod === "credit" ? "Mbeti e papaguar." : "Pagesa u regjistrua." + fiscalMessage));
+      await selectOrganization({ organization_id: organizationId, role: "", fiskalo_organizations: { legal_name: organizationName, municipality: "", nui: organizationNui } });
+    } else {
+      setMessage("Fatura " + invoiceNumber + " dhe pagesa u regjistruan, por ATK nuk e konfirmoi fiskalizimin. Porosia mbetet e ruajtur; provo përsëri me të njëjtën shportë. " + fiscalMessage);
+    }
   }
 
   async function createAndroidAtkCsr() {
     setError(""); setMessage(""); setAtkCsr(""); setAtkFingerprint("");
-    if (!/^\\d{9}$/.test(organizationNui)) { setError("Biznesi nuk ka NUI valid me 9 shifra."); return; }
-    if (!/^\\d{1,20}$/.test(atkBranchId) || !/^\\d{1,20}$/.test(atkPosId)) {
+    if (!/^\d{9}$/.test(organizationNui)) { setError("Biznesi nuk ka NUI valid me 9 shifra."); return; }
+    if (!/^\d{1,20}$/.test(atkBranchId) || !/^\d{1,20}$/.test(atkPosId)) {
       setError("Vendos ID-në e njësisë dhe numrin e POS-it të konfirmuar nga ATK. Mos shpik identifikues.");
       return;
     }
@@ -177,11 +351,150 @@ export default function App() {
     } finally { setAtkBusy(false); }
   }
 
+  async function getAndroidTestPosInstallation(): Promise<{
+    id: string; atk_branch_id: number; pos_id: number; location: string | null; status: string;
+  }> {
+    const { data, error: lookupError } = await supabase
+      .from("fiskalo_atk_pos_installations")
+      .select("id,atk_branch_id,pos_id,location,status")
+      .eq("organization_id", organizationId)
+      .eq("environment", "test")
+      .eq("atk_branch_id", Number(atkBranchId))
+      .eq("pos_id", Number(atkPosId))
+      .limit(2);
+    if (lookupError) throw new Error("Nuk u lexua instalimi TEST i POS-it: " + lookupError.message);
+    if (!data || data.length !== 1) {
+      throw new Error(data && data.length > 1
+        ? "Ka më shumë se një instalim TEST me këto ID. Zgjidh/korrekto instalimin para verifikimit."
+        : "Nuk u gjet instalimi TEST i këtij POS-i në biznes. Regjistroje një herë te konfigurimi ATK në Web POS.");
+    }
+    return data[0] as { id: string; atk_branch_id: number; pos_id: number; location: string | null; status: string };
+  }
+
+  function androidAtkApiBase(): string {
+    const value = process.env.EXPO_PUBLIC_FISKALO_API_URL?.trim();
+    if (!value) throw new Error("Konfiguro EXPO_PUBLIC_FISKALO_API_URL me adresën reale të Fiskalo Cloudflare Worker.");
+    return value.endsWith("/") ? value.slice(0, -1) : value;
+  }
+
+  async function createAndroidVerificationNo(): Promise<string> {
+    return FiskaloAtkCrypto.createVerificationNo();
+  }
+
+  async function submitAndroidPaidInvoiceToATK(invoiceId: string): Promise<string> {
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth.user) throw new Error("Sesioni ka skaduar. Hyr përsëri.");
+    const { data: invoice, error: invoiceError } = await supabase.from("fiskalo_invoices")
+      .select("id,organization_id,status,total,invoice_number,payment_status,subtotal,vat_total")
+      .eq("id", invoiceId).eq("organization_id", organizationId).single();
+    if (invoiceError || !invoice) throw new Error("Fatura nuk u gjet për fiskalizim.");
+    if (invoice.status !== "issued" || invoice.payment_status !== "paid") return "Fatura nuk është plotësisht e paguar; nuk u dërgua në ATK.";
+
+    const { data: existing, error: existingError } = await supabase.from("fiskalo_atk_fiscal_documents")
+      .select("status,atk_transaction_id").eq("organization_id", organizationId).eq("source_invoice_id", invoiceId).maybeSingle();
+    if (existingError) throw new Error("Nuk u kontrollua statusi ekzistues ATK: " + existingError.message);
+    if (existing) return existing.status === "accepted"
+      ? "ATK e ka pranuar tashmë këtë faturë (ID " + String(existing.atk_transaction_id ?? "") + ")."
+      : "Kjo faturë ka tashmë një dërgesë ATK (" + existing.status + "). Nuk u krijua kupon i dytë.";
+
+    const pos = await getAndroidTestPosInstallation();
+    if (pos.status !== "active") throw new Error("Ky POS Android nuk është aktivizuar pas instalimit të certifikatës ATK TEST.");
+    const alias = organizationId + "." + atkBranchId + "." + atkPosId;
+    if (!await FiskaloAtkCrypto.hasKey(alias)) throw new Error("Mungon çelësi privat i këtij POS-i në Android Keystore.");
+    const certificate = await SecureStore.getItemAsync("fiskalo-atk-certificate:" + alias);
+    if (!certificate || !await FiskaloAtkCrypto.matchesCertificate(alias, certificate)) {
+      throw new Error("Certifikata ATK TEST mungon ose nuk përputhet me çelësin lokal të Android-it.");
+    }
+    const { data: verification, error: verificationError } = await supabase.from("fiskalo_atk_pos_verifications")
+      .select("nui,atk_branch_id,pos_id,application_id").eq("organization_id", organizationId)
+      .eq("pos_installation_id", pos.id).maybeSingle();
+    if (verificationError || !verification || verification.nui !== organizationNui ||
+        Number(verification.atk_branch_id) !== Number(pos.atk_branch_id) ||
+        Number(verification.pos_id) !== Number(pos.pos_id)) {
+      throw new Error("Ky POS Android nuk ka verifikim ATK TEST që përputhet me NUI, degën dhe POS ID.");
+    }
+
+    const [{ data: org, error: orgError }, { data: lines, error: linesError }, { data: payments, error: paymentsError }] = await Promise.all([
+      supabase.from("fiskalo_organizations").select("nui,municipality").eq("id", organizationId).single(),
+      supabase.from("fiskalo_invoice_items").select("product_id,description,quantity,unit_price,line_subtotal,line_vat,vat_rate").eq("invoice_id", invoiceId),
+      supabase.from("fiskalo_invoice_payments").select("amount,payment_method").eq("invoice_id", invoiceId).order("created_at"),
+    ]);
+    if (orgError || !org || String(org.nui) !== organizationNui) throw new Error("NUI i biznesit nuk përputhet me profilin fiskal.");
+    if (linesError || !lines?.length) throw new Error("Fatura nuk ka artikuj të lexueshëm.");
+    if (paymentsError || !payments?.length) throw new Error("Nuk u lexua evidenca e pagesave.");
+
+    const productIds = Array.from(new Set(lines.map((line) => line.product_id).filter((id): id is string => Boolean(id))));
+    const { data: mappedProducts, error: productsError } = productIds.length
+      ? await supabase.from("fiskalo_products").select("id,atk_unit_code,atk_tax_code,atk_item_category_code")
+        .eq("organization_id", organizationId).in("id", productIds)
+      : { data: [], error: null };
+    if (productsError) throw new Error("Kodet fiskale nuk u lexuan: " + productsError.message);
+    const productMap = new Map((mappedProducts ?? []).map((product) => [product.id, product]));
+    const itemRows = lines.map((line) => {
+      const product = line.product_id ? productMap.get(line.product_id) : null;
+      const unit = product?.atk_unit_code?.trim() ?? "";
+      const tax = product?.atk_tax_code?.trim() ?? "";
+      const itemType = product?.atk_item_category_code?.trim() ?? "";
+      const vat = Number(line.vat_rate);
+      const matches = vat === 8 ? tax === "D" : vat === 18 ? tax === "E" : vat === 0 ? ["A", "C"].includes(tax) : false;
+      if (!unit || !itemType || !matches) throw new Error("Artikulli " + line.description + " nuk ka kode ATK të plota ose kodi i TVSH-së nuk përputhet.");
+      return { line, unit, tax, itemType };
+    });
+
+    const paymentTypes: Record<string, number> = { cash: 1, card: 2, bank_transfer: 6 };
+    const paymentTotals = new Map<number, number>();
+    for (const payment of payments) {
+      const type = paymentTypes[payment.payment_method];
+      if (!type) throw new Error("Mënyra e pagesës " + payment.payment_method + " nuk ka kod ATK të konfiguruar.");
+      paymentTotals.set(type, (paymentTotals.get(type) ?? 0) + Math.round(Number(payment.amount) * 100));
+    }
+    const paymentCents = Array.from(paymentTotals.values()).reduce((sum, value) => sum + value, 0);
+    const totalCents = Math.round(Number(invoice.total) * 100);
+    if (paymentCents !== totalCents) throw new Error("Totali i pagesave nuk përputhet me totalin e faturës.");
+
+    const { data: couponId, error: couponError } = await supabase.rpc("fiskalo_next_atk_coupon_id", { target_organization: organizationId });
+    if (couponError || !couponId) throw new Error("Nuk u caktua numri unik i kuponit ATK: " + (couponError?.message ?? ""));
+    const grouped = new Map<string, { totalForTaxCents: number; totalTaxCents: number }>();
+    itemRows.forEach(({ line, tax }) => {
+      const current = grouped.get(tax) || { totalForTaxCents: 0, totalTaxCents: 0 };
+      current.totalForTaxCents += Math.round(Number(line.line_subtotal) * 100);
+      current.totalTaxCents += Math.round(Number(line.line_vat) * 100);
+      grouped.set(tax, current);
+    });
+    const payload = encodeAtkBase64(encodeAtkPosCoupon({
+      businessId: String(org.nui), couponId, branchId: pos.atk_branch_id,
+      location: pos.location || org.municipality || "", operatorId: auth.user.id,
+      posId: pos.pos_id, applicationId: Number(verification.application_id),
+      verificationNo: await createAndroidVerificationNo(), type: 1, unixTime: Math.floor(Date.now() / 1000),
+      items: itemRows.map(({ line, unit, tax, itemType }) => ({
+        name: line.description, unitPriceEuro: Number(line.unit_price), unit, quantity: Number(line.quantity),
+        lineTotalCents: Math.round((Number(line.line_subtotal) + Number(line.line_vat)) * 100), taxRate: tax, itemType,
+      })),
+      payments: Array.from(paymentTotals.entries()).map(([type, amountCents]) => ({ type, amountCents })),
+      totalCents,
+      taxGroups: Array.from(grouped.entries()).map(([taxRate, values]) => ({ taxRate, ...values })),
+      totalTaxCents: Math.round(Number(invoice.vat_total) * 100),
+      totalNoTaxCents: Math.round(Number(invoice.subtotal) * 100),
+    }));
+    const signature = await FiskaloAtkCrypto.signBase64(alias, payload);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) throw new Error("Sesioni ka skaduar. Hyr përsëri.");
+    const response = await fetch(androidAtkApiBase() + "/api/atk/test/coupon", {
+      method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+      body: JSON.stringify({ organizationId, nui: String(org.nui), invoiceId, posInstallationId: pos.id,
+        couponId: String(couponId), applicationId: Number(verification.application_id), totalCents, details: payload, signature }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.detail || result.error || "Dërgimi automatik në ATK TEST dështoi. Kontrollo statusin para çdo prove tjetër.");
+    return "ATK TEST e pranoi faturën. Transaction ID: " + String(result.transactionId ?? "");
+  }
+
   async function verifyAndroidAtkPos() {
     setError(""); setMessage("");
-    if (!atkFiscalizationNumber.trim() || !/^\\d{9}$/.test(organizationNui) ||
-        !/^\\d{1,20}$/.test(atkBranchId) || !/^\\d{1,20}$/.test(atkPosId) ||
-        !/^\\d+$/.test(atkApplicationId)) {
+    if (!atkFiscalizationNumber.trim() || !/^\d{9}$/.test(organizationNui) ||
+        !/^\d{1,20}$/.test(atkBranchId) || !/^\d{1,20}$/.test(atkPosId) ||
+        !/^\d+$/.test(atkApplicationId)) {
       setError("Plotëso numrin e fiskalizimit për TEST, Application ID, NUI, ID e njësisë dhe POS ID sipas emailit/udhëzimeve të ATK-së.");
       return;
     }
@@ -190,12 +503,13 @@ export default function App() {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
       if (!token) throw new Error("Sesioni ka skaduar. Hyr përsëri.");
-      const apiBase = process.env.EXPO_PUBLIC_FISKALO_API_URL || "https://fiskalo.shqiptare.workers.dev";
-      const response = await fetch(apiBase + "/api/atk/test/verify", {
+      const apiBase = androidAtkApiBase();
+      const posInstallationId = await getAndroidTestPosInstallation().then((pos) => pos.id);
+      const response = await fetch(apiBase.replace(/\/$/, "") + "/api/atk/test/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
         body: JSON.stringify({
-          organizationId, nui: organizationNui, fiscalizationNumber: atkFiscalizationNumber.trim(),
+          organizationId, posInstallationId, nui: organizationNui, fiscalizationNumber: atkFiscalizationNumber.trim(),
           branchId: atkBranchId, posId: atkPosId, applicationId: atkApplicationId,
         }),
       });
@@ -224,12 +538,13 @@ export default function App() {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
       if (!token) throw new Error("Sesioni ka skaduar. Hyr përsëri.");
-      const apiBase = process.env.EXPO_PUBLIC_FISKALO_API_URL || "https://fiskalo.shqiptare.workers.dev";
-      const response = await fetch(apiBase + "/api/atk/test/sign-csr", {
+      const apiBase = androidAtkApiBase();
+      const posInstallationId = await getAndroidTestPosInstallation().then((pos) => pos.id);
+      const response = await fetch(apiBase.replace(/\/$/, "") + "/api/atk/test/sign-csr", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
         body: JSON.stringify({
-          organizationId, nui: organizationNui, businessName: verification.businessName,
+          organizationId, posInstallationId, nui: organizationNui, businessName: verification.businessName,
           verificationCode: verification.verificationCode, branchId: atkBranchId,
           posId: atkPosId, applicationId: atkApplicationId, csrPem: csr.csrPem,
         }),
@@ -239,6 +554,10 @@ export default function App() {
       const matches = await FiskaloAtkCrypto.matchesCertificate(alias, result.signedCertificate);
       if (!matches) throw new Error("Certifikata e ATK-së nuk përputhet me çelësin lokal të këtij Android-i. Nuk u ruajt.");
       await SecureStore.setItemAsync("fiskalo-atk-certificate:" + alias, result.signedCertificate as string);
+      const posInstallation = await getAndroidTestPosInstallation();
+      const { error: activationError } = await supabase.from("fiskalo_atk_pos_installations")
+        .update({ status: "active" }).eq("organization_id", organizationId).eq("id", posInstallation.id);
+      if (activationError) throw new Error("Certifikata u mor, por instalimi nuk u aktivizua në llogarinë e biznesit: " + activationError.message);
       setAtkCertificateInstalled(true);
       setMessage("Certifikata TEST u mor nga ATK dhe u verifikua se përputhet me çelësin Android Keystore. Nuk është certifikatë prodhimi.");
     } catch (e) {
@@ -256,7 +575,9 @@ export default function App() {
     setSignedIn(false); setOrganizations([]); setOrganizationId(""); setOrganizationNui(""); setCart([]);
   }
 
-  const filtered = products.filter((p) => p.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()) || (p.sku ?? "").toLocaleLowerCase().includes(search.toLocaleLowerCase()));
+  const categories = ["Të gjitha", ...Array.from(new Set(products.map((p) => (p.pos_category || "Tjera").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "sq"))];
+  const selectedCategory = categories.includes(activeCategory) ? activeCategory : "Të gjitha";
+  const filtered = products.filter((p) => (selectedCategory === "Të gjitha" || (p.pos_category || "Tjera") === selectedCategory) && (p.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()) || (p.sku ?? "").toLocaleLowerCase().includes(search.toLocaleLowerCase())));
 
   return <SafeAreaView style={{ flex:  1, backgroundColor: "#f4f7f6" }}>
     <ExpoStatusBar style="dark" />
@@ -283,17 +604,17 @@ export default function App() {
       <Action label="Dil" secondary onPress={() => void signOut()} />
     </ScrollView> : <View style={{ flex: 1 }}>
       <View style={{ paddingHorizontal: 12, paddingTop: 10 }}>
-        <TouchableOpacity onPress={() => setShowAtkSetup((value) => !value)} style={{ padding: 12, marginBottom: 8, backgroundColor: "white", borderWidth: 1, borderColor: line, borderRadius: 9 }}>
+        {canManageATK && <TouchableOpacity onPress={() => setShowAtkSetup((value) => !value)} style={{ padding: 12, marginBottom: 8, backgroundColor: "white", borderWidth: 1, borderColor: line, borderRadius: 9 }}>
           <Text style={{ color: ink, fontWeight: "800" }}>ATK / Siguria e POS-it · {showAtkSetup ? "Mbyll" : "Hap konfigurimin"}</Text>
           <Text style={{ color: "#687773", fontSize: 11, marginTop: 3 }}>Krijo çelësin dhe CSR në këtë pajisje Android. Vetëm për testim.</Text>
-        </TouchableOpacity>
-        {showAtkSetup && <View style={{ padding: 12, marginBottom: 9, backgroundColor: "white", borderWidth: 1, borderColor: line, borderRadius: 9, gap: 7 }}>
+        </TouchableOpacity>}
+        {canManageATK && showAtkSetup && <View style={{ padding: 12, marginBottom: 9, backgroundColor: "white", borderWidth: 1, borderColor: line, borderRadius: 9, gap: 7 }}>
           <Text style={{ color: ink, fontWeight: "800" }}>Identiteti i tatimpaguesit</Text>
           <Text style={{ color: "#687773", fontSize: 12 }}>Biznesi: {organizationName} · NUI: {organizationNui || "Nuk është regjistruar"}</Text>
           <TextInput placeholder="ID e njësisë / degës (e konfirmuar nga ATK)" keyboardType="number-pad" value={atkBranchId} onChangeText={setAtkBranchId} style={inputStyle} />
           <TextInput placeholder="Numri i POS-it (i konfirmuar)" keyboardType="number-pad" value={atkPosId} onChangeText={setAtkPosId} style={inputStyle} />
           <TextInput placeholder="Numri i fiskalizimit për TEST (nga emaili ATK)" value={atkFiscalizationNumber} onChangeText={setAtkFiscalizationNumber} style={inputStyle} />
-          <TextInput placeholder="Application ID (nga emaili ATK)" keyboardType="number-pad" value={atkApplicationId} onChangeText={setAtkApplicationId} style={inputStyle} />
+          <TextInput placeholder="Application ID (menaxhohet nga Fiskalo)" keyboardType="number-pad" value={atkApplicationId} editable={false} style={{ ...inputStyle, backgroundColor: "#f1f5f2" }} />
           <Action label={atkBusy ? "Duke krijuar CSR..." : "Gjenero çelës dhe CSR në Android"} disabled={atkBusy} onPress={() => void createAndroidAtkCsr()} />
           <Action label={atkBusy ? "Duke verifikuar..." : "Verifiko POS-in në ATK TEST"} secondary disabled={atkBusy} onPress={() => void verifyAndroidAtkPos()} />
           <Action label={atkBusy ? "Duke kërkuar certifikatën..." : "Kërko certifikatën TEST"} secondary disabled={atkBusy || !atkVerification} onPress={() => void requestAndroidAtkCertificate()} />
@@ -304,9 +625,25 @@ export default function App() {
             <Text selectable style={{ color: "#52635e", fontSize: 9, maxHeight: 80 }}>{atkCsr}</Text>
             <Action label="Ndaje CSR-në" secondary onPress={() => void shareAndroidAtkCsr()} />
           </>}
-          <Text style={{ color: "#8a5a18", fontSize: 11 }}>Mos e dërgo çelësin privat askund. Ky modul mbështet onboarding TEST dhe kontrollon që certifikata përputhet me çelësin lokal. Dërgimi i kuponëve fiskalë nga Android ende nuk është implementuar. Konfirmo me ATK pranueshmërinë e pajisjes dhe modelit të ruajtjes para përdorimit zyrtar.</Text>
+          <Text style={{ color: "#8a5a18", fontSize: 11 }}>Mos e dërgo çelësin privat askund. Android-i dërgon automatikisht kuponin TEST pas pagesës së plotë kur POS-i dhe certifikata janë gati. Ky version nuk përbën certifikim zyrtar për prodhim; konfirmo me ATK pranueshmërinë e pajisjes para përdorimit zyrtar.</Text>
         </View>}
-        <TextInput placeholder="Kërko produkt / SKU" value={search} onChangeText={setSearch} style={inputStyle} />
+        <PrinterPanel />
+        {paymentMethod === "cash" && <View style={{ padding: 11, marginBottom: 8, backgroundColor: "white", borderWidth: 1, borderColor: line, borderRadius: 9, gap: 7 }}>
+          {activeShift ? <>
+            <Text style={{ color: "#145b3a", fontWeight: "800" }}>Ndërrimi i arkës është i hapur</Text>
+            <Text style={{ color: "#687773", fontSize: 11 }}>Hapur: {new Date(activeShift.opened_at).toLocaleString("sq-XK")} · Fillimi: {money(Number(activeShift.opening_cash))}</Text>
+            <TextInput placeholder="Paratë e numëruara në fund (€)" keyboardType="decimal-pad" value={countedCash} onChangeText={setCountedCash} style={inputStyle} />
+            <Action label={busy ? "Duke mbyllur..." : "Mbyll ndërrimin"} secondary disabled={busy || !countedCash.trim()} onPress={() => void closeCashierShift()} />
+          </> : <>
+            <Text style={{ color: ink, fontWeight: "800" }}>Hap ndërrimin para pagesave cash</Text>
+            <TextInput placeholder="Paratë fillestare në arkë (€)" keyboardType="decimal-pad" value={openingCash} onChangeText={setOpeningCash} style={inputStyle} />
+            <Action label={busy ? "Duke hapur..." : "Hap ndërrimin"} disabled={busy} onPress={() => void openCashierShift()} />
+          </>}
+        </View>}
+        <TextInput placeholder="Kërko ose skano barkod / SKU" value={search} onChangeText={setSearch} onSubmitEditing={() => { const code = search.trim().toLocaleLowerCase(); const match = products.find((p) => p.is_active && (p.sku ?? "").trim().toLocaleLowerCase() === code); if (match) { add(match); setSearch(""); } else if (code) setError("Nuk u gjet produkt me këtë barkod ose SKU."); }} returnKeyType="search" style={inputStyle} />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8, marginBottom: 4, maxHeight: 42 }} contentContainerStyle={{ gap: 7 }}>
+          {categories.map((category) => <TouchableOpacity key={category} onPress={() => setActiveCategory(category)} accessibilityRole="button" accessibilityState={{ selected: selectedCategory === category }} style={{ paddingHorizontal: 13, paddingVertical: 9, borderRadius: 20, backgroundColor: selectedCategory === category ? brand : "#eaf0ed" }}><Text style={{ color: selectedCategory === category ? "white" : ink, fontSize: 12, fontWeight: "700" }}>{category}</Text></TouchableOpacity>)}
+        </ScrollView>
       </View>
       <View style={{ flex: 1 }}>
         <FlatList
@@ -316,7 +653,7 @@ export default function App() {
           contentContainerStyle={{ padding: 8 }}
           renderItem={({ item }) => <TouchableOpacity onPress={() => add(item)} style={{ flex: 1, margin: 5, minHeight: 94, padding: 12, backgroundColor: "white", borderRadius: 10, borderWidth: 1, borderColor: line, justifyContent: "space-between" }}>
             <Text style={{ color: ink, fontWeight: "700" }}>{item.name}</Text>
-            <Text style={{ color: brand, fontWeight: "900", fontSize: 16 }}>{money(Number(item.unit_price))}</Text>
+            <Text style={{ color: brand, fontWeight: "900", fontSize: 16 }}>{money(Number(item.unit_price) * (1 + Number(item.vat_rate) / 100))}</Text>
             <Text style={{ color: "#687773", fontSize: 11 }}>{item.track_stock ? "Stok: " + item.stock_quantity : item.item_type === "service" ? "Shërbim" : "Pa stok"}</Text>
           </TouchableOpacity>}
           ListEmptyComponent={<Text style={{ textAlign: "center", color: "#687773", margin: 24 }}>Nuk ka produkte aktive.</Text>}
@@ -351,8 +688,8 @@ export default function App() {
         {paymentMethod !== "credit" && <TouchableOpacity onPress={() => setPaymentConfirmed((value) => !value)} style={{ flexDirection: "row", alignItems: "center", paddingVertical: 8 }}>
           <Text style={{ color: ink }}>{paymentConfirmed ? "☑" : "□"} Konfirmoj se pagesa është pranuar</Text>
         </TouchableOpacity>}
-        <Action label={busy ? "Duke regjistruar..." : paymentMethod === "credit" ? "Lësho faturën" : "Përfundo shitjen"} disabled={busy || !cart.length} onPress={() => void checkout()} />
-        <Action label="Ndërro biznesin" secondary onPress={() => { setOrganizationId(""); setCart([]); }} />
+        <Action label={busy ? "Duke regjistruar..." : paymentMethod === "credit" ? "Lësho faturën" : "Përfundo shitjen"} disabled={busy || !cart.length || (paymentMethod === "cash" && !activeShift)} onPress={() => void checkout()} />
+        <Action label="Ndërro biznesin" secondary onPress={() => { setOrganizationId(""); setActiveShift(null); setCart([]); }} />
         <Action label="Dil nga llogaria" secondary onPress={() => void signOut()} />
       </View>
     </View>}

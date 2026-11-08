@@ -12,10 +12,12 @@
 - Fiskalo issued-invoice mapping core. It reconciles stored invoice line/header totals and requires explicit ATK unit, tax-category, item-type and payment mappings. It never infers an ATK tax code from a VAT percentage.
 - Protobuf serialization, Base64 payloads, SHA-256 and ECDSA signing.
 - Fixed-host ATK test client for taxpayer/POS verification, CSR signing and test coupon submission.
-- Local host with loopback-only binding, exact origin allowlist, one-time pairing code, bearer session, and authenticated test routes.
+- Local host with loopback-only binding, exact origin allowlist, one-time pairing code, bearer session, and authenticated operational routes.
+- ESC/POS receipt builder for 58 mm and 80 mm paper, QR command support, Windows USB/Bluetooth queues, and private LAN printers on TCP 9100.
+- Printer enumeration, default-printer identification and non-fiscal test-print endpoint.
 - Test certificate is stored locally only after its public key is confirmed to match the protected private key.
 - Signed coupon is persisted to the encrypted queue before submission. Accepted/rejected outcomes are recorded. Ambiguous outcomes are locked for operator reconciliation.
-- Operator reconciliation endpoint supports accepted, rejected and operator-confirmed-not-found decisions. It never retries automatically.
+- Background worker retries only safely queued/not-yet-submitted signed records after connectivity returns; ambiguous submissions remain locked for operator reconciliation. Operator-confirmed-not-found requeues the exact same signed payload and coupon ID.
 - Automated tests cover coupon mapping and queue reconciliation; CI builds on Windows and Ubuntu and publishes a Windows x64 artifact.
 
 ## Security boundaries
@@ -24,6 +26,7 @@
 - Windows key and queue protection uses DPAPI CurrentUser and fails closed off Windows.
 - The agent listens only on 127.0.0.1:17843, rejects unexpected Host values, checks exact browser origins and requires a paired bearer session for operational routes.
 - The pairing code is printed to the local console and must be kept private. The current session is memory-only; restarting the agent invalidates it.
+- The 48-hour recovery deadline is surfaced as an overdue alert; it does not delete or suppress the original signed fiscal record.
 - The queue's not_found_confirmed resolution is an operator assertion after checking ATK records. It is not an ATK query. Never use it when ATK status is unavailable or uncertain.
 - ATK calls are restricted to the official test hostname. No production endpoint or production enable switch exists.
 
@@ -41,7 +44,7 @@ No test taxpayer or ATK test application is assumed. Before sending calls, obtai
 - No ATK test calls have been performed as part of this implementation batch.
 - Invoice mapping is a core contract; it is not yet automatically wired to the web checkout or Android app.
 - Cancel/Return mapping supports original-coupon references, but the complete operator-facing cancellation/return workflow and ATK test evidence are outstanding.
-- The Windows host is a foreground application, not an installed Windows service. No auto-start, secure persistent browser pairing, printer driver, cash drawer or hardware terminal integration exists.
+- The Windows host is a foreground application, not an installed Windows service. No auto-start, secure persistent browser pairing, cash drawer or hardware terminal integration exists.
 - Android ATK signing is not implemented. Android requires an independent Android Keystore-backed implementation and real-device tests.
 
 ## Build and test

@@ -34,15 +34,29 @@ public sealed class FiscalQueueStoreTests
     }
 
     [Fact]
-    public async Task RecoveryDeadline_ExpiresQueuedDocuments()
+    public async Task RecoveryDeadline_DoesNotDiscardOrBlockQueuedFiscalDocuments()
     {
         using var fixture = new QueueFixture();
         var now = DateTimeOffset.Parse("2026-11-02T12:00:00Z");
         await fixture.Store.EnqueueAsync("sale-102", "Sale", "cGF5bG9hZA==", "c2ln", now);
 
-        Assert.Empty(await fixture.Store.GetDueAsync(now.AddHours(48)));
+        var due = await fixture.Store.GetDueAsync(now.AddHours(49));
         var saved = Assert.Single(await fixture.Store.GetAllAsync());
-        Assert.Equal(FiscalQueueStatus.Expired, saved.Status);
+        Assert.Single(due);
+        Assert.Equal(FiscalQueueStatus.Queued, saved.Status);
+        Assert.Equal(now.AddHours(48), saved.RecoveryDeadlineUtc);
+    }
+
+    [Fact]
+    public async Task FailedRetryAfterRecoveryDeadline_RemainsQueued()
+    {
+        using var fixture = new QueueFixture();
+        var now = DateTimeOffset.Parse("2026-11-02T12:00:00Z");
+        await fixture.Store.EnqueueAsync("sale-102b", "Sale", "cGF5bG9hZA==", "c2ln", now);
+
+        var failed = await fixture.Store.RecordFailureAsync("sale-102b", "still offline", now.AddHours(49));
+        Assert.Equal(FiscalQueueStatus.Queued, failed.Status);
+        Assert.Equal(now.AddHours(49).AddSeconds(15), failed.NextAttemptAtUtc);
     }
 
     [Fact]

@@ -63,14 +63,15 @@ public sealed class FiscalQueueReconciliationTests
     }
 
     [Fact]
-    public async Task ExpiredReconciliationCannotBeRequeued()
+    public async Task ConfirmedNotFoundCanBeRequeuedAfterRecoveryDeadline()
     {
         var (store, path, key) = await CreateInFlightAsync();
         try
         {
             var item = (await store.GetAllAsync()).Single();
-            var expired = await store.ResolveNotFoundAndRequeueAsync(key, true, item.RecoveryDeadlineUtc.AddSeconds(1));
-            Assert.Equal(FiscalQueueStatus.Expired, expired.Status);
+            var requeued = await store.ResolveNotFoundAndRequeueAsync(key, true, item.RecoveryDeadlineUtc.AddSeconds(1));
+            Assert.Equal(FiscalQueueStatus.Queued, requeued.Status);
+            Assert.Single(await store.GetDueAsync(item.RecoveryDeadlineUtc.AddSeconds(1)));
         }
         finally { if (File.Exists(path)) File.Delete(path); }
     }

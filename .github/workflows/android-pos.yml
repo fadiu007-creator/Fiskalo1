@@ -2,12 +2,12 @@ name: Android POS CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/web-pos-checkout]
     paths:
       - "mobile-pos/**"
       - ".github/workflows/android-pos.yml"
   pull_request:
-    branches: [main]
+    branches: [main, feature/web-pos-checkout]
     paths:
       - "mobile-pos/**"
       - ".github/workflows/android-pos.yml"
@@ -53,12 +53,26 @@ jobs:
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - name: Generate native Android project
         run: npx expo prebuild --platform android --no-install
-      - name: Compile native Kotlin modules and assemble debug APK
-        run: cd android && chmod +x gradlew && ./gradlew :app:assembleDebug --no-daemon
-      - name: Upload installable debug APK
+      - name: Build standalone internal-test APK with embedded JavaScript
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          EXPO_PUBLIC_FISKALO_API_URL: https://fiskalo.shqiptare.workers.dev
+        run: |
+          test -n "$EXPO_PUBLIC_SUPABASE_URL" || (echo "Missing GitHub secret NEXT_PUBLIC_SUPABASE_URL"; exit 1)
+          test -n "$EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY" || (echo "Missing GitHub secret NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"; exit 1)
+          cd android
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease --no-daemon
+      - name: Verify embedded React Native bundle
+        run: |
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          unzip -l "$APK" | grep -E 'assets/index.android.bundle|assets/index.android.bundle.hbc'
+      - name: Upload standalone internal-test APK
         uses: actions/upload-artifact@v4
         with:
-          name: fiskalo-android-pos-debug-apk
-          path: mobile-pos/android/app/build/outputs/apk/debug/app-debug.apk
+          name: fiskalo-android-pos-internal-test-apk
+          path: mobile-pos/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14

@@ -2,13 +2,22 @@
 
 This is an Android-native POS client scaffold using Expo/React Native and the existing Fiskalo Supabase schema.
 
+## Android thermal printer support
+
+- Pair a Bluetooth Classic ESC/POS printer in Android system settings.
+- Open the POS screen, use **Printer termik · Android**, grant nearby-device permission, refresh paired devices and select a Bluetooth printer.
+- For USB OTG, connect the printer, find USB devices, grant Android's system permission, refresh the list and run the test.
+- Run the test print to verify text and the ESC/POS QR command. This is a printer connectivity test only, not an ATK fiscal receipt.
+- Select 58 mm or 80 mm and optionally enable automatic printing after checkout. Auto-print is guarded: it only prints when an ATK TEST fiscal document has an `accepted` status and a saved QR payload; the printed receipt is explicitly labelled ATK TEST.
+- Supported Android transports: Bluetooth Classic SPP, USB OTG bulk-output devices and private LAN printers on TCP 9100. USB permission is requested through Android's system dialog. The checkout flow can automatically print only after the matching ATK TEST fiscal document is accepted and its QR payload is saved. Printer transport, paper width, character encoding and QR readability still require model-by-model physical-device validation.
+
 ## Configure
 
 1. Copy `.env.example` to `.env`.
 2. Set the Fiskalo Supabase project URL and publishable key. Never put a service-role key in the app.
 3. From this folder run `npm install`.
-4. Run `npx expo start` and open the project on an Android device with Expo Go.
-5. Expo Go supports ordinary POS screens only. The local ATK crypto module requires a custom native build; create an installable internal-test APK with `npx eas-cli build --platform android --profile preview`.
+4. For JavaScript development, connect the Android phone by USB, enable USB debugging, verify it with `adb devices`, then run `adb reverse tcp:8081 tcp:8081` and `npx expo start --localhost`. A debug native build requires Metro to be running.
+5. Do not use Expo Go for the complete POS: the local ATK crypto module requires a custom native build. Install the GitHub Actions artifact `fiskalo-android-pos-internal-test-apk` for standalone device testing; it embeds the JavaScript bundle and should launch without Metro.
 
 ## Implemented
 
@@ -22,19 +31,22 @@ This is an Android-native POS client scaffold using Expo/React Native and the ex
 - SecureStore-backed Supabase auth persistence.
 - Experimental native ATK crypto module using Android Keystore P-256 key generation, local PKCS#10 CSR creation and ECDSA/SHA-256 signing of ATK Base64 payloads.
 - ATK / Siguria e POS-it panel to generate and share a CSR on the Android device. The private key remains in Android Keystore; only the public CSR is shared.
+- ATK TEST POS verification and certificate-request calls, tied to the exact saved POS installation; the returned certificate is checked against the local Android Keystore key.
+- Automatic ATK TEST coupon construction, native signing and submission after a fully paid Android POS checkout. The same one-sale-per-invoice ledger and server-side ATK checks are used as the Web POS.
 
 ## Important limitations
 
 - This is a standard business POS client, not an ATK-certified fiscal POS.
 - The Android Keystore module is source-implemented but not yet built into an APK or verified on a physical device. CSR generation and ECDSA signing are not yet verified against ATK test responses.
-- Android certificate installation/renewal/revocation, ATK verification and certificate API calls, Protobuf coupon mapping/submission, offline queue and manual reconciliation are not yet integrated into checkout.
-- No offline invoice issuance, card terminal integration, barcode scanner integration or printer driver is included.
+- Android certificate lifecycle renewal/revocation, durable offline queue and manual reconciliation are not yet integrated. Ambiguous ATK responses must be checked before any retry.
+- No offline invoice issuance, card terminal integration or barcode scanner integration is included. Android USB support is limited to USB host devices exposing a bulk OUT endpoint; some vendor-specific printer protocols may need model-specific handling.
 - Card payments are recorded only after the cashier confirms that an external terminal/payment provider has accepted the payment. The app does not process card details.
-- The Android project has not yet been built or tested on a physical Android device. EAS custom builds are required for the native module; Expo Go cannot load it.
+- Android ATK onboarding and automatic coupon submission are source-implemented but have not yet been verified on a physical device or with a newly submitted Android coupon. Automatic receipt printing is wired into checkout but likewise requires a physical printer test. EAS custom builds are required for the native module; Expo Go cannot load it.
+- Set `EXPO_PUBLIC_FISKALO_API_URL` to the actual deployed Fiskalo Cloudflare Worker URL. The app deliberately has no guessed fallback URL.
 
 Do not use the app to issue official fiscal coupons before ATK certification.
 
 
-## CI debug APK artifact
+## CI internal-test APK artifact
 
-The Android POS workflow now assembles a debug APK after the native Kotlin compilation step and uploads it as the GitHub Actions artifact `fiskalo-android-pos-debug-apk` (14-day retention). This is an installable internal test build, not a Play Store release or a production-signed APK. Download it from the successful **Android POS CI** run → Artifacts. Install only on a test device and do not use it for real fiscalization.
+The Android POS workflow assembles an installable APK with the JavaScript bundle embedded and uploads it as `fiskalo-android-pos-internal-test-apk` (14-day retention). This is an internal test build, not a Play Store release or a production-signed APK. Download it from a successful **Android POS CI** run → Artifacts. Install only on a test device and do not use it for real fiscalization. The build requires the GitHub Actions secrets `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; the app also receives the deployed Cloudflare Worker URL as its Fiskalo API base.

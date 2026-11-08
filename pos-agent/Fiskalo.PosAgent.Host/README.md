@@ -34,6 +34,9 @@ The installer creates a per-user application directory and desktop shortcut. It 
 | POST | /api/v1/atk/test/verify | Verify registered test taxpayer/POS with ATK |
 | POST | /api/v1/atk/test/sign-csr | Request ATK test certificate and check public-key match |
 | POST | /api/v1/atk/test/coupon | Sign, queue and submit an ATK test coupon |
+| GET | /api/v1/printers | Enumerate installed Windows printers |
+| POST | /api/v1/printers/test | Print a non-fiscal ESC/POS test receipt (58/80 mm) |
+| POST | /api/v1/printers/print | Send ESC/POS bytes to a Windows queue or private LAN printer on TCP 9100 |
 | GET | /api/v1/queue | Read queue metadata; never returns signed payloads |
 | POST | /api/v1/queue/reconcile | Operator-controlled resolution of uncertain submissions |
 
@@ -67,12 +70,14 @@ The signed Protobuf payload and signature are persisted in the DPAPI-protected l
 - Timeout, network error, 5xx or interrupted process: mark NeedsReconciliation.
 - Restart during submission: recover as NeedsReconciliation.
 
+The queue endpoint exposes `recoveryDeadlineExceeded` and `overdueCount`. The 48-hour deadline is monitored; an overdue record remains preserved and queued records continue to be delivered. A deadline overrun must be escalated to the operator/provider and documented. It never authorizes deleting a record or creating a replacement.
+
 For an uncertain result, check ATK test records manually before choosing a resolution:
 - accepted: requires the ATK transaction ID.
 - rejected: requires an operator review note.
-- not_found_confirmed: requires explicit confirmation that no matching ATK record exists. It re-queues the same persisted signed document for a later operator-initiated submission. It does not submit automatically.
+- not_found_confirmed: requires explicit confirmation that no matching ATK record exists. It re-queues the same persisted signed document; the background worker may then submit that same document. It never creates a new coupon ID.
 
-Do not choose not_found_confirmed when ATK is unavailable, when the search is incomplete, or merely because the original request timed out. Expired recovery windows cannot be reopened.
+Do not choose not_found_confirmed when ATK is unavailable, when the search is incomplete, or merely because the original request timed out. A missed recovery deadline is an operational incident; the original fiscal record remains preserved. Do not create a replacement solely because the deadline elapsed.
 
 ## PowerShell scripts
 
@@ -85,7 +90,7 @@ Do not choose not_found_confirmed when ATK is unavailable, when the search is in
 - Not ATK-certified; production fiscalization is disabled.
 - Foreground process only; no Windows service, auto-start, persistent pairing session or updater.
 - Windows x64 only for DPAPI-backed signing and queue protection.
-- No printer/cash drawer/card terminal integration.
+- Thermal receipt printing is supported through installed Windows printer queues (USB or Bluetooth devices installed in Windows) and private LAN printers using raw TCP port 9100. Android app printing is a separate Bluetooth Classic SPP path. Android USB direct printing, cash drawer and card terminal integration are not included.
 - Browser checkout and Android app issue internal Fiskalo invoices; invoice-to-ATK mapping is a core milestone and is not yet automatically wired to checkout.
 - Android does not yet have an ATK signing agent or Android Keystore implementation.
 - No test taxpayer, ATK test certificate or coupon submission has been supplied/performed in this development batch.
