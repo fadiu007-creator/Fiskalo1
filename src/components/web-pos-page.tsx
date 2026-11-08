@@ -617,6 +617,70 @@ export function WebPosPage({ basicMode = false }: { basicMode?: boolean } = {}) 
         .pos-product-card,.pos-category,.fiskalo-pos input,.fiskalo-pos select { transition:none !important; }
         .pos-product-card:hover { transform:none; }
       }
+
+      /* Full-screen quick-service POS: split menu + persistent order rail */
+      .fiskalo-pos.hybrid-pos {
+        --pos-yellow:#ffc928; --pos-red:#c91525; --pos-ink:#171717;
+        max-width:none !important; min-height:100vh; padding:18px clamp(14px,2.5vw,36px) 28px !important;
+        background:#fff !important; color:var(--pos-ink) !important;
+      }
+      .fiskalo-pos .pos-layout {
+        display:grid !important; grid-template-columns:minmax(0,1fr) minmax(320px,370px) !important;
+        gap:clamp(18px,2.5vw,36px) !important; align-items:stretch !important;
+        min-height:calc(100vh - 170px);
+      }
+      .fiskalo-pos .pos-layout > .pos-catalog-panel {
+        border:0 !important; border-radius:0 !important; box-shadow:none !important;
+        padding:clamp(10px,2vw,28px) !important; background:#fff !important; min-width:0;
+      }
+      .fiskalo-pos .pos-catalog-heading { display:flex; justify-content:space-between; align-items:end; gap:16px; margin:8px 0 24px; }
+      .fiskalo-pos .pos-catalog-heading h2 { font-size:clamp(30px,4vw,48px) !important; line-height:1.05; letter-spacing:-1.8px; color:#111; margin:12px 0 8px; }
+      .fiskalo-pos .pos-catalog-heading p { color:#777; font-size:15px; margin:0; }
+      .fiskalo-pos .pos-kicker { color:#9a7614 !important; font-size:11px; letter-spacing:1.7px; font-weight:900; }
+      .fiskalo-pos .pos-search-input { max-width:560px; min-height:50px; border-radius:999px !important; padding:0 20px !important; background:#f6f6f6 !important; border:1px solid #ededed !important; }
+      .fiskalo-pos .pos-categories { gap:10px; padding:12px 0 20px; }
+      .fiskalo-pos .pos-category { min-height:44px; border:0 !important; border-radius:14px !important; background:#f4f4f4 !important; color:#252525 !important; padding:11px 18px !important; font-weight:800; }
+      .fiskalo-pos .pos-category.active { background:var(--pos-red) !important; color:#fff !important; box-shadow:none !important; }
+      .fiskalo-pos .pos-product-grid { grid-template-columns:repeat(auto-fill,minmax(165px,1fr)) !important; gap:16px !important; }
+      .fiskalo-pos .pos-product-card { border:0 !important; border-radius:18px !important; padding:0 0 15px !important; background:#f7f7f7 !important; text-align:center !important; align-items:center; gap:7px !important; }
+      .fiskalo-pos .pos-product-card:hover { background:#fff8e5 !important; border:0 !important; box-shadow:0 8px 24px #00000012 !important; transform:translateY(-3px); }
+      .fiskalo-pos .pos-product-image { aspect-ratio:1.55/1; width:100%; background:transparent !important; color:#d6a900 !important; position:relative; }
+      .fiskalo-pos .pos-product-image img { width:100%; height:100%; object-fit:contain; padding:12px; }
+      .fiskalo-pos .pos-product-add { display:none; }
+      .fiskalo-pos .pos-product-category-code { display:none; }
+      .fiskalo-pos .pos-product-name { font-size:15px !important; min-height:unset !important; padding:0 10px !important; color:#151515; font-weight:850 !important; }
+      .fiskalo-pos .pos-product-price { color:#b38a00 !important; font-size:18px !important; padding:0 !important; }
+      .fiskalo-pos .pos-product-stock { padding:0 8px !important; }
+      .fiskalo-pos .pos-layout > .pos-cart-panel {
+        position:sticky !important; top:12px !important; align-self:stretch; min-height:calc(100vh - 190px);
+        border:0 !important; border-left:1px solid #ededed !important; border-radius:0 !important;
+        box-shadow:none !important; padding:24px 20px !important; background:#fbfbfb !important;
+        display:flex; flex-direction:column;
+      }
+      .fiskalo-pos .pos-cart-heading { padding-bottom:20px; border-bottom:1px solid #e9e9e9; }
+      .fiskalo-pos .pos-cart-heading h2 { font-size:25px !important; color:#111; margin:8px 0 0; }
+      .fiskalo-pos .pos-cart-count { background:#fff0bd; color:#5e4700; border-radius:999px; padding:6px 10px; font-weight:800; }
+      .fiskalo-pos .pos-layout aside > div:nth-child(2) { flex:1; max-height:none !important; overflow:auto; padding:14px 0; }
+      .fiskalo-pos .pos-quantity-stepper { justify-content:center; }
+      .fiskalo-pos .pos-quantity-stepper button { border:1px solid #e5e5e5 !important; border-radius:999px !important; background:#fff !important; color:#222 !important; min-width:38px; min-height:36px; }
+      .fiskalo-pos .pos-quantity-stepper button:nth-of-type(2) { background:var(--pos-yellow) !important; border-color:var(--pos-yellow) !important; }
+      .fiskalo-pos .pos-cart-summary { margin-top:auto !important; padding-top:18px !important; }
+      .fiskalo-pos .pos-cart-summary > div:nth-last-of-type(1) { font-size:24px !important; padding:12px 0; }
+      .fiskalo-pos .pos-cart-summary label { margin-top:7px; }
+      .fiskalo-pos .pos-cart-summary input,.fiskalo-pos .pos-cart-summary select { min-height:44px; border-radius:12px !important; }
+      .fiskalo-pos .pos-checkout-button { min-height:72px; border-radius:22px !important; background:var(--pos-yellow) !important; color:#151515 !important; font-size:20px !important; font-weight:900 !important; box-shadow:none !important; }
+      .fiskalo-pos .pos-mode-tabs { border:0 !important; }
+      .fiskalo-pos .pos-mode-tabs button { border-radius:999px !important; }
+      @media(max-width:760px) {
+        .fiskalo-pos.hybrid-pos { padding:10px 10px 20px !important; }
+        .fiskalo-pos .pos-layout { grid-template-columns:minmax(0,1fr) !important; min-height:0; }
+        .fiskalo-pos .pos-layout > .pos-cart-panel { position:relative !important; top:auto !important; min-height:0; border:1px solid #eee !important; border-radius:20px !important; padding:18px !important; }
+        .fiskalo-pos .pos-catalog-heading { margin:8px 0 16px; }
+        .fiskalo-pos .pos-catalog-heading h2 { font-size:32px !important; }
+        .fiskalo-pos .pos-product-grid { grid-template-columns:repeat(2,minmax(0,1fr)) !important; gap:10px !important; }
+        .fiskalo-pos .pos-product-card { border-radius:15px !important; }
+        .fiskalo-pos .pos-product-image { aspect-ratio:1.3/1; }
+      }
     `}</style>
   </main>;
 }
