@@ -25,6 +25,7 @@ public sealed class FiscalReceiptIdentityTests
     [Fact]
     public void PosAndCitizenCoupons_UseTheSamePerCouponNuiKf()
     {
+        var nuiKf = FiscalReceiptIdentity.CreateNuiKf();
         var input = new PosCouponInput(
             BusinessId: 812345678,
             CouponId: 1,
@@ -33,7 +34,7 @@ public sealed class FiscalReceiptIdentityTests
             OperatorId: "OP-1",
             PosId: 1,
             ApplicationId: 1,
-            VerificationNo: "",
+            VerificationNo: nuiKf,
             Type: (CouponType)1,
             UnixTime: 1760000000,
             Items: new[] { new PosCouponItemInput("Water", 1m, "PCE", 1m, 118, "E", "A") },
@@ -44,8 +45,7 @@ public sealed class FiscalReceiptIdentityTests
             TotalNoTaxCents: 100,
             TotalDiscountCents: 0);
 
-        var nuiKf = FiscalReceiptIdentity.CreateNuiKf();
-        var posCoupon = PosCouponBuilder.Build(input, nuiKf);
+        var posCoupon = PosCouponBuilder.Build(input);
         var citizenCoupon = AtkCouponSigner.CreateCitizenCoupon(posCoupon);
 
         Assert.Equal(nuiKf, posCoupon.VerificationNo);
