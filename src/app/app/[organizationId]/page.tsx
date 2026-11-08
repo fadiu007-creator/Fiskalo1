@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ArrowUpRight, Boxes, FileBarChart2, FileText, Plus, ReceiptText, ShoppingCart, Truck, Wallet, AlertCircle, Contact } from "lucide-react";
+import { ArrowUpRight, Boxes, ClipboardList, FileBarChart2, FileText, Package, Plus, ReceiptText, ShoppingCart, Truck, Wallet, AlertCircle, Contact } from "lucide-react";
 
 type Props = { params: Promise<{ organizationId: string }> };
 const money = (n: number) => new Intl.NumberFormat("sq-XK", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(n);
@@ -75,6 +75,8 @@ export default async function BusinessDashboard({ params }: Props) {
   const modules = [
     { href:`/app/${organizationId}/pos`, title:"Regjistro shitje", detail:"Hap arkën dhe përfundo një shitje", icon:ShoppingCart, primary:true, roles:["owner","administrator","manager","cashier"] },
     { href:`/app/${organizationId}/invoices`, title:"Shiko faturat", detail:"Kontrollo shitjet dhe pagesat", icon:FileText, roles:["owner","administrator","manager","accountant","cashier"] },
+    { href:`/app/${organizationId}/pos/shifts`, title:"Ndërrimet e arkëtarëve", detail:"Hap ose mbyll ndërrimin dhe kontrollo gjendjen e arkës", icon:ClipboardList, roles:["owner","administrator","manager","cashier"] },
+    { href:`/app/${organizationId}/pos/products`, title:"Produktet dhe çmimet", detail:"Menaxho katalogun, çmimet, barkodet dhe stokun", icon:Package, roles:["owner","administrator","manager"] },
     { href:`/app/${organizationId}/customers`, title:"Shto klient", detail:"Ruaj të dhënat e klientit", icon:Contact, roles:["owner","administrator","manager","accountant"] },
     { href:`/app/${organizationId}/expenses`, title:"Regjistro shpenzim", detail:"Shto një shpenzim të biznesit", icon:ReceiptText, roles:["owner","administrator","manager","accountant"] },
     { href:`/app/${organizationId}/purchases`, title:"Regjistro blerje", detail:"Faturat e furnitorëve dhe hyrjet e mallit", icon:Truck, roles:["owner","administrator","manager","accountant"] },
